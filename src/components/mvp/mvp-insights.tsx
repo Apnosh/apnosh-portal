@@ -485,6 +485,18 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
 
   const swipeRef = useRef<HTMLDivElement>(null)
   const progRef = useRef(false) // true while WE scroll it (deep-link) — don't re-pick
+  /* THE CAROUSEL IS AS TALL AS THE SLIDE YOU ARE ON (owner 2026-09-12: "the spacing between the
+     range row and the dots"). A flex row of slides stands as tall as its tallest slide, so the
+     Orders slide, 27px taller than the chart slides, left a blank band under every other stage's
+     range row. The height now follows the active slide, measured, and eases between them. */
+  const [slideH, setSlideH] = useState<number | null>(null)
+  useEffect(() => {
+    const el = swipeRef.current?.children[idx] as HTMLElement | undefined
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setSlideH(Math.ceil(el.getBoundingClientRect().height)))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [idx])
   /* the WHOLE hero card swipes (owner 2026-09-04: "not very swipable"): a horizontal drag that
      starts on the name row, the number, the dots or the padding is forwarded to the carousel */
   const dragRef = useRef<{ x: number; y: number; left: number; horiz: boolean | null; dx: number; t0: number } | null>(null)
@@ -548,7 +560,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       </div>
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
           histogram; swipe the graph left/right to change stages */}
-      <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', alignItems: 'flex-start' }}>
+      <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', alignItems: 'flex-start', height: slideH ?? undefined, transition: 'height .25s cubic-bezier(.2,.7,.3,1)' }}>
         {STAGE_ORDER.map((s, si) => {
           const smv = byKey.get(resolveFocus(s.key).metric)
           return (
@@ -569,7 +581,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       </div>
 
       {/* the swipe dots — BELOW the histogram; tappable to jump */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', margin: '10px 18px 14px' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', margin: '14px 18px 14px' }}>
         {STAGE_ORDER.map((s, i) => (
           <button key={s.key} aria-label={s.label} onClick={() => pick(s.key)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === idx ? STAGE_ACCENT[STAGE_ORDER[idx].key].main : C.line, transition: 'width .2s, background .2s' }} />
         ))}

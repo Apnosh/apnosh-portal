@@ -1086,7 +1086,7 @@ export function ActionsChart({
       {/* THE RANGE, UNDER THE GRAPH, as plain words (owner 2026-09-11): no glass capsule, just
           the four spans and a calendar. The one in force wears the graph's own colour, so the
           bars, the pill and the range read as one thing. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 18 }}>
         {CHART_RANGES.map(([k, l]) => {
           const on = range === k
           const cal = k === 'custom'
