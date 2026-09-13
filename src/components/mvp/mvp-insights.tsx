@@ -1413,7 +1413,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
       <div style={{ margin: '14px 0 6px' }}>{rangeRow}</div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
+          ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
         {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
@@ -1753,7 +1753,46 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   )
 }
 
-function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void; /** render inside another card (the trend), no card of its own */ bare?: boolean; /** the same daily series the chart above draws, for the before/after read */ series?: Array<{ date: string; value: number }>; noun?: string }) {
+/* A friendly network name from a source's provider id ("instagram" → "Instagram"). */
+const PROVIDER_NAMES: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube', google_business_profile: 'Google', google_analytics: 'Google Analytics', google_search_console: 'Search Console', yelp: 'Yelp', social: 'a social account', ads: 'an ads account', pos: 'your register', reservations: 'a reservations app', delivery: 'a delivery app', loyalty: 'a loyalty program', email: 'your email tool' }
+function providerName(id: string): string {
+  const p = String(SOURCE_BY_ID[id]?.provider ?? '')
+  return PROVIDER_NAMES[p] ?? (p ? p.charAt(0).toUpperCase() + p.slice(1) : '')
+}
+/** One quiet row for a group with nothing connected yet: names the networks that would
+ *  fill it and opens the connect screen. Replaces a tile per network saying "Connect to see". */
+function ConnectRow({ label, sources, first = false }: { label: string; sources: StageSourceView[]; first?: boolean }) {
+  const provs = [...new Set(sources.filter((s) => s.status === 'AVAILABLE_NOT_CONNECTED').map((s) => String(SOURCE_BY_ID[s.id]?.provider ?? '')).filter(Boolean))]
+  const names = provs.map((p) => PROVIDER_NAMES[p] ?? p)
+  const list = names.length <= 2 ? names.join(' or ') : `${names.slice(0, 2).join(', ')} or ${names.length - 2} more`
+  return (
+    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', padding: '10px 0 4px' }}>
+      <span style={{ display: 'inline-flex', flexShrink: 0, width: 36, justifyContent: 'center' }}>
+        {(provs.length ? provs.slice(0, 3) : ['website']).map((p, i) => (
+          <span key={p} style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? -8 : 0, opacity: 0.55, filter: 'grayscale(.4)' }}>
+            <BrandOrMark provider={p} size={15} />
+          </span>
+        ))}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{label}</div>
+        <div style={{ fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.35 }}>{names.length ? `Connect ${list} to see it here.` : 'Coming soon.'}</div>
+      </div>
+      {names.length > 0 && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.greenDk, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Connect <ChevronRight size={14} /></span>}
+    </Link>
+  )
+}
+/** Several campaigns shipped the same day under the same title read as one row with a count. */
+function foldSameNames(items: StageCampaign[]): { c: StageCampaign; count: number }[] {
+  const out: { c: StageCampaign; count: number }[] = []
+  for (const c of items) {
+    const hit = out.find((o) => o.c.name === c.name)
+    if (hit) hit.count++; else out.push({ c, count: 1 })
+  }
+  return out
+}
+
+function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void; /** render inside another card (the trend), no card of its own */ bare?: boolean }) {
   const A = useAccent()
   if (list === null) return null // stay quiet until the fetch lands
   const MAX = 5
