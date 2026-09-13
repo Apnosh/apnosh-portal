@@ -2769,41 +2769,34 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
  * Not a floating button. The page is read to the end and then acted on; a thing
  * hovering over the numbers the whole way down is in the way of the numbers.
  */
-const QUICK: { label: string; href: string; hue: HueKey; Icon: typeof PenLine }[] = [
-  { label: 'Write a post', href: '/dashboard/post', hue: 'brand', Icon: PenLine },
-  { label: 'Boost a post', href: '/dashboard/boost', hue: 'event', Icon: Megaphone },
-  { label: 'Reply to reviews', href: '/dashboard/review-replies', hue: 'reviews', Icon: MessageSquare },
-  { label: 'Your Google listing', href: '/dashboard/google-profile', hue: 'newfaces', Icon: MapPin },
+const QUICK: { label: string; short: string; href: string; hue: HueKey; Icon: typeof PenLine }[] = [
+  { label: 'Write a post', short: 'Post', href: '/dashboard/post', hue: 'brand', Icon: PenLine },
+  { label: 'Boost a post', short: 'Boost', href: '/dashboard/boost', hue: 'event', Icon: Megaphone },
+  { label: 'Reply to reviews', short: 'Reviews', href: '/dashboard/review-replies', hue: 'reviews', Icon: MessageSquare },
+  { label: 'Your Google listing', short: 'Google', href: '/dashboard/google-profile', hue: 'newfaces', Icon: MapPin },
 ]
 
+/* FOUR TILES IN A ROW (owner 2026-09-12), the same shape as Create's quick tiles: a tinted square
+   with the glyph in its hue and one or two words under it. They were four white cards in a grid,
+   which looked like more results to read rather than things to do. */
 function QuickActions() {
   return (
     <div style={{ marginTop: 22, padding: '0 2px 4px' }}>
-      <div style={{ ...H3, marginBottom: 8, padding: '0 2px' }}>Do something with this</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div style={{ ...H3, marginBottom: 10, padding: '0 2px' }}>Do something with this</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {QUICK.map((q) => (
-          <Link
-            key={q.label}
-            href={q.href}
-            className="mvp-row"
-            style={{
-              display: 'flex', flexDirection: 'column', gap: 9, padding: '13px 13px 14px', borderRadius: 16,
-              textDecoration: 'none', color: 'inherit', background: '#fff',
-              border: `0.5px solid ${C.line}`, boxShadow: '0 1px 3px rgba(0,0,0,.05)',
-            }}
-          >
-            <span style={{ width: 34, height: 34, borderRadius: 11, background: gradOf(q.hue), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 3px 10px ${tint(q.hue, .5)}` }}>
-              <q.Icon size={17} />
+          <Link key={q.label} href={q.href} className="mvp-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, textDecoration: 'none', color: 'inherit', minWidth: 0 }}>
+            <span style={{ width: 58, height: 58, borderRadius: 18, background: tint(q.hue, .14), color: hueOfHex(q.hue), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <q.Icon size={23} strokeWidth={2} />
             </span>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.label}</span>
-            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: C.ink, textAlign: 'center', lineHeight: 1.2 }}>{q.short}</span>
           </Link>
         ))}
       </div>
     </div>
   )
 }
+const hueOfHex = (k: HueKey) => HUES[k][1]
 
 function Section({ title, sub, action, children }: { title: string; sub?: string; action?: { label: string; href: string }; children: React.ReactNode }) {
   return (
