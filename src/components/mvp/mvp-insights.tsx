@@ -1369,7 +1369,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
         {TREND_RANGES.map(([k, l]) => {
           const on = range === k
           const cal = k === 'custom'
-          const col = cur.sm && cur.sm.compareTotal > 0 ? verdictColor(cur.st.key, cur.sm.deltaPct) : (STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown).main
+          const col = (STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown).main
           return <button key={k} type="button" aria-label={cal ? 'Custom dates' : l} onClick={() => setRange(k)} style={{ flex: cal ? '0 0 auto' : 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 99, padding: cal ? '0 12px' : 0, background: on ? col : 'transparent', color: on ? '#fff' : C.mute, fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s, color .15s' }}>{cal ? <CalendarDays size={15} /> : l}</button>
         })}
       </div>
@@ -1426,9 +1426,8 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
   const t0 = series.length ? trendDayMs(series[0].date) : 0, t1 = series.length ? trendDayMs(series[series.length - 1].date) : 1
   const pins = campaigns.map((c) => (c.shippedAt ? trendDayMs(c.shippedAt) : NaN)).filter((ms) => Number.isFinite(ms) && ms >= t0 && ms <= t1)
   const dn = (sm?.deltaPct ?? 0) < 0
-  /* the sparkline and the % wear this stage's verdict: its bright colour up, red down; the dot
-     keeps the stage's identity hue */
-  const rowCol = sm && sm.compareTotal > 0 ? (dn ? TREND_RED : (STAGE_BRIGHT[stageKeyOfAccent(accent)] ?? TREND_GREEN)) : accent.main
+  /* the sparkline wears the stage's own colour (owner 2026-09-12); the % keeps the up/down colour */
+  const rowCol = accent.main
   return (
     <button type="button" onClick={onPick} aria-pressed={on} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', margin: '0 -8px', boxSizing: 'content-box', background: on ? accent.soft : 'none', borderRadius: on ? 12 : 0, border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
       <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
@@ -1446,7 +1445,7 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
       </span>
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
         <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{!locked && total != null ? total.toLocaleString() : DASH}</span>
-        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: rowCol }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
+        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
       </span>
     </button>
   )
@@ -1530,9 +1529,9 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const stretch = Math.max(DAY_MS * 2, Math.min(7 * DAY_MS, spanMs / 3))
   const headA = trendMeanIn(dayMs, startMs, startMs + stretch), headB = trendMeanIn(dayMs, endMs - stretch, endMs + 1)
   const trendPct = headA.n >= 2 && headB.n >= 2 && headA.mean > 0 ? Math.round(((headB.mean - headA.mean) / headA.mean) * 100) : null
-  /* the line wears the verdict (owner 2026-09-11): the stage's bright colour up, bright red down,
-     the stage hue only while it is too early to call */
-  const trendCol = trendPct == null || Math.abs(trendPct) < 5 ? A.main : trendPct > 0 ? (STAGE_BRIGHT[stageKeyOfAccent(A)] ?? TREND_GREEN) : TREND_RED
+  /* the line wears its STAGE's own colour (owner 2026-09-12: back to the original colours after a
+     day in the up/down verdict colours); the trending words still say the direction */
+  const trendCol = A.main
   const roll = days.map((_, i) => { const sl = days.slice(Math.max(0, i - (smooth - 1)), i + 1); return sl.reduce((t, x) => t + x.v, 0) / sl.length })
   const byT = new Map(dayMs.map((x) => [x.t, x.v]))
   const priorOffset = Math.round(spanMs / DAY_MS + 1) * DAY_MS
@@ -1643,7 +1642,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           <span style={{ fontSize: 13.5, color: C.mute }}>Not enough days to call a direction yet.</span>
         ) : (
           <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendCol }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? TREND_GREEN : TREND_RED }}>
               {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
               {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
             </span>
