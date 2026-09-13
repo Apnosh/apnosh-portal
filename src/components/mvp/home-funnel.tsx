@@ -926,11 +926,12 @@ export default function HomeFunnel({
       const pw = ctx.measureText(label).width + 20, ph = 18
       ctx.globalAlpha = pillIn
       roundRectP(px - pw / 2, midY - ph / 2, pw, ph, ph / 2)
-      // the chip wears the colour of the stage it feeds, never a health colour (owner 2026-09-13)
-      const sc = stageRgb(i + 1)
-      ctx.fillStyle = `rgba(${sc.join(',')},${dark ? 0.22 : 0.13})`
+      // the conversion chip keeps its own band colours (owner 2026-09-13): the weak step is the one filled chip on the page
+      const cr = bandCol(dband) // theme-aware band colour for the text
+      const alarm = !dark && dband === 'veryLow'
+      ctx.fillStyle = alarm ? `rgb(${HEALTH_RED.join(',')})` : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
       ctx.fill()
-      ctx.fillStyle = `rgb(${sc.join(',')})`
+      ctx.fillStyle = alarm ? '#ffffff' : `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
       ctx.fillText(label, px, midY + 4)
       ctx.globalAlpha = 1
     }
