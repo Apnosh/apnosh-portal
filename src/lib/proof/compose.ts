@@ -28,6 +28,10 @@ export interface ProofCardRow {
   attribution?: string
   spark?: number[]
   is_sample?: boolean
+  /** THE NUMBERS BEHIND THE WORDS (2026-09-12), so the card can DRAW them: a post's thumbnail
+   *  and its counts, a Google week's calls and directions against last week, a review month's
+   *  average, a campaign's before and after. `kind` says which. Text-only cards carry none. */
+  metadata?: Record<string, unknown>
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
@@ -190,6 +194,7 @@ export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: 
       : attribution,
     spark,
     is_sample: w.hasDemo,
+    metadata: { kind: 'gbp_week', calls: { cur: w.cur.calls, prior: w.prior.calls }, directions: { cur: w.cur.directions, prior: w.prior.directions } },
   }
 }
 
@@ -218,6 +223,7 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
     big: parts.join(' · '),
     // Same rule as the win card: the drop is in the TOTAL, so each metric states its own move.
     context: `${weekMetricLines(w.cur, w.prior)} A push this week turns it around.`,
+    metadata: { kind: 'gbp_week', calls: { cur: w.cur.calls, prior: w.prior.calls }, directions: { cur: w.cur.directions, prior: w.prior.directions } },
   }
 }
 
@@ -293,13 +299,13 @@ export async function evalPost(admin: SupabaseClient, clientId: string, now: Dat
   const windowStart = new Date(now); windowStart.setUTCDate(windowStart.getUTCDate() - 30)
   const { data: rows } = await admin
     .from('social_posts')
-    .select('id, platform, media_type, caption, posted_at, reach, likes, comments, saves, shares, video_views')
+    .select('id, platform, media_type, caption, posted_at, reach, likes, comments, saves, shares, video_views, thumbnail_url, permalink')
     .eq('client_id', clientId)
     .not('posted_at', 'is', null)
     .order('posted_at', { ascending: false })
     .limit(60)
   if (!rows || rows.length < 4) return evalPostFromDrafts(admin, clientId, now)
-  type P = { id: string; platform: string; video: boolean; caption: string | null; posted_at: string; views: number; reach: number; score: number; likes: number; saves: number; shares: number; comments: number }
+  type P = { id: string; platform: string; video: boolean; caption: string | null; posted_at: string; views: number; reach: number; score: number; likes: number; saves: number; shares: number; comments: number; thumb: string | null; link: string | null }
   const parsed: P[] = rows.map((r) => {
     const views = Number(r.video_views) || 0, reach = Number(r.reach) || 0
     return {
@@ -307,6 +313,7 @@ export async function evalPost(admin: SupabaseClient, clientId: string, now: Dat
       caption: (r.caption as string | null) ?? null, posted_at: String(r.posted_at),
       views, reach, score: Math.max(views, reach),
       likes: Number(r.likes) || 0, saves: Number(r.saves) || 0, shares: Number(r.shares) || 0, comments: Number(r.comments) || 0,
+      thumb: (r.thumbnail_url as string | null) ?? null, link: (r.permalink as string | null) ?? null,
     }
   }).filter((p) => p.score > 0)
   if (parsed.length < 4) return evalPostFromDrafts(admin, clientId, now)
@@ -341,6 +348,7 @@ export async function evalPost(admin: SupabaseClient, clientId: string, now: Dat
     big: cand.video && cand.views > 0 ? `${cand.views.toLocaleString('en-US')} views` : `${cand.reach.toLocaleString('en-US')} people saw it`,
     context: bits.length ? bits.join(' · ') + '.' : 'More than your usual post.',
     attribution: short ? `"${short}" · went up ${day}.` : `It went up ${day}.`,
+    metadata: { kind: 'post', platform: cand.platform, video: cand.video, views: cand.views, reach: cand.reach, likes: cand.likes, saves: cand.saves, shares: cand.shares, comments: cand.comments, postId: cand.id, thumbnailUrl: cand.thumb, permalink: cand.link },
   }
 }
 const PLATFORM_WORD: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', threads: 'Threads', pinterest: 'Pinterest' }
@@ -385,6 +393,7 @@ export async function evalSocialMonth(admin: SupabaseClient, clientId: string, n
     big: `${plural(cur.gained, 'new follower')}`,
     context: cur.reach > 0 ? `${cur.reach.toLocaleString('en-US')} people reached ${where}.` : `Growing ${where}.`,
     attribution: priorKnown ? `Up from ${prior.gained.toLocaleString('en-US')} the month before.` : undefined,
+    metadata: { kind: 'social_month', gained: cur.gained, prior: priorKnown ? prior.gained : null, reach: cur.reach, nets: [...cur.nets] },
   }
 }
 
@@ -425,6 +434,7 @@ export async function evalSiteWeek(admin: SupabaseClient, clientId: string, now:
     label: 'This week on your website',
     big: `${cur.visitors.toLocaleString('en-US')} people visited`,
     context: `Up from ${prior.visitors.toLocaleString('en-US')} the week before.${extras.length ? ' ' + extras.join(' · ') + '.' : ''}`,
+    metadata: { kind: 'site_week', visitors: { cur: cur.visitors, prior: prior.visitors }, menu: cur.menu, orders: cur.orders },
   }
 }
 
@@ -491,6 +501,7 @@ export async function evalCampaignMoved(admin: SupabaseClient, clientId: string,
         big: `+${diff.toLocaleString('en-US')} ${m.noun}`,
         context: `The two weeks after ${when}: ${after.toLocaleString('en-US')}, against ${before.toLocaleString('en-US')} the two before.`,
         attribution: 'It shows what happened, not proof of cause.',
+        metadata: { kind: 'campaign_moved', before, after, noun: m.noun },
       }
     }
   }
@@ -551,6 +562,7 @@ export async function evalReviews(admin: SupabaseClient, clientId: string, now: 
       ? `Up from ${plural(monthBefore.length, 'review')} the month before.`
       : 'Your best review month on record here.',
     attribution: `Since ${wo.title} went live, ${dLabel}.`,
+    metadata: { kind: 'reviews', count: prevMonth.length, prior: monthBefore.length, avg: Math.round(avg * 10) / 10 },
   }
 }
 

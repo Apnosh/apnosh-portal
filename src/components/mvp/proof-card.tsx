@@ -13,7 +13,8 @@
  */
 
 import { useRef, useState } from 'react'
-import { X, ChevronRight, ChevronDown, AlertTriangle, TrendingUp } from 'lucide-react'
+import { X, ChevronRight, ChevronDown, AlertTriangle, TrendingUp, Heart, Share2, Bookmark, MessageCircle, Star, Play, ArrowRight, Image as ImageIcon, Phone, Navigation, Users, Eye } from 'lucide-react'
+import { BrandOrMark } from './mvp-insights'
 
 export interface ProofCardData {
   /** Stable id for dismissal, e.g. "gbp-2026-08-24". */
@@ -42,6 +43,8 @@ export interface ProofCardData {
   cta?: { label: string; href: string }
   /** A WIN's second door: the page where it becomes something to send somebody. Same CTA style. */
   share?: { label: string; href: string }
+  /** proof_cards.metadata: the numbers the card is drawn from, keyed by `kind` (2026-09-12) */
+  visual?: Record<string, unknown>
 }
 
 export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen = false }: {
@@ -110,10 +113,37 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
           <span style={{ marginLeft: 4, fontSize: 9, letterSpacing: '.08em', border: '1px solid #d8d8dc', color: '#8e8e93', borderRadius: 5, padding: '1px 6px', fontWeight: 700 }}>Example</span>
         )}
       </div>
-      <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.04em', color: headsUp ? '#1d1d1f' : '#0f6e56', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
-        {card.big}
-      </div>
-      <div style={{ fontSize: 13, color: '#6e6e73', marginTop: 5, lineHeight: 1.45 }}>{card.context}</div>
+      {(() => {
+        const v = card.visual
+        const isPost = v?.kind === 'post'
+        const thumb = isPost ? (typeof v.thumbnailUrl === 'string' ? v.thumbnailUrl : null) : null
+        const link = isPost && typeof v.permalink === 'string' ? v.permalink : null
+        const words = (
+          <>
+            <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.04em', color: headsUp ? '#1d1d1f' : '#0f6e56', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+              {card.big}
+            </div>
+            {/* a post says its counts as marks, not a sentence; every other card keeps its line */}
+            {isPost ? <PostCounts v={v} /> : <div style={{ fontSize: 13, color: '#6e6e73', marginTop: 5, lineHeight: 1.45 }}>{card.context}</div>}
+          </>
+        )
+        if (!isPost) return <>{words}<Visual v={v} /></>
+        /* THE POST ITSELF, beside its number (owner 2026-09-12): the picture, the network on its
+           corner, a play mark on a video, and the way out to the post on a tap. */
+        const pic = (
+          <span style={{ position: 'relative', width: 78, height: 104, borderRadius: 14, flexShrink: 0, overflow: 'hidden', background: thumb ? `#111 center/cover url(${thumb})` : '#f0f0f3', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.12)' }}>
+            {!thumb && <ImageIcon size={20} color="#aeaeb2" />}
+            {v.video === true && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 30, height: 30, borderRadius: 99, background: 'rgba(255,255,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 2 }}><Play size={13} fill="#1d1d1f" color="#1d1d1f" /></span></span>}
+            <span style={{ position: 'absolute', left: 6, top: 6, width: 22, height: 22, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={String(v.platform ?? '')} size={12} /></span>
+          </span>
+        )
+        return (
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{words}</div>
+            {link ? <a href={link} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()} aria-label="Open the post">{pic}</a> : pic}
+          </div>
+        )
+      })()}
       {card.spark && card.spark.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 22, marginTop: 10 }} aria-hidden>
           {card.spark.map((v, i) => (
@@ -159,4 +189,85 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       </div>
     </div>
   )
+}
+
+/* ── the drawings each kind of card carries (2026-09-12) ─────────────────────────────────── */
+const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : Number(x) || 0)
+const pair = (x: unknown): { cur: number; prior: number | null } => {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
+  return { cur: num(o.cur), prior: o.prior == null ? null : num(o.prior) }
+}
+
+/** one number against the same number before it: up green, down red, the difference beside */
+function Tile({ Icon, label, cur, prior }: { Icon: typeof Phone; label: string; cur: number; prior: number | null }) {
+  const d = prior == null ? null : cur - prior
+  const ink = d == null || d === 0 ? '#8e8e93' : d > 0 ? '#17ad6b' : '#ec1528'
+  return (
+    <div style={{ flex: 1, minWidth: 0, background: '#f5f5f7', borderRadius: 13, padding: '9px 11px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: '#6e6e73' }}><Icon size={12} /> {label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+        <b style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.02em', color: '#1d1d1f', fontVariantNumeric: 'tabular-nums' }}>{cur.toLocaleString('en-US')}</b>
+        {d != null && <span style={{ fontSize: 11, fontWeight: 700, color: ink, whiteSpace: 'nowrap' }}>{d > 0 ? '▲' : d < 0 ? '▼' : '–'} {Math.abs(d).toLocaleString('en-US')}</span>}
+      </div>
+    </div>
+  )
+}
+
+/** a post's counts as marks: likes, shares, saves, comments, only the ones that happened */
+function PostCounts({ v }: { v: Record<string, unknown> }) {
+  const items = [
+    { Icon: Heart, n: num(v.likes) }, { Icon: Share2, n: num(v.shares) }, { Icon: Bookmark, n: num(v.saves) }, { Icon: MessageCircle, n: num(v.comments) },
+  ].filter((x) => x.n > 0)
+  if (!items.length) return <div style={{ fontSize: 13, color: '#6e6e73', marginTop: 5 }}>More than your usual post.</div>
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+      {items.map((x, i) => <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: '#1d1d1f', fontVariantNumeric: 'tabular-nums' }}><x.Icon size={13} color="#6e6e73" /> {x.n.toLocaleString('en-US')}</span>)}
+    </div>
+  )
+}
+
+function Visual({ v }: { v?: Record<string, unknown> }) {
+  if (!v) return null
+  const kind = String(v.kind ?? '')
+  if (kind === 'gbp_week') {
+    const c = pair(v.calls), d = pair(v.directions)
+    return <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><Tile Icon={Phone} label="Calls" cur={c.cur} prior={c.prior} /><Tile Icon={Navigation} label="Direction taps" cur={d.cur} prior={d.prior} /></div>
+  }
+  if (kind === 'site_week') {
+    const vis = pair(v.visitors)
+    return <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><Tile Icon={Users} label="Visitors" cur={vis.cur} prior={vis.prior} />{num(v.menu) > 0 && <Tile Icon={Eye} label="Saw the menu" cur={num(v.menu)} prior={null} />}</div>
+  }
+  if (kind === 'reviews') {
+    const avg = num(v.avg), full = Math.floor(avg), half = avg - full >= 0.5
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+          {[0, 1, 2, 3, 4].map((i) => <Star key={i} size={18} color="#e0a13a" fill="#e0a13a" fillOpacity={i < full ? 1 : i === full && half ? 0.5 : 0.12} strokeWidth={1.6} />)}
+          <b style={{ marginLeft: 6, fontSize: 18, fontWeight: 800, letterSpacing: '-.02em', color: '#1d1d1f' }}>{avg.toFixed(1)}</b>
+        </span>
+        <Tile Icon={MessageCircle} label="New reviews" cur={num(v.count)} prior={v.prior == null ? null : num(v.prior)} />
+      </div>
+    )
+  }
+  if (kind === 'social_month') {
+    const nets = Array.isArray(v.nets) ? (v.nets as unknown[]).map(String) : []
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <Tile Icon={Users} label="New followers" cur={num(v.gained)} prior={v.prior == null ? null : num(v.prior)} />
+        {num(v.reach) > 0 && <Tile Icon={Eye} label="People reached" cur={num(v.reach)} prior={null} />}
+        {nets.length > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>{nets.slice(0, 4).map((n, i) => <span key={n} style={{ marginLeft: i ? -6 : 0, width: 24, height: 24, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={n} size={13} /></span>)}</span>}
+      </div>
+    )
+  }
+  if (kind === 'campaign_moved') {
+    const before = num(v.before), after = num(v.after)
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <div style={{ flex: 1, background: '#f5f5f7', borderRadius: 13, padding: '9px 11px' }}><div style={{ fontSize: 10.5, fontWeight: 600, color: '#6e6e73' }}>Two weeks before</div><b style={{ display: 'block', fontSize: 19, fontWeight: 800, letterSpacing: '-.02em', color: '#6e6e73', marginTop: 2 }}>{before.toLocaleString('en-US')}</b></div>
+        <ArrowRight size={16} color="#8e8e93" style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, background: '#eaf7f3', borderRadius: 13, padding: '9px 11px' }}><div style={{ fontSize: 10.5, fontWeight: 600, color: '#2e9a78' }}>Two weeks after</div><b style={{ display: 'block', fontSize: 19, fontWeight: 800, letterSpacing: '-.02em', color: '#0f6e56', marginTop: 2 }}>{after.toLocaleString('en-US')}</b></div>
+      </div>
+    )
+  }
+  return null
 }
