@@ -1464,6 +1464,10 @@ const DAY_MS = 86400000
 
 function trendDayMs(iso: string): number { return Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso) }
 function fmtPinDate(ms: number): string { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
+/* A DAY, not a moment: the series' dates are day-only and parsed at UTC midnight, so formatting
+   them in Seattle time named the day before (Sep 12 read as Sep 11, owner 2026-09-12). Day-derived
+   times print in UTC; a campaign's real timestamp keeps fmtPinDate. */
+function fmtDay(ms: number): string { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }) }
 function trendCompact(n: number): string { const v = Math.round(n); return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace(/\.0$/, '')}k` : String(v) }
 // a smooth (Catmull-Rom → bézier) curve through the points, so the line reads as
 // a trend instead of a jagged connect-the-dots.
@@ -1495,8 +1499,14 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const firstMs = dayMs[0].t
   const lastMs = dayMs[dayMs.length - 1].t
   const isCustom = chartRange === 'custom' && !!customStart && !!customEnd
-  const endMs = isCustom ? Math.min(lastMs, trendDayMs(customEnd!)) : lastMs
-  const startMs = isCustom ? Math.max(firstMs, trendDayMs(customStart!)) : range === 'all' ? firstMs : Math.max(firstMs, endMs - TREND_DAYS[range] * DAY_MS)
+  /* THE SAME DAYS AS INSIGHTS (owner 2026-09-12: "why is it still showing Aug 11?"). The window
+     used to end on the last day with a number and run 30 days back inclusive, so 30d drew Aug 11
+     to Sep 10 while Insights drew Aug 14 to Sep 12. Now it ends TODAY and starts N-1 days back,
+     exactly the literal window the graph above uses; the line simply stops at the last reported
+     day, the way the bars there show the trailing days as still filling in. */
+  const todayMs = trendDayMs(localYmd())
+  const endMs = isCustom ? Math.min(lastMs, trendDayMs(customEnd!)) : range === 'all' ? lastMs : todayMs
+  const startMs = isCustom ? Math.max(firstMs, trendDayMs(customStart!)) : range === 'all' ? firstMs : Math.max(firstMs, endMs - (TREND_DAYS[range] - 1) * DAY_MS)
   const spanMs = Math.max(DAY_MS, endMs - startMs)
 
   const win = dayMs.filter((d) => d.t >= startMs && d.t <= endMs)
@@ -1615,7 +1625,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
         <span style={H2}>{title}</span>
-        {isCustom && <span style={{ fontSize: 12.5, color: C.faint }}>{`${fmtPinDate(startMs)} – ${fmtPinDate(endMs)}`}</span>}
+        {isCustom && <span style={{ fontSize: 12.5, color: C.faint }}>{`${fmtDay(startMs)} – ${fmtDay(endMs)}`}</span>}
       </div>
       {/* the read, in one line: where the line is heading, and what was launched into it.
           THE SCOPE IS PART OF THE SENTENCE. This line compares the END of the selected
@@ -1718,15 +1728,15 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         )}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, margin: '2px 4px 0', paddingLeft: 18 }}>
-        <span>{fmtPinDate(startMs)}</span>
-        <span>{fmtPinDate((startMs + endMs) / 2)}</span>
-        <span>{fmtPinDate(endMs)}</span>
+        <span>{fmtDay(startMs)}</span>
+        <span>{fmtDay((startMs + endMs) / 2)}</span>
+        <span>{fmtDay(endMs)}</span>
       </div>
       {/* one fixed line under the axis: the legend, or the picked day's read */}
       <div style={{ minHeight: 22, marginTop: 8, fontSize: 11.5, display: 'flex', alignItems: 'center' }}>
         {pick != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-            <b style={{ color: C.ink }}>{fmtPinDate(days[pick].t)}</b>
+            <b style={{ color: C.ink }}>{fmtDay(days[pick].t)}</b>
             <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun}{smooth > 1 ? ' a day, on average' : ''}</span>
             {prior[pick] != null && <span style={{ color: C.faint }}>· prior period {prior[pick]!.toLocaleString()}</span>}
           </div>
@@ -1975,7 +1985,7 @@ function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days:
             <span style={{ width: 34, height: 20, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{up ? <TrendingUp size={18} /> : <TrendingDown size={18} />}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtDay(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 13.5, fontWeight: 700, color: col, fontFamily: DISPLAY, fontVariantNumeric: 'normal' }}>{h.value.toLocaleString()}</span>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: col }}>{up ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}%</span>
               </span>
