@@ -474,23 +474,6 @@ export default function HomeFunnel({
   }, [])
 
   const { lang, T } = useLang()
-  /* THE PERIOD BEFORE, BY ITS DATES (owner 2026-09-11: "the actual dates, just vs (date)"):
-     the same length as the real window, ending the day before it starts. "Jul 14 – Aug 12",
-     not "the 30 days before". Falls back to the words only when the window is not known yet. */
-  const compareLabel = useMemo(() => {
-    if (windowStart && windowEnd) {
-      const start = new Date(windowStart + 'T00:00:00'), end = new Date(windowEnd + 'T00:00:00')
-      const d = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
-      if (d > 0) {
-        const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1)
-        const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (d - 1))
-        const f = (x: Date) => x.toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric' })
-        return `${f(prevStart)} – ${f(prevEnd)}`
-      }
-    }
-    if (curRange === '12m') return T('the year before')
-    return T('the {n} days before', { n: curRange === '7d' ? 7 : curRange === '90d' ? 90 : 30 })
-  }, [curRange, windowStart, windowEnd, T, lang])
   /* The shape of the business, off the client this screen already resolved for the bell. It
    * only bends the stage WORDS (shape-words.ts); nothing about the layout or the numbers reads
    * it. A client with no shape yet is a storefront, which is the copy that was always here. */
@@ -1224,18 +1207,6 @@ export default function HomeFunnel({
   const pickRange = onRange ?? setLocRange
   // the real window this graph covers: "‹start› – ‹today›". The window is calendar-true;
   // reporting for the newest days arrives a few days late and fills in on its own.
-  const rangeLabel = useMemo(() => {
-    const endISO = windowEnd ?? asOf
-    if (!endISO) return null
-    const e = new Date(endISO + 'T00:00:00')
-    if (Number.isNaN(e.getTime())) return null
-    const s = windowStart ? new Date(windowStart + 'T00:00:00') : null
-    const sValid = s != null && !Number.isNaN(s.getTime())
-    const sameYear = sValid ? (s as Date).getFullYear() === e.getFullYear() : true
-    const opts: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }
-    const eStr = e.toLocaleDateString('en-US', opts)
-    return sValid ? `${(s as Date).toLocaleDateString('en-US', opts)} – ${eStr}` : eStr
-  }, [asOf, windowStart, windowEnd])
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', height: effH, background: C.funnelBg, overflow: 'hidden', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, ...(fill ? { border: 'none', borderRadius: 0, boxShadow: 'none' } : { border: `0.5px solid ${C.line}`, borderRadius: 20, boxShadow: '0 24px 60px -24px rgba(18,80,58,.30), 0 6px 18px -6px rgba(0,0,0,.06)' }) }}>
@@ -1297,20 +1268,7 @@ export default function HomeFunnel({
         </div>
       )}
 
-      {/* one quiet line under the tabs: the real window · the lag note · what the +/- compares
-          (owner ask 2026-09-02: the audience row came out so the funnel gets the room) */}
-      {rangeLabel && (
-        /* The canvas starts at the top of this block and the crowd drifts up behind the words, so
-           the line sits on its own plate from the tokens rather than on the sprites. The funnel
-           itself is untouched: this is chrome above it. */
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 16px 8px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', padding: '3px 11px' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
-            {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
-            <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· vs ${compareLabel}` : `· ${T('platforms report a few days behind')}`}</span>
-          </span>
-        </div>
-      )}
+      {/* no date line under the tabs (owner 2026-09-12): the funnel takes the room */}
       </div>
 
       <canvas
