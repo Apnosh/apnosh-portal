@@ -1371,9 +1371,12 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
     const mv = byKey.get(resolveFocus(st.key).metric)
     const cs = computedStage(detail, STAGE_ORDER.findIndex((x) => x.key === st.key) + 1)
     const locked = !mv || cs?.isEmpty === true
-    const sm = mv && !locked ? bucketsFor(range, mv, cStart, cEnd) : null
+    /* A stage nothing feeds still gets its line, flat at zero, and its graph below (owner
+       2026-09-12: "even if it's 0 the graphs should show"). The row says "not connected". */
+    const view = locked ? zeroView(st.key, mv) : mv
+    const sm = view && !locked ? bucketsFor(range, view, cStart, cEnd) : null
     const launches = (campaigns?.[st.key] ?? []).filter((c) => c.state !== 'production' && c.shippedAt && Date.now() - trendDayMs(c.shippedAt) <= days * DAY_MS).length
-    return { st, mv, sm, launches, locked, cs, n: STAGE_ORDER.findIndex((x) => x.key === st.key) + 1 }
+    return { st, mv: view, sm, launches, locked, cs, n: STAGE_ORDER.findIndex((x) => x.key === st.key) + 1 }
   })
   const cur = rows.find((r) => r.st.key === sel) ?? rows[0]
   const rangeRow = (
@@ -1412,10 +1415,8 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
       {/* the range row sits between the stage list and the picked stage's graph (owner 2026-09-11) */}
       <div style={{ margin: '14px 0 6px' }}>{rangeRow}</div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
-        {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
-          : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
-        {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} range={range} customStart={cStart} customEnd={cEnd} />}
+        {cur.mv && <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} note={cur.locked ? 'Not connected yet. Connect the source that measures it and the line fills in.' : undefined} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />}
+        {cur.mv && <RhythmCard mv={cur.mv} range={range} customStart={cStart} customEnd={cEnd} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
       </AccentCtx.Provider>
     </div>
@@ -1447,10 +1448,10 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
       <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
       <span style={{ width: 92, flexShrink: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{label}</span>
-        {locked && <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>not measured</span>}
+        {locked && <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>not connected</span>}
       </span>
       <span style={{ flex: 1, minWidth: 0, height: H }}>
-        {roll.length > 1 && !locked && (
+        {roll.length > 1 && (
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }} aria-hidden>
             <polyline points={pts.join(' ')} fill="none" stroke={rowCol} strokeWidth={1.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
             {pins.map((ms, i) => { const x = ((ms - t0) / Math.max(1, t1 - t0)) * W; return <line key={i} x1={x} y1={2} x2={x} y2={H - 2} stroke={accent.main} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" /> })}
@@ -1458,7 +1459,7 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
         )}
       </span>
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
-        <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{!locked && total != null ? total.toLocaleString() : DASH}</span>
+        <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{locked ? '0' : total != null ? total.toLocaleString() : DASH}</span>
         {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
       </span>
     </button>
@@ -1479,6 +1480,14 @@ const TREND_OF_RANGE: Record<string, TrendRange> = { '7d': 'week', '30d': 'month
 const TREND_DAYS: Record<'week' | 'month' | 'quarter' | 'year', number> = { week: 7, month: 30, quarter: 90, year: 365 }
 const DAY_MS = 86400000
 
+/** A stage nothing feeds yet, as a series: a zero for every day of the past year, so its row,
+    graph and daily bars draw flat at zero instead of vanishing (owner 2026-09-12). */
+function zeroView(key: string, mv?: MetricView): MetricView {
+  const t = new Date()
+  const daily: { date: string; value: number }[] = []
+  for (let i = 365; i >= 0; i--) daily.push({ date: localYmdOf(new Date(t.getFullYear(), t.getMonth(), t.getDate() - i)), value: 0 })
+  return { key: mv?.key ?? `zero:${key}`, tabLabel: mv?.tabLabel ?? '', heroLabel: mv?.heroLabel ?? '', heroSub: '', unit: mv?.unit ?? '', total: 0, weekPct: 0, monthPct: 0, prevMonthLabel: '', chart: [], daily, monthly: [], tiles: [], lastDataDate: '' }
+}
 function trendDayMs(iso: string): number { return Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso) }
 function fmtPinDate(ms: number): string { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
 /* A DAY, not a moment: the series' dates are day-only and parsed at UTC midnight, so formatting
@@ -1496,7 +1505,7 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Trend', onPins, litPin, footer, underGraph, customStart, customEnd, smooth = 7 }: { mv?: MetricView; /** drawn right under the legend, before the campaigns (the Trends range row) */ underGraph?: React.ReactNode; list: StageCampaign[] | null; /** dated reviews, drawn under the same axis */ reviews?: InsightsReview[]; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
+function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Trend', onPins, litPin, footer, underGraph, customStart, customEnd, smooth = 7, note }: { mv?: MetricView; /** replaces the direction caption (a stage nothing feeds yet) */ note?: string; /** drawn right under the legend, before the campaigns (the Trends range row) */ underGraph?: React.ReactNode; list: StageCampaign[] | null; /** dated reviews, drawn under the same axis */ reviews?: InsightsReview[]; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
   const [pick, setPick] = useState<number | null>(null) // the day under the finger
@@ -1536,7 +1545,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const days = win
   const n = days.length
   const maxV = Math.max(...days.map((d) => d.v))
-  if (maxV <= 0) return null // an all-zero window → don't draw a flat fake line
+  const flatZero = maxV <= 0 // a stage nothing feeds yet: the line lies flat on the axis (owner 2026-09-12)
   const avgV = days.reduce((s, d) => s + d.v, 0) / n
   // the one-line read: the window's last stretch against its first (a week each, or a
   // third of a short window), so "trending up 12%" means something a person can check
@@ -1560,6 +1569,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const xAt = (t: number) => padL + ((t - startMs) / spanMs) * plotW
   const yAt = (v: number) => yBot - (v / head) * (yBot - yTop)
   const clampX = (x: number) => Math.max(padL + 11, Math.min(W - padR - 11, x))
+  // a flat-zero window keeps the three hairlines (same frame as the other stages), numbered only at 0
   const yTicks = [lineMax, lineMax / 2, 0]
   const slot = plotW / n
   const xOf = (i: number) => padL + (i + 0.5) * slot
@@ -1649,8 +1659,10 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           both correct and, unlabelled, an apparent contradiction on one screen. An owner
           named that as their reason to cancel, so the qualifier is not optional. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        {trendPct == null ? (
-          <span style={{ fontSize: 13.5, color: C.mute }}>Not enough days to call a direction yet.</span>
+        {note ? (
+          <span style={{ fontSize: 13.5, color: C.mute }}>{note}</span>
+        ) : trendPct == null ? (
+          <span style={{ fontSize: 13.5, color: C.mute }}>{flatZero ? 'Nothing counted in this range yet.' : 'Not enough days to call a direction yet.'}</span>
         ) : (
           <>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? TREND_GREEN : TREND_RED }}>
@@ -1688,7 +1700,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {yTicks.map((v, i) => (
           <g key={i}>
             <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke={C.line} strokeWidth={0.6} opacity={v === 0 ? 1 : 0.6} />
-            <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>
+            {(!flatZero || v === 0) && <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>}
           </g>
         ))}
         {/* the same window one period earlier */}
@@ -1860,17 +1872,17 @@ function RhythmCard({ mv, range = '30d', customStart, customEnd }: { mv: MetricV
   const startMs = endMs - (spanDays - 1) * DAY_MS
   // zero days inside the window are unreported, not quiet: they would drag a weekday down
   const win = series.filter((d) => d.t >= startMs && d.t <= endMs && d.value > 0)
-  if (win.length < 5) return null
   const by = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }))
   for (const d of win) { const k = new Date(d.t).getUTCDay(); by[k].sum += d.value; by[k].n++ }
   const avg = by.map((x) => (x.n ? Math.round(x.sum / x.n) : 0))
   const byDay = [1, 2, 3, 4, 5, 6, 0].map((k) => ({ day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][k], avg: avg[k] }))
   const max = Math.max(...byDay.map((d) => d.avg))
-  if (max < 1) return null
+  // fewer than five counted days: seven zero bars, nothing singled out (a stage nothing feeds yet)
+  const enough = win.length >= 5 && max >= 1
   const present = byDay.filter((d) => d.avg > 0)
-  const min = Math.min(...present.map((d) => d.avg))
-  const strongDay = byDay.find((d) => d.avg === max)?.day
-  const weakDay = present.length > 1 && min < max ? present.find((d) => d.avg === min)?.day : undefined
+  const min = present.length ? Math.min(...present.map((d) => d.avg)) : 0
+  const strongDay = enough ? byDay.find((d) => d.avg === max)?.day : undefined
+  const weakDay = enough && present.length > 1 && min < max ? present.find((d) => d.avg === min)?.day : undefined
   const when = isCustom ? `${fmtDay(startMs)} – ${fmtDay(endMs)}` : range === '1y' ? 'last year' : `last ${spanDays} days`
   return (
     <div style={LIST}>
@@ -1885,8 +1897,8 @@ function RhythmCard({ mv, range = '30d', customStart, customEnd }: { mv: MetricV
           const col = strong ? A.main : weak ? TREND_RED : C.line
           return (
             <div key={d.day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: strong ? A.main : weak ? TREND_RED : C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.avg ? d.avg.toLocaleString() : '–'}</span>
-              <span aria-hidden style={{ width: '100%', height: Math.max(3, Math.round((d.avg / max) * 54)), background: col, borderRadius: 5 }} />
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: strong ? A.main : weak ? TREND_RED : C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.avg.toLocaleString()}</span>
+              <span aria-hidden style={{ width: '100%', height: Math.max(3, Math.round((d.avg / Math.max(1, max)) * 54)), background: col, borderRadius: 5 }} />
               <span style={{ fontSize: 11, fontWeight: strong || weak ? 700 : 500, color: strong ? A.main : weak ? TREND_RED : C.mute }}>{d.day}</span>
             </div>
           )
