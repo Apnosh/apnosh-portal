@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Calendar, Users, Image as ImageIcon, PenLine, ChevronRight } from 'lucide-react'
+import { Calendar, Users, Image as ImageIcon, PenLine, ChevronRight, AlertCircle, Check } from 'lucide-react'
 /* mvp-insights imports THIS file for its own compact block, so the two are a
    cycle. It is safe because both bindings are function declarations used at
    render time, never read while either module is still evaluating -- but do not
@@ -191,31 +191,33 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
         </div>
         {/* bleeds past the page gutter so a cut-off card shows there is more */}
         <div className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
-          {shown.map((r) => (
-            <div key={r.id} style={{
-              flex: '0 0 238px', width: 238, scrollSnapAlign: 'start', boxSizing: 'border-box',
-              borderRadius: 16, padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start',
-              border: `0.5px solid ${r.bad ? tint('red', .45, 1) : C.line}`,
-              background: r.bad ? '#fffafa' : r.team ? `linear-gradient(150deg, ${tint('mint', .12)}, ${tint('brand', .1)})` : '#fff',
-              boxShadow: '0 1px 3px rgba(0,0,0,.05)',
-            }}>
-              {r.media
-                ? <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, background: `center/cover url(${r.media})` }} />
-                : (
-                  <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: r.team ? gradOf('mint') : r.bad ? gradOf('red') : gradOf('nights'), boxShadow: r.team ? glow('mint', .26) : 'none' }}>
-                    {r.team ? <Users size={18} /> : <Calendar size={18} />}
+          {shown.map((r) => {
+            /* STATUS FIRST (owner 2026-09-12): the one thing an owner wants from a scheduled post
+               is its state, so it leads as a coloured chip: red when it did not go, blue for a
+               time, mint when the team has it ready, amber while they are writing. The words come
+               under it with the picture beside them, and the networks ride the chip's row. */
+            const tone = r.bad ? { ink: '#ec1528', bg: '#fde4e6', Icon: AlertCircle }
+              : r.team ? (r.when.startsWith('Written') ? { ink: C.greenDk, bg: tint('mint', .16), Icon: Check } : { ink: '#9a6b17', bg: '#faf1de', Icon: Users })
+              : { ink: '#3b6fd4', bg: tint('nights', .16), Icon: Calendar }
+            return (
+              <Link key={r.id} href="/dashboard/insights/posts" style={{
+                flex: '0 0 238px', width: 238, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
+                borderRadius: 18, padding: 12, display: 'flex', flexDirection: 'column', gap: 9,
+                border: `0.5px solid ${C.line}`, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.05)',
+              }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 11.5, fontWeight: 700, padding: '4px 9px 4px 7px', borderRadius: 99, background: tone.bg, color: tone.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <tone.Icon size={12} strokeWidth={2.4} style={{ flexShrink: 0 }} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.when}</span>
                   </span>
-                )}
-              {/* THE WHEN GETS THE WHOLE LINE. With the network marks beside it,
-                  "Written, ready to go" truncated to "Written, re…" in a 238px
-                  card -- the marks are a detail and the words are the point. */}
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: r.bad ? C.coral : C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.when}</span>
-                <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 3, lineHeight: 1.35, maxHeight: 32, overflow: 'hidden' }}>{r.text}</span>
-                {r.platforms.length > 0 && <span style={{ display: 'block', marginTop: 7 }}>{marks(r.platforms)}</span>}
-              </span>
-            </div>
-          ))}
+                  {r.platforms.length > 0 && <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{marks(r.platforms)}</span>}
+                </span>
+                <span style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  {r.media && <span style={{ width: 44, height: 44, borderRadius: 11, flexShrink: 0, background: `center/cover url(${r.media})` }} />}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 34 }}>{r.text}</span>
+                </span>
+              </Link>
+            )
+          })}
           {rows.length > shown.length && (
             <Link href="/dashboard/insights/posts" style={{ flex: '0 0 132px', width: 132, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 16, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <span style={{ width: 34, height: 34, borderRadius: 11, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
