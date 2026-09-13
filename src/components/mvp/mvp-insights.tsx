@@ -1350,7 +1350,6 @@ function smoothDays(range: string, spanDays: number): number {
   if (range === '1y') return 30
   return spanDays <= 14 ? 1 : spanDays <= 45 ? 7 : spanDays <= 120 ? 14 : 30
 }
-const avgLabel = (n: number) => (n <= 1 ? 'Each day' : `${n}-day average`)
 const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y'], ['custom', 'Custom']]
 function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string; /** dated reviews, drawn on the same timeline as the metric */ reviews?: InsightsReview[] }) {
   const [range, setRange] = useState<ChartRange>('30d')
@@ -1739,11 +1738,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
             <b style={{ color: C.ink }}>{fmtDay(days[pick].t)}</b>
             <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun}{smooth > 1 ? ' a day, on average' : ''}</span>
           </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 14, height: 0, borderTop: `2.2px solid ${A.main}` }} /> {avgLabel(smooth)}</span>
-          </div>
-        )}
+        ) : null}
       </div>
       {underGraph}
 
