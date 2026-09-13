@@ -1286,12 +1286,9 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
             </span>
           )}
         </div>
-        {/* the two windows behind that change, by date — the way a portfolio app says
-            "past month"; a stale feed says so here instead of hiding the change */}
-        {total > 0 && (
-          <div style={{ fontSize: 12, color: C.mute, marginTop: 5, lineHeight: 1.4 }}>
-            {deltaSub(summary)}{!fresh && mv.lastDataDate ? ` · last update ${relDate(mv.lastDataDate)}` : ''}
-          </div>
+        {/* no dates under the number (owner 2026-09-12); a stale feed still says so here */}
+        {total > 0 && !fresh && mv.lastDataDate && (
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 5, lineHeight: 1.4 }}>last update {relDate(mv.lastDataDate)}</div>
         )}
         {/* year-over-year: same window a year ago. Shows only when we can honestly
             make the claim (fresh data + a real prior-year number). */}
