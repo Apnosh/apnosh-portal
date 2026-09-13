@@ -891,7 +891,12 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   }
   const curDates = span('cur'), cmpDates = span('cmp')
   const avg = elapsed.length ? Math.round(total / elapsed.length) : 0
-  const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
+  /* THE AXIS FITS THIS PERIOD, not the one before it (owner 2026-09-12: "make 90 days the real
+     height and the others the same"). Scaling to the prior period too let one giant day in the
+     comparison (249,526 on Aug 12) squash every current bar to a stub on 7d and 30d, while 90d,
+     bucketed by week, happened to fit. Now the current bars always fill the graph; a prior bar
+     that would run past the top is clipped there and drawn with a dashed cap. */
+  const max = Math.max(1, ...bars.map((b) => b.value), avg)
 
   // Year-over-year for THIS window: the elapsed days vs the same days a year ago.
   // Hidden for the annual view (the pill is already YoY there) and when a year
@@ -1044,7 +1049,7 @@ export function ActionsChart({
                   <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 6px ${col}, 0 0 18px ${col}aa` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s, box-shadow .15s' }} />
                 )}
                 {/* the prior-period bar lights up with its partner, so the pair being compared is unmistakable */}
-                <div style={{ width: '46%', maxWidth: 18, height: `${(b.compare / max) * 100}%`, minHeight: isPicked && b.compare > 0 ? 2 : 0, background: isPicked ? '#9a9aa2' : C.ghost, opacity: dim ? 0.3 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked && b.compare > 0 ? '0 0 6px #9a9aa2, 0 0 14px rgba(120,120,130,.55)' : 'none', transition: 'opacity .15s, background .15s' }} />
+                <div style={{ width: '46%', maxWidth: 18, height: `${Math.min(100, (b.compare / max) * 100)}%`, minHeight: isPicked && b.compare > 0 ? 2 : 0, background: isPicked ? '#9a9aa2' : C.ghost, opacity: dim ? 0.3 : 1, borderRadius: b.compare > max ? '0' : '4px 4px 0 0', borderTop: b.compare > max ? `2px dashed ${isPicked ? '#6e6e73' : '#c9c9cf'}` : 'none', boxSizing: 'border-box', boxShadow: isPicked && b.compare > 0 ? '0 0 6px #9a9aa2, 0 0 14px rgba(120,120,130,.55)' : 'none', transition: 'opacity .15s, background .15s' }} />
               </div>
             )
           })}
