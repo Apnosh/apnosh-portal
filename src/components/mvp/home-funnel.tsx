@@ -645,10 +645,12 @@ export default function HomeFunnel({
     stages.forEach((s, i) => {
       const L = layout[i]
       const ox = cx + L.dx, oy = L.y, r = rAt(i)
-      const effZone: Zone = s.count === 0 ? 'locked' : s.zone
+      const effZone: Zone = s.count === 0 || s.count == null ? 'locked' : s.zone
       const bd = s.count === 0 ? null : trend[i] // the stage's direction tints the inner glow (grey when empty)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
-      const rgb = bd ? dirCol(i, bd).join(',') : TONE[effZone].rgb
+      /* a ring with no verdict wears its STAGE's own hue, faint (owner 2026-09-12: an unmeasured
+         Orders ring in the measured-zone green read as a good sign); the zone only sets how faint */
+      const rgb = bd ? dirCol(i, bd).join(',') : stageRgb(i).join(',')
       const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (bd === 'veryLow' ? 1.2 : bd === 'low' ? 1.1 : 1)
       // light: a white disc with a soft green-grey shadow, painted BEFORE the crowd so the people sit on it
       if (!dark) {
@@ -760,9 +762,9 @@ export default function HomeFunnel({
       const ox = cx + L.dx, oy = L.y, r = rAt(i)
       const band = trend[i] // the stage's direction → its ring/number colour (red down, green otherwise)
       const pr = pressAmtRef.current[i] ?? 0 // press "settle" amount for this row
-      const effZone: Zone = s.count === 0 ? 'locked' : s.zone // a 0 reads as empty → grey it like a no-data ring
-      // the ring IS its band colour (red→green); a no-data / empty ring falls back to its grey zone hue.
-      const rc: number[] = band ? dirCol(i, band) : TONE[effZone].rgb.split(',').map(Number)
+      const effZone: Zone = s.count === 0 || s.count == null ? 'locked' : s.zone // empty or unmeasured reads faint
+      // the ring IS its band colour (red→green); a no-data / empty ring wears its stage's own hue, faint.
+      const rc: number[] = band ? dirCol(i, band) : stageRgb(i)
       const ringStr = `${Math.round(rc[0])},${Math.round(rc[1])},${Math.round(rc[2])}`
       const baseRowStr = TONE[effZone].rgb // the row's OWN zone hue → press tint + chevron wake
       const baseA = !dark ? (effZone === 'locked' ? 0.35 : 0.95) : effZone === 'measured' ? 0.82 : effZone === 'estimate' ? 0.52 : 0.32
