@@ -486,15 +486,25 @@ export default function HomeFunnel({
     const n = stages.length
     // the tabs + audience chrome floats OVER the canvas now, so start the rings headerH below the top —
     // the flow streams up behind the chrome, but the rings + big numbers clear it (no text/number collision).
-    const yTop = 62 + headerH, yBot = effH - 64 // the mouth ring clears the one-line header // lead-in up top for the crowd; small bottom margin
+    const yTop = 62 + headerH // the mouth ring clears the one-line header; lead-in up top for the crowd
+    const RRATIO = [1, 0.80, 0.70, 0.64, 0.60] // Awareness biggest; the lower rings stay generously sized
+    const OFFSET_BIG = 72 // a wider weave — the orbs swing further to their side (esp. Awareness↔Interest)
+    /* THE BOTTOM MARGIN MATCHES THE TOP (owner 2026-09-12): the last ring's edge sits as far above
+       the nav as the first ring's edge sits below the tabs, so the funnel uses the whole screen
+       with the same breathing room at both ends. The radii depend on the spacing and the spacing
+       on where the last ring sits, so it settles in two passes. (+16: the nav floats above the
+       frame's bottom edge, which is where this canvas ends, and its shadow eats a few more.) */
+    let RTOP = 60, yBot = effH - 64
+    for (let pass = 0; pass < 2; pass++) {
+      const gapTop = Math.max(12, yTop - RTOP - headerH)
+      yBot = effH - (gapTop + 16) - RTOP * (n === 5 ? RRATIO[4] : 0.45)
+      const sp = n > 1 ? (yBot - yTop) / (n - 1) : yBot - yTop
+      RTOP = Math.max(34, Math.min(74, (sp - 8) / 2)) // the mouth bead — bigger orbs all round
+    }
     // FUNNEL-NARROWING beads: biggest at the mouth, tapering down the path like a real
     // funnel (the mockup's silhouette). Magnitude still lives in the number + the crowd;
     // the taper gives the funnel its shape. Even y-spacing means the edge-gaps WIDEN as
     // the beads shrink, which reads as the classic funnel neck.
-    const spacing = n > 1 ? (yBot - yTop) / (n - 1) : yBot - yTop
-    const RRATIO = [1, 0.80, 0.70, 0.64, 0.60] // Awareness biggest; the lower rings stay generously sized
-    const OFFSET_BIG = 72 // a wider weave — the orbs swing further to their side (esp. Awareness↔Interest)
-    const RTOP = Math.max(34, Math.min(74, (spacing - 8) / 2)) // the mouth bead — bigger orbs all round
     return stages.map((_s, i) => {
       const f = n > 1 ? i / (n - 1) : 0
       const ratio = n === 5 ? RRATIO[i] : 1 - 0.55 * f // exact mockup taper for the 5-stage funnel; linear otherwise
