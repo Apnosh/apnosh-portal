@@ -1040,16 +1040,25 @@ export function ActionsChart({
             const dim = picked != null && !isPicked
             const pending = b.elapsed === false
             return (
-              <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
+              <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', cursor: 'pointer' }}>
+                {/* THE PAIR SHARES ONE SLOT (owner 2026-09-12: the ranges "did not feel the same
+                    size"). Side by side, thirty pairs made hairline bars and seven made fat ones.
+                    The prior period now sits BEHIND its partner, wider and ghosted, and the current
+                    bar in front, so every range draws bars of a similar weight and the pair still
+                    reads as a pair: the ghost shows above when the prior was bigger, the current
+                    covers it when this period won. */}
+                <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '86%', maxWidth: 30, height: `${Math.min(100, (b.compare / max) * 100)}%`, minHeight: isPicked && b.compare > 0 ? 2 : 0, background: isPicked ? '#b9b9c2' : C.ghost, opacity: dim ? 0.3 : 1, borderRadius: b.compare > max ? '0' : '5px 5px 0 0', borderTop: b.compare > max ? `2px dashed ${isPicked ? '#6e6e73' : '#c9c9cf'}` : 'none', boxSizing: 'border-box', transition: 'opacity .15s' }} />
                 {/* a day no source has reported yet: a faint dashed stub, not an
                     empty slot — the window is current, the numbers are en route */}
                 {pending ? (
-                  <div style={{ width: '46%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55 }} />
+                  <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55, boxSizing: 'border-box' }} />
                 ) : (
-                  <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 6px ${col}, 0 0 18px ${col}aa` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s, box-shadow .15s' }} />
+                  /* the holder centres; the bar inside animates (its grow keyframe owns `transform`,
+                     so the centring cannot live on the same element) */
+                  <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+                    <div className="mvp-grow" style={{ width: '100%', height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 6px ${col}, 0 0 18px ${col}aa` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s, box-shadow .15s' }} />
+                  </div>
                 )}
-                {/* the prior-period bar lights up with its partner, so the pair being compared is unmistakable */}
-                <div style={{ width: '46%', maxWidth: 18, height: `${Math.min(100, (b.compare / max) * 100)}%`, minHeight: isPicked && b.compare > 0 ? 2 : 0, background: isPicked ? '#9a9aa2' : C.ghost, opacity: dim ? 0.3 : 1, borderRadius: b.compare > max ? '0' : '4px 4px 0 0', borderTop: b.compare > max ? `2px dashed ${isPicked ? '#6e6e73' : '#c9c9cf'}` : 'none', boxSizing: 'border-box', boxShadow: isPicked && b.compare > 0 ? '0 0 6px #9a9aa2, 0 0 14px rgba(120,120,130,.55)' : 'none', transition: 'opacity .15s, background .15s' }} />
               </div>
             )
           })}
