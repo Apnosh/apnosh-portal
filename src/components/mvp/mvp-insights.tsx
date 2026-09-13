@@ -433,7 +433,9 @@ const STAGE_EXPLAIN: Record<string, string> = {
    the one before, red when down, amber when even. The stage hue stays on the dots + sections. */
 /* BRIGHT, on purpose (owner 2026-09-11: "stand out more"): the graph, its range and its pill all
    wear these, a clear green up and a bright red down (owner: red, not orange), not the quieter kit greens and corals. */
-const TREND_GREEN = '#1fc47a'
+/* percentages and their triangles keep the direction colour (owner 2026-09-13); everything else wears the stage */
+const TREND_GREEN = '#1fc47a', TREND_RED = '#ec1528'
+const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe6e8'
 /* THE VERDICT COLOURS (owner 2026-09-11): each stage has its own bright colour for UP, and every
    stage shares the bright red for DOWN. The graph's bars, its range button, the pill, the by-source
    bars and the Trends line all wear the verdict, so one glance says which way the number went. */
@@ -1293,7 +1295,6 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
   const dn = summary.deltaPct < 0
   const stageKey = STAGE_ORDER[Math.max(0, Math.min(4, (stageNumber ?? 1) - 1))]?.key ?? 'shown'
   const ac = verdictColor(stageKey)
-  const acbg = ac + '22'
   // report the picked range up (the external cards follow it), and the verdict colour
   useEffect(() => { onRange?.(range) }, [range, onRange])
   useEffect(() => { onDir?.(ac) }, [ac, onDir])
@@ -1317,7 +1318,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
               trending line (owner 2026-09-12). */}
           {total > 0 && (
             <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginBottom: 4, minWidth: 0 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: dn ? TREND_RED : TREND_GREEN, background: dn ? TREND_RED_SOFT : TREND_GREEN_SOFT, padding: '4px 10px', borderRadius: 99 }}>
                 <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
               </span>
             </span>
@@ -1461,7 +1462,7 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
       </span>
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
         <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{locked ? '0' : total != null ? total.toLocaleString() : DASH}</span>
-        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: rowCol }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
+        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
       </span>
     </button>
   )
@@ -1686,7 +1687,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           <span style={{ fontSize: 13.5, color: C.mute }}>{flatZero ? 'Nothing counted in this range yet.' : 'Not enough days to call a direction yet.'}</span>
         ) : (
           <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendCol }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? TREND_GREEN : TREND_RED }}>
               {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
               {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
             </span>
@@ -1930,7 +1931,6 @@ function RhythmCard({ mv, range = '30d', customStart, customEnd }: { mv: MetricV
 }
 
 function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days: number; label: string; smooth?: number }) {
-  const A = useAccent()
   const win_n = Math.max(3, smooth)
   const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
   const win = raw.slice(-Math.max(days, 14))
@@ -1948,7 +1948,7 @@ function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days:
         <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
       ) : hits.map((h) => {
         const up = h.vsWeekPct > 0
-        const col = A.main
+        const col = up ? TREND_GREEN : TREND_RED
         const avg = Math.round(h.value / (1 + h.vsWeekPct / 100))
         const isOpen = open === h.date
         const max = Math.max(h.value, avg, 1)
@@ -2844,7 +2844,7 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
               {t.direction !== 'flat' && (
-                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: STAGE_BRIGHT.back, background: STAGE_BRIGHT.back + '22', borderRadius: 99, padding: '2px 7px' }}>
+                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: t.direction === 'up' ? TREND_GREEN : TREND_RED, background: t.direction === 'up' ? TREND_GREEN_SOFT : TREND_RED_SOFT, borderRadius: 99, padding: '2px 7px' }}>
                   {t.direction === 'up' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{t.direction === 'up' ? 'Improving' : 'Slipping'}
                 </span>
               )}
@@ -2960,7 +2960,7 @@ function RecentVsLifetime({ summary, shownAvg }: { summary: ReviewSummary | null
   const gap = Math.round((lately - shownAvg) * 10) / 10
   if (Math.abs(gap) < 0.3) return null
   const better = gap > 0
-  const col = STAGE_BRIGHT.back
+  const col = better ? TREND_GREEN : TREND_RED
   const behind = summary?.placeRatingCount ?? null
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -3163,7 +3163,7 @@ function MonthlyRating({ months }: { months: { ym: string; count: number; avg: n
           <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }}>{last.toFixed(1)}&#9733;</span>
         </span>
         {Math.abs(move) >= 0.2 && (
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: STAGE_BRIGHT.back }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: move > 0 ? TREND_GREEN : TREND_RED }}>
             {move > 0 ? '▲' : '▼'}{Math.abs(move).toFixed(1)} since {monLabel(withData[0].ym + '-01')}
           </span>
         )}

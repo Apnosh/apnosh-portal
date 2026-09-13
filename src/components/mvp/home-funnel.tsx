@@ -733,7 +733,7 @@ export default function HomeFunnel({
       if (i < 0) return undefined
       const b = trend[i]
       if (!b) return undefined
-      return b === 'veryLow' ? HUES.red[0] : HUES[STAGE_HUES[Math.max(0, Math.min(4, i))]][0]
+      return HUES[STAGE_HUES[Math.max(0, Math.min(4, i))]][0] // never red (owner 2026-09-13)
     }
     for (const tr of particlesRef.current) {
       let px: number, py: number, col: string, a = 1, head: string | undefined
@@ -867,7 +867,8 @@ export default function HomeFunnel({
           const tx = fits ? (numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8) : anchorX
           const ty = fits ? oy + 5 : numBase + 17
           ctx.globalAlpha = tickIn
-          ctx.fillStyle = r0 === 0 ? C.mute : `rgb(${stageRgb(i).join(',')})`
+          // the tick keeps the direction colour (owner 2026-09-13: percentages and triangles stay red or green)
+          ctx.fillStyle = r0 > 0 ? `rgb(${HEALTH_GREEN.join(',')})` : r0 < 0 ? `rgb(${HEALTH_RED.join(',')})` : C.mute
           ctx.fillText(tickStr, tx, ty)
           ctx.globalAlpha = 1
         }
