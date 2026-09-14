@@ -78,13 +78,13 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .btn.block{width:100%;height:46px}
 .cr .btn:disabled{background:#e3e6e5;box-shadow:none;cursor:default}
 /* sections + shelves */
-.cr .sec{display:flex;align-items:flex-end;justify-content:space-between;padding:22px 16px 12px}
+.cr .sec{display:flex;align-items:flex-end;justify-content:space-between;padding:14px 16px 10px}
 .cr .sec h2{margin:0;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:19px;color:#1d1d1f;letter-spacing:-.01em}
 .cr .sec h2 .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:linear-gradient(135deg,var(--c1),var(--c2));margin:0 8px 2px 0;vertical-align:middle}
 .cr .sec .sub{font-size:13px;color:#6e6e73;margin-top:2px}
 .cr .sec .more{color:#aeaeb2;display:flex;align-items:center;padding-bottom:4px;background:none;border:0;cursor:pointer}
-.cr .shelf{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 8px;scrollbar-width:none;align-items:stretch}
-.cr .grp{font-size:13px;font-weight:600;color:#6e6e73;padding:10px 16px 8px}
+.cr .shelf{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 4px;scrollbar-width:none;align-items:stretch}
+.cr .grp{font-size:13px;font-weight:600;color:#6e6e73;padding:6px 16px 6px}
 .cr .facts{display:flex;gap:0;margin-top:2px}
 .cr .facts div{flex:1;min-width:0}
 .cr .facts div:first-child{flex:1.6}
