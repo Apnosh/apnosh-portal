@@ -287,6 +287,55 @@ function readReplies(raw: unknown): SocialCommentReply[] {
 }
 
 /** The client's Zernio profile id, or null when they have no live connection. */
+/**
+ * The vendor's own day-by-day for one platform, written over social_metrics (2026-09-14).
+ * /analytics/daily-metrics with attribution=received is what each day actually earned; for
+ * TikTok the count lives in `views` (impressions and reach come back 0), so views stands in
+ * for both there. Confirmed live on production (status 200, dailyData[].date + metrics.*).
+ * Writes only the columns it knows; followers stay as the ledger left them.
+ */
+export async function writeDailyMetrics(clientId: string, profileId: string, platform: string, fromDay: string, toDay: string): Promise<number> {
+  const admin = createAdminClient()
+  const j = await zer(`/analytics/daily-metrics?profileId=${encodeURIComponent(profileId)}&platform=${encodeURIComponent(platform)}&attribution=received&fromDate=${fromDay}&toDate=${toDay}`, { timeoutMs: 20000 })
+  const days = (Array.isArray(j.dailyData) ? j.dailyData : []) as Record<string, unknown>[]
+  let written = 0
+  for (const d of days) {
+    const date = str(d.date).slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > toDay) continue
+    const m = (d.metrics && typeof d.metrics === 'object' ? d.metrics : {}) as Record<string, unknown>
+    const views = num(m.views)
+    const { error } = await admin.from('social_metrics').upsert({
+      client_id: clientId, platform, date,
+      reach: num(m.reach) || views,
+      impressions: num(m.impressions) || views,
+      engagement: num(m.likes) + num(m.comments) + num(m.shares) + num(m.saves),
+      profile_visits: 0,
+      raw_data: { vendor: 'zernio', note: 'vendor daily metrics, received attribution: what each day actually earned', metrics: m, postCount: num(d.postCount), source_updated_at: new Date().toISOString() },
+    }, { onConflict: 'client_id,platform,date' })
+    if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
+    written++
+  }
+  return written
+}
+
+/** Rewrite the last `days` days for every linked platform from the vendor's day-by-day (owner-run, once). */
+export async function backfillDailyMetrics(clientId: string, days: number): Promise<{ written: number; platforms: string[]; failed: string[] }> {
+  const admin = createAdminClient()
+  const { data: conn } = await admin.from('channel_connections').select('platform_account_id, metadata').eq('client_id', clientId).eq('channel', 'zernio').eq('status', 'active').maybeSingle()
+  const profileId = str(conn?.platform_account_id)
+  if (!profileId) throw new ChannelError('not_configured', 'This client has no active zernio connection')
+  const linked = ((conn?.metadata as { platforms?: string[] } | null)?.platforms ?? []).filter((p) => typeof p === 'string')
+  const today = new Date().toISOString().slice(0, 10)
+  const from = new Date(Date.now() - Math.max(1, Math.min(365, days)) * 86400000).toISOString().slice(0, 10)
+  let written = 0
+  const failed: string[] = []
+  for (const platform of linked) {
+    try { written += await writeDailyMetrics(clientId, profileId, platform, from, today) }
+    catch (e) { failed.push(`${platform} (${e instanceof Error ? e.message.slice(0, 80) : 'failed'})`) }
+  }
+  return { written, platforms: linked, failed }
+}
+
 async function profileIdFor(clientId: string): Promise<string | null> {
   const admin = createAdminClient()
   const { data } = await admin
@@ -1450,25 +1499,7 @@ export const zernioAdapter: ChannelAdapter = {
       let dmOff = false
       for (const platform of linked) {
         try {
-          const j = await zer(`/analytics/daily-metrics?profileId=${encodeURIComponent(profileId)}&platform=${encodeURIComponent(platform)}&attribution=received&fromDate=${dmFrom}&toDate=${today}`, { timeoutMs: 15000 })
-          const days = (Array.isArray(j.dailyData) ? j.dailyData : []) as Record<string, unknown>[]
-          for (const d of days) {
-            const date = str(d.date).slice(0, 10)
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) continue
-            const m = (d.metrics && typeof d.metrics === 'object' ? d.metrics : {}) as Record<string, unknown>
-            const views = num(m.views)
-            const row = {
-              client_id: connection.client_id, platform, date,
-              reach: num(m.reach) || views,
-              impressions: num(m.impressions) || views,
-              engagement: num(m.likes) + num(m.comments) + num(m.shares) + num(m.saves),
-              profile_visits: 0,
-              raw_data: { vendor: 'zernio', note: 'vendor daily metrics, received attribution: what each day actually earned', metrics: m, postCount: num(d.postCount), source_updated_at: new Date().toISOString() },
-            }
-            const { error } = await admin.from('social_metrics').upsert(row, { onConflict: 'client_id,platform,date' })
-            if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
-            dmDays++
-          }
+          dmDays += await writeDailyMetrics(connection.client_id, profileId, platform, dmFrom, today)
         } catch (e) {
           const msg = e instanceof Error ? e.message : ''
           /* zer() words a 402 as the account-limit message; that is the add-on gate here */
