@@ -27,7 +27,7 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 const MORE_CSS = `
 .mvp-row{transition:background .12s ease}
-.mvp-row:active{background:#f1f5f4}
+.mvp-row:active{background:#f7f7f9}
 @media (hover:hover){.mvp-row:hover{background:#f7faf9}}
 `
 
@@ -202,16 +202,13 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
         return (
           <div key={g.title} style={{ marginTop: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 4px 4px' }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(g.hue) }} />{g.title}</div>
-            {list.map((r) => (
-              <Link key={r.href} href={r.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 8px', minHeight: 50, marginBottom: 6, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', borderRadius: 14, background: '#f5f5f7' }}>
+            {list.map((r, i) => (
+              <Link key={r.href} href={r.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px 11px 2px', minHeight: 52, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', borderRadius: 12, borderBottom: i < list.length - 1 ? `0.5px solid ${C.line}` : 'none' }}>
                 <Mark hue={r.hue} size={36}><r.Icon size={18} /></Mark>
                 {/* t() answers an unknown key with its own English, so the rows nobody has
                     translated yet read exactly as they always have. */}
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{T(r.label)}</span>
-                  {/* Only the rows that need explaining carry one, so the list does
-                      not become two lines of everything. */}
-                  {r.sub && <span style={{ display: 'block', fontSize: 12, color: C.mute, lineHeight: 1.3, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{T(r.sub)}</span>}
                 </span>
                 {r.pill && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 8px', flexShrink: 0, ...pillStyle(r.pill.tone) }}>{r.pill.text}</span>}
                 <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
@@ -222,7 +219,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
       })}
 
       {!q && (
-        <button type="button" onClick={() => { void signOut() }} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 8px', minHeight: 50, marginTop: 12, boxSizing: 'border-box', borderRadius: 14, background: '#fbeaea', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+        <button type="button" onClick={() => { void signOut() }} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px 11px 2px', minHeight: 52, marginTop: 18, boxSizing: 'border-box', borderRadius: 12, border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
           <Mark hue="red" size={36}><LogOut size={18} /></Mark>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: C.coral }}>Sign out</span>
         </button>
