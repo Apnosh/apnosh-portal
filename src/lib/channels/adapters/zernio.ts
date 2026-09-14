@@ -1430,11 +1430,62 @@ export const zernioAdapter: ChannelAdapter = {
      }
     }
 
+    /* THE VENDOR'S OWN DAY-BY-DAY (2026-09-14). The ledger above only sees growth in the
+     * per-post lifetime totals BETWEEN OUR SYNCS, and the vendor refreshes those totals rarely,
+     * so most days read as zero and a post's views pile onto its publish day (the owner saw a
+     * week of 0 under a video that was plainly being watched). /analytics/daily-metrics with
+     * attribution=received is the vendor's own count of what each day actually earned. When it
+     * answers, its last ten days overwrite the ledger's rows for those days (the delta write
+     * above still runs first, as the fallback the moment this call fails). It needs the
+     * Analytics add-on: a 402 is remembered on the connection and re-tried weekly, never daily.
+     * Field names are the spec's (dailyData[].date, .metrics.{impressions,reach,views,likes,
+     * comments,shares,saves}); the first live answer is the shape check, via ?describe=. */
+    const dmState = String(priorMd.daily_metrics ?? '')
+    const dmCheckedAt = Date.parse(String(priorMd.daily_metrics_checked_at ?? '')) || 0
+    const dmDue = dmState !== 'unavailable' || Date.now() - dmCheckedAt > 7 * 86400000
+    let dmNext: Record<string, unknown> = {}
+    if (dmDue) {
+      const dmFrom = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10)
+      let dmDays = 0
+      let dmOff = false
+      for (const platform of linked) {
+        try {
+          const j = await zer(`/analytics/daily-metrics?profileId=${encodeURIComponent(profileId)}&platform=${encodeURIComponent(platform)}&attribution=received&fromDate=${dmFrom}&toDate=${today}`, { timeoutMs: 15000 })
+          const days = (Array.isArray(j.dailyData) ? j.dailyData : []) as Record<string, unknown>[]
+          for (const d of days) {
+            const date = str(d.date).slice(0, 10)
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) continue
+            const m = (d.metrics && typeof d.metrics === 'object' ? d.metrics : {}) as Record<string, unknown>
+            const views = num(m.views)
+            const row = {
+              client_id: connection.client_id, platform, date,
+              reach: num(m.reach) || views,
+              impressions: num(m.impressions) || views,
+              engagement: num(m.likes) + num(m.comments) + num(m.shares) + num(m.saves),
+              profile_visits: 0,
+              raw_data: { vendor: 'zernio', note: 'vendor daily metrics, received attribution: what each day actually earned', metrics: m, postCount: num(d.postCount), source_updated_at: new Date().toISOString() },
+            }
+            const { error } = await admin.from('social_metrics').upsert(row, { onConflict: 'client_id,platform,date' })
+            if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
+            dmDays++
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : ''
+          /* zer() words a 402 as the account-limit message; that is the add-on gate here */
+          if (/402|add-on|addon|upgrade|plan|account limit/i.test(msg)) { dmOff = true; break }
+          failed.push(`${platform} daily metrics (${msg.slice(0, 80)})`)
+        }
+      }
+      dmNext = dmOff
+        ? { daily_metrics: 'unavailable', daily_metrics_checked_at: new Date().toISOString() }
+        : { daily_metrics: dmDays > 0 ? 'ok' : 'empty', daily_metrics_checked_at: new Date().toISOString(), daily_metrics_days: dmDays }
+    }
+
     /* Refresh the account counts + the lifetime-totals ledger after the run (the
      * platforms list was already stamped above, so the connection has been showing
      * the truth throughout). */
     await admin.from('channel_connections')
-      .update({ status: 'active', metadata: { ...priorMd, platforms: linked, account_counts: accountCounts, lifetime_totals: nextTotals } })
+      .update({ status: 'active', metadata: { ...priorMd, ...dmNext, platforms: linked, account_counts: accountCounts, lifetime_totals: nextTotals } })
       .eq('id', connection.id)
 
     const ok = linked.filter((p) => !failed.some((f) => f.startsWith(p)))
