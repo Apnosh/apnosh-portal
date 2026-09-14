@@ -20,7 +20,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ChevronRight, MessageCircle, Star } from 'lucide-react'
+import { Check, ChevronRight, Loader2, MessageCircle, Send, Sparkles, Star } from 'lucide-react'
 import { C, DISPLAY } from './tokens'
 import { loadComments, type CommentRow } from './mvp-inbox'
 import type { CommentReadItem, CommentTone } from '@/app/api/dashboard/comment-read/route'
@@ -78,6 +78,39 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   const [commentsErr, setCommentsErr] = useState(false)
   const [read, setRead] = useState<CommentRead | null>(null)
   const [queue, setQueue] = useState<Queue | null>(null)
+  /* REPLY IN PLACE (owner 2026-09-14), same as comments on the post sheet: a Reply link opens a
+     box under the review, Suggest fills it with a draft in the owner's voice, Send posts it to
+     Google through the same route the review page uses. The reply stays under the review and
+     Edit reopens it: Google keeps one owner reply per review, so a second send replaces it. */
+  const [rOpen, setROpen] = useState<Set<string>>(new Set())
+  const [rDraft, setRDraft] = useState<Record<string, string>>({})
+  const [rBusy, setRBusy] = useState<string | null>(null)
+  const [rSent, setRSent] = useState<Record<string, string>>({})
+  const [rErr, setRErr] = useState<Record<string, string>>({})
+  const openReply = (id: string, seed?: string) => { setROpen((o) => new Set(o).add(id)); if (seed != null) setRDraft((d) => ({ ...d, [id]: seed })) }
+  const suggest = async (id: string, rating: number) => {
+    setRBusy(`draft:${id}`); setRErr((e) => ({ ...e, [id]: '' }))
+    try {
+      const r = await fetch('/api/dashboard/reviews/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewId: id, tone: rating <= 3 ? 'winback' : 'thankful' }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.reply) throw new Error('no draft')
+      setRDraft((d) => ({ ...d, [id]: String(j.reply) }))
+    } catch { setRErr((e) => ({ ...e, [id]: 'Could not write a draft just now. Your own words work.' })) }
+    setRBusy(null)
+  }
+  const sendReply = async (id: string) => {
+    const text = (rDraft[id] ?? '').trim()
+    if (!text || rBusy) return
+    setRBusy(`send:${id}`); setRErr((e) => ({ ...e, [id]: '' }))
+    try {
+      const r = await fetch(`/api/dashboard/reviews/${id}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replyText: text }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.ok) throw new Error('not posted')
+      setRSent((m) => ({ ...m, [id]: text }))
+      setROpen((o) => { const n = new Set(o); n.delete(id); return n })
+    } catch { setRErr((e) => ({ ...e, [id]: 'We could not post this to Google. Your team was told.' })) }
+    setRBusy(null)
+  }
 
   useEffect(() => {
     if (!clientId) return
@@ -207,16 +240,37 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
           <div style={{ ...CARD, fontSize: 13, color: C.mute }}>{queue && queue.unreachable > 0 ? `${queue.unreachable} older ${queue.unreachable === 1 ? 'review has' : 'reviews have'} no reply, and Google gives us no address to answer them.` : 'Nothing waiting. Every review and comment that wanted an answer has one.'}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {openReviews.map((r) => (
-              <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ ...CARD, textDecoration: 'none', color: 'inherit', display: 'block', borderLeft: `3px solid ${r.rating <= 2 ? RED : r.rating === 3 ? AMBER : TEAL}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13.5 }}>{r.author}</span><StarsRow n={r.rating} size={11} />
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{SOURCE_WORD[r.source] ?? r.source} · {ago(r.postedAt)}</span>
+            {openReviews.map((r) => { const isOpen = rOpen.has(r.id); const sentTx = rSent[r.id]; const col = r.rating <= 2 ? RED : r.rating === 3 ? AMBER : TEAL
+              return (
+                <div key={r.id} style={{ ...CARD, borderLeft: `3px solid ${col}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13.5 }}>{r.author}</span><StarsRow n={r.rating} size={11} />
+                    <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{SOURCE_WORD[r.source] ?? r.source} · {ago(r.postedAt)}</span>
+                    <Link href={`/dashboard/reviews/${r.id}`} aria-label="Open the review" style={{ color: C.faint, display: 'inline-flex' }}><ChevronRight size={15} /></Link>
+                  </div>
+                  {r.text ? <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 4, display: isOpen ? 'block' : '-webkit-box', WebkitLineClamp: isOpen ? undefined : 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div> : <div style={{ fontSize: 12, color: C.faint, fontStyle: 'italic', marginTop: 4 }}>No written comment.</div>}
+                  {sentTx && <div style={{ marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${TEAL}`, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}><b style={{ color: TEAL_DK, fontWeight: 700 }}>You</b> {sentTx}</div>}
+                  {isOpen ? (
+                    <div style={{ marginTop: 10, padding: '10px 10px 10px 12px', borderRadius: 14, background: C.bg }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: TEAL_DK }}>{sentTx ? 'Edit your reply' : 'Your reply'}</div>
+                      <textarea value={rDraft[r.id] ?? ''} onChange={(e) => setRDraft((d) => ({ ...d, [r.id]: e.target.value }))} rows={3} autoFocus placeholder={`Reply to ${r.author}…`}
+                        style={{ display: 'block', width: '100%', marginTop: 4, border: 0, outline: 0, resize: 'none', background: 'none', font: 'inherit', fontSize: 13.5, lineHeight: 1.45, color: C.ink, padding: 0, boxSizing: 'border-box' }} />
+                      {rErr[r.id] && <div style={{ fontSize: 12, color: RED, marginTop: 4 }}>{rErr[r.id]}</div>}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 8 }}>
+                        <button type="button" onClick={() => suggest(r.id, r.rating)} disabled={rBusy != null} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12.5, fontWeight: 700, color: TEAL_DK, cursor: 'pointer' }}>{rBusy === `draft:${r.id}` ? <Loader2 size={13} className="mvp-spin" /> : <Sparkles size={13} />} Suggest a reply</button>
+                        <button type="button" onClick={() => sendReply(r.id)} disabled={rBusy != null || !(rDraft[r.id] ?? '').trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px', borderRadius: 99, border: 0, background: TEAL_DK, color: '#fff', font: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: (rDraft[r.id] ?? '').trim() ? 1 : .5 }}>
+                          {rBusy === `send:${r.id}` ? <Loader2 size={13} className="mvp-spin" /> : <Send size={13} />} {sentTx ? 'Update' : 'Post to Google'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                      {sentTx && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: TEAL_DK }}><Check size={12} strokeWidth={3} /> Posted to Google</span>}
+                      <button type="button" onClick={() => openReply(r.id, sentTx)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12, fontWeight: 700, color: sentTx ? C.mute : TEAL_DK, cursor: 'pointer' }}><MessageCircle size={13} /> {sentTx ? 'Edit reply' : 'Reply'}</button>
+                    </div>
+                  )}
                 </div>
-                {r.text ? <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div> : <div style={{ fontSize: 12, color: C.faint, fontStyle: 'italic', marginTop: 4 }}>No written comment.</div>}
-                <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: TEAL_DK, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Reply <ChevronRight size={13} /></div>
-              </Link>
-            ))}
+              ) })}
             {openComments.map((c) => { const it = toneOf.get(c.id)!; const col = it.tone === 'complaint' ? RED : AMBER
               return (
                 <Link key={c.id} href="/dashboard/inbox?tab=comments" style={{ ...CARD, textDecoration: 'none', color: 'inherit', display: 'block', borderLeft: `3px solid ${col}` }}>
