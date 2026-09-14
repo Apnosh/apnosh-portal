@@ -16,7 +16,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut, PenLine, TrendingUp, MapPin, MessageSquare, ShoppingBag, MapPinned, AtSign, BarChart3, Mail } from 'lucide-react'
+import { ChevronRight, Store, Clock, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut, PenLine, TrendingUp, MapPin, MessageSquare, ShoppingBag, MapPinned, AtSign, BarChart3, Mail } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 import { useLang } from './mvp-language'
 import { gradOf, hueOf, type HueKey } from './hues'
@@ -31,10 +31,6 @@ const MORE_CSS = `
 @media (hover:hover){.mvp-row:hover{background:#f7faf9}}
 `
 
-const GOAL_HUE: Record<string, HueKey> = {
-  more_foot_traffic: 'newfaces', regulars_more_often: 'regulars', more_online_orders: 'online', more_reservations: 'event',
-  better_reputation: 'reviews', be_known_for: 'brand', fill_slow_times: 'nights', grow_catering: 'catering',
-}
 
 interface MoreData {
   profile: { name: string; logoUrl: string | null; cuisine: string | null; city: string | null; tier: string | null; hours: unknown; goals: { slug: string; name: string }[] }
@@ -150,7 +146,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
   const quick: { label: string; href: string; Icon: typeof Store; hue: HueKey }[] = [
     { label: 'Info', href: '/dashboard/business-info', Icon: Store, hue: 'newfaces' },
     { label: 'Hours', href: '/dashboard/business-info/hours', Icon: Clock, hue: 'newfaces' },
-    { label: 'Menu', href: '/dashboard/business-info/menu', Icon: UtensilsCrossed, hue: 'catering' },
+    { label: 'Goals', href: '/dashboard/goals', Icon: Trophy, hue: 'catering' },
     { label: 'Photos', href: '/dashboard/assets', Icon: ImageIcon, hue: 'catering' },
     { label: 'Brand', href: '/dashboard/business-info/brand', Icon: Palette, hue: 'brand' },
   ]
@@ -178,11 +174,6 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
             <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />
           </Link>
 
-          {/* their goals, in each goal's colour; a nudge when none are set */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12, padding: '0 4px' }}>
-            {(p?.goals?.length ? p.goals : []).map((g) => { const hue = GOAL_HUE[g.slug] ?? 'mint'; return <Link key={g.slug} href="/dashboard/goals" style={{ fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 99, background: hueTint(hue), color: hueInk(hue), textDecoration: 'none' }}>{g.name}</Link> })}
-            {p && p.goals.length === 0 && <Link href="/dashboard/goals" style={{ fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 99, background: '#eaf7f3', color: C.greenDk, textDecoration: 'none' }}>Pick your goals</Link>}
-          </div>
 
           {/* the five things owners touch most */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginTop: 12 }}>
@@ -230,4 +221,3 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
 
 /* soft tint + deep ink of a hue, for the goal chips */
 const hueTint = (h: HueKey) => hueOf(h)[0] + '29'
-const hueInk = (h: HueKey) => hueOf(h)[1]
