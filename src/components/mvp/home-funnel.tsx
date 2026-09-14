@@ -497,7 +497,9 @@ export default function HomeFunnel({
     let RTOP = 60, yBot = effH - 64
     for (let pass = 0; pass < 2; pass++) {
       const gapTop = Math.max(12, yTop - RTOP - headerH)
-      yBot = effH - (gapTop + 16) - RTOP * (n === 5 ? RRATIO[4] : 0.45)
+      /* closer to the nav than to the tabs (owner 2026-09-14): about half the top gap, never under 10px,
+         so the Reputation ring sits low without touching the nav or its shadow */
+      yBot = effH - (Math.max(10, Math.round(gapTop * 0.45)) + 16) - RTOP * (n === 5 ? RRATIO[4] : 0.45)
       const sp = n > 1 ? (yBot - yTop) / (n - 1) : yBot - yTop
       RTOP = Math.max(34, Math.min(74, (sp - 8) / 2)) // the mouth bead — bigger orbs all round
     }
