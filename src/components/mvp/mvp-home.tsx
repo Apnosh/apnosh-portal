@@ -1049,7 +1049,7 @@ export function ActionsChart({
                   /* the holder centres; the bar inside animates (its grow keyframe owns `transform`,
                      so the centring cannot live on the same element) */
                   <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
-                    <div className="mvp-grow" style={{ width: '100%', height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 6px ${col}, 0 0 18px ${col}aa` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s, box-shadow .15s' }} />
+                    <div className="mvp-grow" style={{ width: '100%', height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', /* no glow on the bars (owner 2026-09-14); the picked one just reads at full colour */ transition: 'opacity .15s' }} />
                   </div>
                 )}
               </div>
