@@ -662,11 +662,11 @@ export default function HomeFunnel({
       const rgb = bd ? dirCol(i, bd).join(',') : stageRgb(i).join(',')
       const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (bd === 'veryLow' ? 1.2 : bd === 'low' ? 1.1 : 1)
       // light: a white disc with a soft green-grey shadow, painted BEFORE the crowd so the people sit on it
+      /* NO GLOW IN THE LIGHT LOOK (owner 2026-09-14): a plain white disc, no drop shadow under it
+         and no tinted haze inside it. The ring is the hairline alone. The night look keeps its lit beads. */
       if (!dark) {
-        ctx.save()
-        ctx.shadowColor = `rgba(18,80,58,${0.12 * eIn})`; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6
         ctx.beginPath(); ctx.arc(ox, oy, r, 0, 7); ctx.fillStyle = effZone === 'locked' ? '#fafafa' : '#ffffff'; ctx.fill()
-        ctx.restore()
+        return
       }
       const g = ctx.createRadialGradient(ox, oy, r * 0.08, ox, oy, r * 1.02)
       g.addColorStop(0, `rgba(${rgb},${peak * eIn})`)
@@ -797,8 +797,8 @@ export default function HomeFunnel({
 
       // the open hairline ring, lifted a hair off the white by one soft same-hue shadow
       ctx.save()
-      ctx.shadowColor = `rgba(${ringStr},${shBase * eIn})`
-      ctx.shadowBlur = 4
+      ctx.shadowColor = `rgba(${ringStr},${(dark ? shBase : 0) * eIn})`
+      ctx.shadowBlur = dark ? 4 : 0
       ctx.beginPath(); ctx.arc(ox, oy, r, 0, 7)
       ctx.lineWidth = lw; ctx.setLineDash(dash || [])
       ctx.strokeStyle = `rgba(${ringStr},${baseA * eIn})`; ctx.stroke(); ctx.setLineDash([])
