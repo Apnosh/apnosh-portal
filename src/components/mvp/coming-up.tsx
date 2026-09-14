@@ -200,32 +200,35 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
             const tone = r.bad ? { ink: '#ec1528', bg: '#fde4e6', Icon: AlertCircle }
               : r.team ? (r.ready ? { ink: C.greenDk, bg: tint('mint', .16), Icon: Check } : { ink: '#9a6b17', bg: '#faf1de', Icon: Users })
               : { ink: '#3b6fd4', bg: tint('nights', .16), Icon: Calendar }
-            /* CALM CARD (owner 2026-09-14: "too busy"). Three things only: the state as one coloured
-               word with a dot, two lines of the post, and the networks as quiet grey words. No chip,
-               no logos, no shadow; a hairline holds it. The picture, when there is one, is a small
-               square on the right so the words lead. */
-            const word = (pl: string) => ({ instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', google: 'Google', gbp: 'Google', x: 'X', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' } as Record<string, string>)[pl.toLowerCase()] ?? pl
-            const nets = r.platforms.map(word)
-            const netLine = nets.length > 3 ? `${nets.slice(0, 3).join(', ')} +${nets.length - 3}` : nets.join(', ')
+            /* A POST PREVIEW (owner 2026-09-14): the same 164x256 tile as Recent posts under it, so
+               what is coming and what went out read as one flow. The picture fills it (a soft
+               network-tinted pane when there is none), the networks sit top-left, the state is a
+               small chip top-right, and the caption sits at the bottom, on a scrim over a photo. */
+            const has = !!r.media
             return (
               <Link key={r.id} href="/dashboard/insights/posts" style={{
-                flex: '0 0 224px', width: 224, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
-                borderRadius: 16, padding: '12px 13px 11px', display: 'flex', flexDirection: 'column', gap: 6,
-                border: `0.5px solid ${C.line}`, background: '#fff',
+                position: 'relative', flex: '0 0 164px', width: 164, height: 256, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
+                borderRadius: 18, overflow: 'hidden', background: has ? '#111' : '#fff', backgroundImage: has ? `url(${r.media})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
+                border: has ? 'none' : `0.5px solid ${C.line}`, boxShadow: '0 1px 3px rgba(0,0,0,.08), 0 8px 20px rgba(0,0,0,.05)',
               }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: tone.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.ink, flexShrink: 0 }} />{r.when}
+                {!has && <span style={{ position: 'absolute', inset: 0, background: gradOf(r.bad ? 'red' : r.team ? (r.ready ? 'mint' : 'amber') : 'nights'), opacity: .13 }} />}
+                {has && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '70%', background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.35) 40%, rgba(0,0,0,.82) 100%)' }} />}
+                <span style={{ position: 'absolute', left: 9, top: 38, display: 'inline-flex', alignItems: 'center' }}>
+                  {r.platforms.slice(0, 4).map((pl, i) => (
+                    <span key={pl + i} style={{ marginLeft: i ? -7 : 0, width: 25, height: 25, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.24)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <BrandOrMark provider={pl} size={14} />
+                    </span>
+                  ))}
                 </span>
-                <span style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.ink, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 36 }}>{r.text}</span>
-                  {r.media && <span style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, background: `center/cover url(${r.media})` }} />}
+                <span style={{ position: 'absolute', left: 8, top: 9, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, padding: '3px 7px', borderRadius: 99, background: has ? 'rgba(255,255,255,.92)' : tone.bg, color: tone.ink, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 16px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <tone.Icon size={11} strokeWidth={2.6} style={{ flexShrink: 0 }} />{r.when}
                 </span>
-                {netLine && <span style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{netLine}</span>}
+                <span style={{ position: 'absolute', left: 11, right: 11, bottom: 11, fontSize: has ? 12.5 : 14, lineHeight: 1.4, color: has ? '#fff' : C.ink, display: '-webkit-box', WebkitLineClamp: has ? 4 : 7, WebkitBoxOrient: 'vertical', overflow: 'hidden', textShadow: has ? '0 1px 6px rgba(0,0,0,.4)' : 'none' }}>{r.text}</span>
               </Link>
             )
           })}
           {rows.length > shown.length && (
-            <Link href="/dashboard/insights/posts" style={{ flex: '0 0 132px', width: 132, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 16, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Link href="/dashboard/insights/posts" style={{ flex: '0 0 120px', width: 120, height: 256, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <span style={{ width: 34, height: 34, borderRadius: 11, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ChevronRight size={16} color={C.greenDk} />
               </span>
