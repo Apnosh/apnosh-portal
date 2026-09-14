@@ -351,6 +351,8 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
                       </span>
                       <span style={{ display: 'block', fontSize: 13.5, color: C.ink, lineHeight: 1.45, marginTop: 3 }}>{c.text}</span>
                       {it?.why && <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 3 }}>{it.why}</span>}
+                      {/* the replies the vendor already holds (the business's and anyone else's), then the ones sent from here */}
+                      {(c.replies ?? []).map((rp, i) => <span key={`v${i}`} style={{ display: 'block', marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.green}`, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}><b style={{ color: C.greenDk, fontWeight: 700 }}>{rp.by || 'You'}</b> {rp.text}</span>)}
                       {(sentText[c.id] ?? []).map((tx, i) => <span key={i} style={{ display: 'block', marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.green}`, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}><b style={{ color: C.greenDk, fontWeight: 700 }}>You</b> {tx}</span>)}
                       {!wants && (canReply
                         ? <button type="button" onClick={() => setOpen((o) => new Set(o).add(c.id))} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12.5, fontWeight: 700, color: answered ? C.mute : C.greenDk, cursor: 'pointer' }}><MessageCircle size={13} /> {answered ? 'Reply again' : 'Reply'}</button>

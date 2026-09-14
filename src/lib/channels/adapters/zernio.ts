@@ -264,6 +264,26 @@ export interface SocialCommentRow {
   postCaption: string | null
   /** likes on the comment itself, when the vendor reports them */
   likes: number
+  /** the replies already under it, as the vendor returns them (the business's own and others'),
+   *  oldest first; the post sheet shows them so an answered comment shows its answer (2026-09-14) */
+  replies: SocialCommentReply[]
+}
+export interface SocialCommentReply { text: string; by: string; at: string | null }
+
+/** The vendor's `replies` array is comment-shaped (message, from, createdTime); read it the same way. */
+function readReplies(raw: unknown): SocialCommentReply[] {
+  if (!Array.isArray(raw)) return []
+  const s = (x: unknown) => (typeof x === 'string' ? x : typeof x === 'number' ? String(x) : '')
+  const out: SocialCommentReply[] = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const c = r as Record<string, unknown>
+    const text = s(c.message) || s(c.content) || s(c.text)
+    if (!text) continue
+    const who = (c.from && typeof c.from === 'object' ? (c.from as Record<string, unknown>) : {}) as Record<string, unknown>
+    out.push({ text, by: s(c.from) || s(who.username) || s(who.name) || s(who.displayName) || s(c.username) || '', at: s(c.createdTime) || s(c.createdAt) || null })
+  }
+  return out.sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? '')))
 }
 
 /** The client's Zernio profile id, or null when they have no live connection. */
@@ -784,6 +804,7 @@ async function tiktokComments(clientId: string, profileId: string): Promise<Soci
         canReply: c.canReply !== false,
         url: str(c.url) || str(c.permalink) || null,
         postPermalink: v.permalink, postCaption: v.caption, likes: num(c.likeCount),
+        replies: readReplies(c.replies),
       })
     }
   }
@@ -872,6 +893,7 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
         postPermalink: str(post.permalink) || null,
         postCaption: str(post.content) || null,
         likes: num(c.likeCount),
+        replies: readReplies(c.replies),
       })
     }
   }

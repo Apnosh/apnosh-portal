@@ -168,7 +168,7 @@ export function loadComments(clientId: string): Promise<CommentRow[]> {
   return p
 }
 
-export interface CommentRow { id: string; platform: string; postId: string | null; accountId?: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null; postPermalink?: string | null; postCaption?: string | null; likes?: number }
+export interface CommentRow { id: string; platform: string; postId: string | null; accountId?: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null; postPermalink?: string | null; postCaption?: string | null; likes?: number; replies?: { text: string; by: string; at: string | null }[] }
 
 /**
  * COMMENTS ON THEIR POSTS, with the reply in the same place.
