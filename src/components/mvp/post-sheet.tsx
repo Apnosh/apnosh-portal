@@ -131,6 +131,11 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
   const [sending, setSending] = useState<string | null>(null)
   const [sent, setSent] = useState<Set<string>>(new Set())
   const [sendErr, setSendErr] = useState<string | null>(null)
+  /* REPLY TO ANY COMMENT (owner 2026-09-14): the box used to open only where the read suggested
+     words. Now every comment the vendor lets us answer has a Reply link; a suggested reply
+     still opens the box on its own, filled in. What was sent stays under the comment. */
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const [sentText, setSentText] = useState<Record<string, string>>({})
   useEffect(() => {
     if (!clientId) return
     let live = true
@@ -181,6 +186,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(ownerSafe(String(j.error ?? '')))
       setSent((s) => new Set(s).add(c.id))
+      setSentText((m) => ({ ...m, [c.id]: text }))
     } catch (e) { setSendErr(e instanceof Error ? e.message : ownerSafe('')) }
     setSending(null)
   }
@@ -328,7 +334,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           {mine && mine.length === 0 && <div style={{ fontSize: 13, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>No comments on this one yet.</div>}
           {sendErr && <div style={{ fontSize: 12.5, color: C.coral, marginTop: 10 }}>{sendErr}</div>}
           <div style={{ marginTop: 6 }}>
-            {ordered.map((c) => { const t = toneOf(c); const it = read?.items.get(c.id); const answered = c.replied || sent.has(c.id); const wants = !answered && c.canReply !== false && !!it?.reply
+            {ordered.map((c) => { const t = toneOf(c); const it = read?.items.get(c.id); const answered = c.replied || sent.has(c.id); const canReply = c.canReply !== false; const wants = !answered && canReply && (open.has(c.id) || !!it?.reply)
               return (
                 <div key={c.id} style={{ padding: '12px 0', borderTop: `0.5px solid ${C.line}` }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -342,12 +348,16 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
                       </span>
                       <span style={{ display: 'block', fontSize: 13.5, color: C.ink, lineHeight: 1.45, marginTop: 3 }}>{c.text}</span>
                       {it?.why && <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 3 }}>{it.why}</span>}
+                      {sentText[c.id] && <span style={{ display: 'block', marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.green}`, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}><b style={{ color: C.greenDk, fontWeight: 700 }}>You</b> {sentText[c.id]}</span>}
+                      {!answered && !wants && (canReply
+                        ? <button type="button" onClick={() => setOpen((o) => new Set(o).add(c.id))} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, cursor: 'pointer' }}><MessageCircle size={13} /> Reply</button>
+                        : c.url && <a href={c.url} target="_blank" rel="noreferrer noopener" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 12.5, fontWeight: 700, color: C.mute, textDecoration: 'none' }}>Reply on {name(c.platform)} <ArrowUpRight size={12} /></a>)}
                     </span>
                   </div>
                   {wants && (
                     <div style={{ margin: '10px 0 0 40px', padding: '10px 10px 10px 12px', borderRadius: 14, background: C.bg }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.greenDk }}>Suggested reply</div>
-                      <textarea value={drafts[c.id] ?? ''} onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))} rows={2}
+                      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.greenDk }}>{it?.reply ? 'Suggested reply' : 'Your reply'}</div>
+                      <textarea value={drafts[c.id] ?? ''} onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))} rows={2} placeholder={`Reply to ${(c.authorName || 'them').replace(/^@/, '')}…`} autoFocus={open.has(c.id) && !it?.reply}
                         style={{ display: 'block', width: '100%', marginTop: 4, border: 0, outline: 0, resize: 'none', background: 'none', font: 'inherit', fontSize: 13.5, lineHeight: 1.45, color: C.ink, padding: 0, boxSizing: 'border-box' }} />
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                         <button type="button" onClick={() => send(c)} disabled={sending === c.id || !(drafts[c.id] ?? '').trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: sending === c.id ? .7 : 1 }}>
