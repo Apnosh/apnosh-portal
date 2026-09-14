@@ -441,7 +441,11 @@ export default function HomeFunnel({
       if (!cv) return
       const vh = window.visualViewport?.height ?? window.innerHeight
       const nav = document.querySelector('.mvp-frame nav') ?? document.querySelector('nav')
-      const navH = nav ? nav.getBoundingClientRect().height : 68
+      /* THE NAV'S REAL TOP EDGE (owner 2026-09-14): on a phone with a home bar the nav floats
+         above the safe area, so its top is higher than "height from the bottom" assumed and
+         the last ring stopped 30px short. Measured, the canvas ends exactly at the nav's edge. */
+      const navTop = nav ? nav.getBoundingClientRect().top : vh - 78
+      const navH = vh - navTop
       // the canvas now starts at the very TOP of the card (the chrome floats over it); its top is fixed by the
       // account bar above the card and does NOT move when the canvas grows → measuring it here is stable + loop-free
       const cvTop = cv.getBoundingClientRect().top
@@ -498,10 +502,9 @@ export default function HomeFunnel({
     for (let pass = 0; pass < 2; pass++) {
       /* closer to the nav than to the tabs (owner 2026-09-14): about half the top gap, never under 10px,
          so the Reputation ring sits low without touching the nav or its shadow */
-      /* THE CANVAS ENDS 10px BELOW THE NAV'S TOP EDGE (the nav floats NAV_BOTTOM above the frame's
-         bottom), so the last ring's edge sits at canvas bottom minus 10 minus a hair (owner
-         2026-09-14: as close to the nav as it can be without touching). */
-      yBot = effH - 18 - RTOP * (n === 5 ? RRATIO[4] : 0.45)
+      /* the canvas ends AT the nav's top edge (measured above), so the last ring's edge sits 8px
+         above the nav (owner 2026-09-14: as close as it can be without touching) */
+      yBot = effH - 8 - RTOP * (n === 5 ? RRATIO[4] : 0.45)
       const sp = n > 1 ? (yBot - yTop) / (n - 1) : yBot - yTop
       RTOP = Math.max(34, Math.min(74, (sp - 8) / 2)) // the mouth bead — bigger orbs all round
     }

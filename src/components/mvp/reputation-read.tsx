@@ -47,6 +47,32 @@ const LIST: React.CSSProperties = { marginTop: 18, padding: '0 2px' }
 const H3: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }
 const CARD: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14 }
 
+const DEMO: { summary: Summary; topics: Topics; queue: Queue; comments: CommentRow[]; read: CommentRead } = {
+  summary: { split: { positive: 186, neutral: 21, negative: 17, total: 224 }, stars: { '5': 152, '4': 34, '3': 21, '2': 6, '1': 11 }, reply: { total: 224, replied: 201, unanswered: 23, unansweredNegative: 3, ratePct: 90, medianHours: 9 }, sources: { google: 198, yelp: 26 }, placeRating: 4.6, placeRatingCount: 312 },
+  topics: { summary: 'Guests come for the popcorn chicken sando and stay for the staff. The wait on Friday nights is the one thing that keeps coming up.', topics: [
+    { name: 'Popcorn chicken sando', positive: 41, negative: 1, mentions: 42, direction: 'up', quote: 'the popcorn chicken sando is unreal, crispy and still juicy', negQuote: '' },
+    { name: 'Staff', positive: 33, negative: 2, mentions: 35, direction: 'flat', quote: 'the owner came out to say hi and remembered our order', negQuote: 'felt rushed at the counter' },
+    { name: 'Bubble tea', positive: 19, negative: 4, mentions: 23, direction: 'flat', quote: 'brown sugar boba was perfect', negQuote: 'my milk tea was watery this time' },
+    { name: 'Wait time', positive: 2, negative: 14, mentions: 16, direction: 'down', quote: '', negQuote: 'waited 35 minutes on a Friday for two sandos' },
+    { name: 'Prices', positive: 3, negative: 7, mentions: 10, direction: 'flat', quote: 'worth every dollar', negQuote: '$15 for a sando is a lot' },
+  ], source: 'ai' },
+  queue: { total: 224, replied: 201, critical: 3, unreachable: 0, queue: [
+    { id: 'demo-1', rating: 1, author: 'Marcus T.', text: 'Waited 40 minutes for a pickup order that was supposed to be ready. Nobody said sorry. The sando was good but I will not be back for that wait.', postedAt: new Date(Date.now() - 2 * 86400000).toISOString(), waitingDays: 2 },
+    { id: 'demo-2', rating: 2, author: 'Priya N.', text: 'Bubble tea was watery and the ice was half the cup. Food was fine.', postedAt: new Date(Date.now() - 4 * 86400000).toISOString(), waitingDays: 4 },
+    { id: 'demo-3', rating: 3, author: 'Dan L.', text: 'Good sando, loud room, hard to hear my friend. Would come back for takeout.', postedAt: new Date(Date.now() - 6 * 86400000).toISOString(), waitingDays: 6 },
+  ] },
+  comments: [
+    { id: 'c1', platform: 'instagram', postId: 'p1', accountId: 'a1', authorName: 'jess.eats', text: 'Do you have anything gluten free? Coming Saturday with my sister', createdAt: new Date(Date.now() - 86400000).toISOString(), replied: false, canReply: true, url: null, postPermalink: null, postCaption: null, likes: 2, replies: [] } as unknown as CommentRow,
+    { id: 'c2', platform: 'tiktok', postId: 'p2', accountId: 'a1', authorName: 'mike_sea', text: 'Came in after this video. Line out the door but worth it', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), replied: true, canReply: true, url: null, postPermalink: null, postCaption: null, likes: 14, replies: [] } as unknown as CommentRow,
+    { id: 'c3', platform: 'instagram', postId: 'p1', accountId: 'a1', authorName: 'tasha.k', text: 'Ordered delivery and the sando arrived soggy :( in store it is perfect', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), replied: false, canReply: true, url: null, postPermalink: null, postCaption: null, likes: 0, replies: [] } as unknown as CommentRow,
+  ],
+  read: { summary: 'Mostly love for the sando and the boba, a couple of questions about the menu, and one delivery complaint.', items: [
+    { id: 'c1', tone: 'question', why: 'asks about gluten free options', reply: 'Hi Jess! Our rice bowls are gluten free and we can do the sando on lettuce. Ask for Ana on Saturday and she will sort you out.' },
+    { id: 'c2', tone: 'love', why: 'the line was worth it', reply: null },
+    { id: 'c3', tone: 'complaint', why: 'delivery order arrived soggy', reply: 'So sorry Tasha, that is on us. Message us your order number and the next one is ours. We are changing the box so it travels better.' },
+  ] },
+}
+
 const SOURCE_WORD: Record<string, string> = { google: 'Google', yelp: 'Yelp', facebook: 'Facebook', tripadvisor: 'TripAdvisor', apple_maps: 'Apple Maps', other: 'Other' }
 const PLATFORM_WORD: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn' }
 
@@ -71,13 +97,16 @@ function StarsRow({ n, size = 14 }: { n: number; size?: number }) {
 }
 
 export default function ReputationRead({ clientId, reviews }: { clientId?: string; reviews: ReadReview[] }) {
-  const [summary, setSummary] = useState<Summary | null>(null)
-  const [topics, setTopics] = useState<Topics | null>(null)
-  const [topicsLoading, setTopicsLoading] = useState(true)
-  const [comments, setComments] = useState<CommentRow[] | null>(null)
+  /* ?demo=reputation shows the section with sample reviews and comments, so the owner can see
+     the whole thing before their own sources fill it (2026-09-14). Nothing is fetched then. */
+  const [demo] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === 'reputation')
+  const [summary, setSummary] = useState<Summary | null>(() => (demo ? DEMO.summary : null))
+  const [topics, setTopics] = useState<Topics | null>(() => (demo ? DEMO.topics : null))
+  const [topicsLoading, setTopicsLoading] = useState(!demo)
+  const [comments, setComments] = useState<CommentRow[] | null>(() => (demo ? DEMO.comments : null))
   const [commentsErr, setCommentsErr] = useState(false)
-  const [read, setRead] = useState<CommentRead | null>(null)
-  const [queue, setQueue] = useState<Queue | null>(null)
+  const [read, setRead] = useState<CommentRead | null>(() => (demo ? DEMO.read : null))
+  const [queue, setQueue] = useState<Queue | null>(() => (demo ? DEMO.queue : null))
   /* REPLY IN PLACE (owner 2026-09-14), same as comments on the post sheet: a Reply link opens a
      box under the review, Suggest fills it with a draft in the owner's voice, Send posts it to
      Google through the same route the review page uses. The reply stays under the review and
@@ -113,24 +142,24 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   }
 
   useEffect(() => {
-    if (!clientId) return
+    if (!clientId || demo) return
     let live = true
     fetch(`/api/dashboard/review-summary?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSummary(j as Summary) }).catch(() => {})
     fetch(`/api/dashboard/review-topics?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) { setTopics(j as Topics | null); setTopicsLoading(false) } }).catch(() => { if (live) setTopicsLoading(false) })
     fetch(`/api/dashboard/reviews/queue?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j?.queue) setQueue(j as Queue) }).catch(() => {})
     loadComments(clientId).then((rows) => { if (live) setComments(rows) }).catch(() => { if (live) { setComments([]); setCommentsErr(true) } })
     return () => { live = false }
-  }, [clientId])
+  }, [clientId, demo])
 
   /* the comments, read once they are here: tone and a suggested reply for the ones that want one */
   useEffect(() => {
-    if (!clientId || !comments || comments.length === 0) return
+    if (!clientId || demo || !comments || comments.length === 0) return
     let live = true
     const batch = [...comments].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? ''))).slice(0, 30)
     fetch('/api/dashboard/comment-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, caption: '', comments: batch.map((c) => ({ id: c.id, text: c.text, author: c.authorName })) }) })
       .then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) setRead((j as CommentRead | null) ?? { summary: '', items: [] }) }).catch(() => { if (live) setRead({ summary: '', items: [] }) })
     return () => { live = false }
-  }, [clientId, comments])
+  }, [clientId, comments, demo])
 
   /* loading is a fact about the data, not a flag: comments are here and the read is not yet */
   const readLoading = !!comments && comments.length > 0 && !read
