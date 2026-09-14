@@ -409,15 +409,12 @@ export default function CreatePage() {
   /** The people who are on this client's live orders, for the bottom door. Empty is a fine
    *  answer: the door then says Get help, which is a real place, and never invents a name. */
   const [people, setPeople] = useState<OrderPerson[]>([])
-  /** their newest post's picture, for the drawing on the product sheet; null draws a plain tint */
-  const [thumb, setThumb] = useState<string | null>(null)
 
   useEffect(() => {
     if (!clientId) return
     let live = true
     fetch(`/api/dashboard/why-signals?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSignals(j as Signals) }).catch(() => {})
     fetch(`/api/campaigns/shelf-context?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setCtx(j as ShelfCtx) }).catch(() => {})
-    fetch(`/api/dashboard/social-posts?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { const t = (Array.isArray(j?.posts) ? j.posts : []).find((x: { thumbnailUrl?: string | null }) => x?.thumbnailUrl)?.thumbnailUrl; if (live && t) setThumb(String(t)) }).catch(() => {})
     fetch(`/api/dashboard/people?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as OrderPerson[]) }).catch(() => {})
     fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!live || !Array.isArray(j?.campaigns)) return
@@ -856,10 +853,11 @@ export default function CreatePage() {
      reply under it. Nothing in it is invented: where a number is not known the line is a grey
      bar, not a made-up dish. */
   /* one drawing per card, specific to what the card does (drawings.tsx) */
-  const bizName = client?.name || T('Your restaurant')
+  /* the drawings say "Your business" (owner 2026-09-14): generic on purpose, so they read as an example */
+  const bizName = T('Your business')
   const ratingLine = signals?.rating != null ? `${signals.rating.toFixed(1)} · ${(signals.ratingCount ?? 0).toLocaleString()} ${T('reviews')}` : T('Google listing')
   const tt = (x: string) => T(x)
-  const draw = (c: ShelfCard, now = false) => <Drawing spec={sceneFor(c.id, c.channels)} name={bizName} rating={ratingLine} thumb={thumb} now={now} t={tt} />
+  const draw = (c: ShelfCard, now = false) => <Drawing spec={sceneFor(c.id, c.channels)} name={bizName} rating={ratingLine} now={now} t={tt} />
   const product = (id: string) => {
     const c = cards[id]
     if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>{T('That one is not on the shelf.')} <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>{T('Back to the shelf')}</button></div>

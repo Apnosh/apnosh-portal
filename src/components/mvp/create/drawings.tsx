@@ -64,8 +64,6 @@ export interface DrawProps {
   name: string
   /** "4.7 · 312 reviews" when known, else a plain word */
   rating: string
-  /** their newest photo, or null for a tint */
-  thumb: string | null
   /** the "now" state for a before/after: greyed, the thing missing */
   now?: boolean
   t: (s: string) => string
@@ -73,8 +71,11 @@ export interface DrawProps {
 
 const Bar = ({ w = '70%' }: { w?: string }) => <b className="bar" style={{ width: w }} />
 
-export function Drawing({ spec, name, rating, thumb, now = false, t }: DrawProps): ReactNode {
-  const ph = <div className="ph" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} />
+export function Drawing({ spec, name, rating, now = false, t }: DrawProps): ReactNode {
+  /* the photo slots are drawn, not fetched (owner 2026-09-14): a plate, a bowl, a drink, a table, in
+     warm tones, so no one else's post and no words end up on a card */
+  const v = `p${((spec.scene.length + (spec.focus?.length ?? 0)) % 4) + 1}`
+  const ph = <div className={`ph ${v}`} />
   const fx = (k: GoogleFocus) => (!now && (spec.focus === k || spec.focus === 'all') ? ' fx' : '')
   const cls = `dw ${spec.scene}${now ? ' now' : ''}`
   switch (spec.scene) {
@@ -84,14 +85,14 @@ export function Drawing({ spec, name, rating, thumb, now = false, t }: DrawProps
       const compact = f === 'menu' || f === 'qa' || f === 'products' || f === 'gpost'
       return (
         <div className={`${cls}${compact ? ' compact' : ''}`}>
-          <div className={`strip${fx('photos')}`}>{ph}<div className="ph2" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><div className="ph3" /></div>
+          <div className={`strip${fx('photos')}`}>{ph}<div className="ph2 food p2" /><div className="ph3 food p3" /></div>
           <div className="nm">{name}</div><div className="mt">{rating}</div>
           {now && f === 'buttons' ? <div className="btns dim"><i>{t('Directions')}</i><i>{t('Website')}</i></div>
             : <div className={`btns${fx('buttons')}`}><i>{t('Menu')}</i><i className="on">{t('Order')}</i><i className="on">{t('Reserve')}</i><i>{t('Call')}</i></div>}
           {f === 'menu' || f === 'all' ? (now ? <div className="nomenu">{t('No menu added')}</div> : <div className={`menu${fx('menu')}`}><div><Bar w="62%" /><b className="pr">$13</b></div><div><Bar w="48%" /><b className="pr">$11</b></div></div>) : null}
           {f === 'qa' ? (now ? <div className="nomenu">{t('4 questions, no answer')}</div> : <div className={`qa${fx('qa')}`}><div><span>{t('Do you have parking?')}</span><em>{t('Yes, behind the building.')}</em></div><div><span>{t('Kids welcome?')}</span><em>{t('Always.')}</em></div></div>) : null}
-          {f === 'products' ? <div className={`prods${fx('products')}`}><div className="pd"><i style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><span>{t('Catering')}</span></div><div className="pd"><i /><span>{t('Gift cards')}</span></div><div className="pd"><i /><span>{t('Private room')}</span></div></div> : null}
-          {f === 'gpost' ? <div className={`gpost${fx('gpost')}`}><i style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><div><Bar w="80%" /><Bar w="55%" /><em>{t('Order online')}</em></div></div> : null}
+          {f === 'products' ? <div className={`prods${fx('products')}`}><div className="pd"><i /><span>{t('Catering')}</span></div><div className="pd"><i /><span>{t('Gift cards')}</span></div><div className="pd"><i /><span>{t('Private room')}</span></div></div> : null}
+          {f === 'gpost' ? <div className={`gpost${fx('gpost')}`}><i /><div><Bar w="80%" /><Bar w="55%" /><em>{t('Order online')}</em></div></div> : null}
         </div>
       )
     }
@@ -118,21 +119,21 @@ export function Drawing({ spec, name, rating, thumb, now = false, t }: DrawProps
     case 'post':
       return <div className={cls}><div className="hd"><i />{name}</div>{ph}<div className="cap"><Bar w="60%" /><em className="fx">{t('Reserve')}</em></div></div>
     case 'story':
-      return <div className={cls} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}><div className="prog"><i /><i /><i /></div><div className="stick fx">{t('Book Friday')}</div></div>
+      return <div className={cls}><div className="prog"><i /><i /><i /></div><div className="stick fx">{t('Book Friday')}</div></div>
     case 'reel':
-      return <div className={cls} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}><i className="play" /><div className="cap">{t('Popcorn chicken, 4 ways')}</div><div className="side"><i /><i /><i /></div></div>
+      return <div className={cls}><i className="play" /><div className="cap">{t('Popcorn chicken, 4 ways')}</div><div className="side"><i /><i /><i /></div></div>
     case 'profile':
-      return <div className={cls}><div className="top"><i style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><div><b>{name}</b><span>{t('312 posts · 2,140 followers')}</span></div></div><div className="pb fx"><span>{t('Order food')}</span><span>{t('Reserve')}</span><span>{t('Call')}</span></div><div className="g3"><i style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><i /><i /></div></div>
+      return <div className={cls}><div className="top"><i /><div><b>{name}</b><span>{t('312 posts · 2,140 followers')}</span></div></div><div className="pb fx"><span>{t('Order food')}</span><span>{t('Reserve')}</span><span>{t('Call')}</span></div><div className="g3"><i /><i /><i /></div></div>
     case 'linkpage':
-      return <div className={cls}><i className="av" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><b>{name}</b>{[t('Order'), t('Reserve'), t('Menu'), t('Directions')].map((x, i) => <span key={i} className={i === 0 ? 'fx' : ''}>{x}</span>)}</div>
+      return <div className={cls}><i className="av" /><b>{name}</b>{[t('Order'), t('Reserve'), t('Menu'), t('Directions')].map((x, i) => <span key={i} className={i === 0 ? 'fx' : ''}>{x}</span>)}</div>
     case 'grid':
-      return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} className={i < 3 ? 'pin fx' : ''} style={i % 3 === 0 && thumb ? { backgroundImage: `url(${thumb})` } : undefined}>{i < 3 && <em>{[t('Menu'), t('Hours'), t('How to order')][i]}</em>}</i>)}</div>
+      return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} className={i < 3 ? 'pin fx' : ''}>{i < 3 && <em>{[t('Menu'), t('Hours'), t('How to order')][i]}</em>}</i>)}</div>
     case 'batch':
-      return <div className={cls}>{[0, 1, 2].map((i) => <div key={i} className={`pc${i}`}><div className="hd"><i />{name}</div><div className="ph" style={i === 0 && thumb ? { backgroundImage: `url(${thumb})` } : undefined} /><Bar w="50%" /></div>)}</div>
+      return <div className={cls}>{[0, 1, 2].map((i) => <div key={i} className={`pc${i}`}><div className="hd"><i />{name}</div><div className="ph" /><Bar w="50%" /></div>)}</div>
     case 'graphic':
       return <div className={cls}><div className="poster fx"><span>{t('Taco Tuesday')}</span><b>{t('Half price, all night')}</b><em>{name}</em></div></div>
     case 'photos':
-      return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} style={i === 0 && thumb ? { backgroundImage: `url(${thumb})` } : undefined} />)}</div>
+      return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} />)}</div>
     case 'creator':
       return <div className={cls}><div className="hd"><i className="cr" />@seattle.eats<span>{t('40k nearby')}</span></div>{ph}<div className="cap"><Bar w="70%" /><em>{t('at {name}').replace('{name}', name)}</em></div></div>
     case 'ad':
@@ -140,7 +141,7 @@ export function Drawing({ spec, name, rating, thumb, now = false, t }: DrawProps
     case 'ticket':
       return <div className={cls}><div className="stub"><b>{t('Sat')}</b><span>21</span></div><div className="bd"><b>{t('Dumpling night at {name}').replace('{name}', name)}</b><span>{t('7 pm · 24 seats')}</span><em className="fx">{t('Get a seat · $45')}</em></div></div>
     case 'event':
-      return <div className={cls}><div className="poster fx" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}><div className="wash" /><span>{t('Friday')}</span><b>{t('Live music, late menu')}</b><em>{name}</em></div></div>
+      return <div className={cls}><div className="poster fx"><div className="wash" /><span>{t('Friday')}</span><b>{t('Live music, late menu')}</b><em>{name}</em></div></div>
     case 'calendar':
       return <div className={cls}><div className="mo">{t('October')}</div><div className="days">{Array.from({ length: 21 }, (_, i) => <i key={i} className={[3, 9, 17].includes(i) ? 'fx' : ''} />)}</div><div className="mt">{t('3 pushes planned')}</div></div>
     case 'missed':
@@ -169,7 +170,11 @@ export const DRAW_CSS = `
 .cr .dw{background:#fff;color:#1d1d1f;border-radius:1em;overflow:hidden;font-size:12px;width:100%;position:relative;box-shadow:0 .7em 2em rgba(0,0,0,.12);font-family:'Inter',system-ui,sans-serif;line-height:1.3}
 .cr .dw.now{filter:grayscale(1);opacity:.7}
 .cr .dw .bar{display:block;height:.5em;border-radius:.3em;background:#e6e6ea}
-.cr .dw .ph{height:5.5em;background:linear-gradient(135deg,var(--c1),var(--c2));background-size:cover;background-position:center 35%}
+.cr .dw .ph{height:5.5em}
+.cr .dw .ph,.cr .dw .food,.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3,.cr .dw.google .pd i,.cr .dw.google .gpost i,.cr .dw.profile .top i,.cr .dw.profile .g3 i,.cr .dw.grid i,.cr .dw.photos i,.cr .dw.linkpage .av,.cr .dw.story,.cr .dw.reel,.cr .dw.event .poster{background-color:#e9c9a6;background-image:radial-gradient(circle at 28% 38%,rgba(214,86,52,.95) 0%,rgba(214,86,52,0) 48%),radial-gradient(circle at 72% 30%,rgba(243,182,72,.9) 0%,rgba(243,182,72,0) 45%),radial-gradient(circle at 60% 78%,rgba(126,168,84,.85) 0%,rgba(126,168,84,0) 42%),radial-gradient(circle at 18% 85%,rgba(255,240,214,.9) 0%,rgba(255,240,214,0) 40%),linear-gradient(160deg,#f4dcc2,#d9a97f);background-size:cover;background-position:center}
+.cr .dw .ph.p2,.cr .dw .food.p2,.cr .dw.grid i:nth-child(2),.cr .dw.photos i:nth-child(2),.cr .dw.photos i:nth-child(5){background-color:#6b4a35;background-image:radial-gradient(circle at 40% 45%,rgba(240,196,106,.95) 0%,rgba(240,196,106,0) 46%),radial-gradient(circle at 75% 70%,rgba(201,71,58,.8) 0%,rgba(201,71,58,0) 40%),radial-gradient(circle at 15% 80%,rgba(127,176,94,.7) 0%,rgba(127,176,94,0) 38%),linear-gradient(160deg,#8a5d42,#3d2a20)}
+.cr .dw .ph.p3,.cr .dw .food.p3,.cr .dw.grid i:nth-child(3),.cr .dw.photos i:nth-child(3),.cr .dw.photos i:nth-child(6){background-color:#d9e3c3;background-image:radial-gradient(circle at 35% 40%,rgba(109,160,74,.9) 0%,rgba(109,160,74,0) 46%),radial-gradient(circle at 70% 35%,rgba(255,245,220,.95) 0%,rgba(255,245,220,0) 40%),radial-gradient(circle at 62% 80%,rgba(230,120,70,.8) 0%,rgba(230,120,70,0) 42%),linear-gradient(160deg,#eef2df,#bcd2a4)}
+.cr .dw .ph.p4,.cr .dw .food.p4,.cr .dw.grid i:nth-child(4),.cr .dw.photos i:nth-child(4){background-color:#c9a27f;background-image:radial-gradient(circle at 50% 50%,rgba(255,236,210,.95) 0%,rgba(255,236,210,0) 42%),radial-gradient(circle at 20% 30%,rgba(120,72,45,.85) 0%,rgba(120,72,45,0) 45%),radial-gradient(circle at 82% 75%,rgba(120,72,45,.85) 0%,rgba(120,72,45,0) 45%),linear-gradient(160deg,#e3c8a8,#a97c58)}
 .cr .dw .fx{box-shadow:0 0 0 2px var(--c2),0 0 0 6px var(--t1)!important;border-radius:.5em}
 .cr .dw .pr{font-weight:600;font-size:.85em;flex:none;margin-left:.6em}
 .cr .dw .nm{font-weight:700;font-size:1.1em;padding:.6em .9em 0}
@@ -177,7 +182,7 @@ export const DRAW_CSS = `
 /* google */
 .cr .dw.google .strip{display:flex;gap:.2em;height:5em;margin:0 0 0}
 .cr .dw.google .strip .ph{flex:2;height:100%}
-.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3{flex:1;background:linear-gradient(135deg,var(--t1),var(--c1));background-size:cover;background-position:center}
+.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3{flex:1}
 .cr .dw.google .strip.fx{border-radius:0;margin:3px 3px 0}
 .cr .dw.google.compact .strip{height:3.2em}
 .cr .dw.google.compact .btns{display:none}
@@ -194,10 +199,10 @@ export const DRAW_CSS = `
 .cr .dw.google .qa em{display:block;font-size:.78em;color:#6e6e73;font-style:normal}
 .cr .dw.google .prods{display:flex;gap:.4em;margin:0 .6em .7em;padding:.4em}
 .cr .dw.google .pd{flex:1;min-width:0}
-.cr .dw.google .pd i{display:block;height:2.6em;border-radius:.4em;background:var(--t1);background-size:cover;background-position:center}
+.cr .dw.google .pd i{display:block;height:2.6em;border-radius:.4em}
 .cr .dw.google .pd span{display:block;font-size:.72em;font-weight:600;margin-top:.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .dw.google .gpost{display:flex;gap:.6em;margin:0 .6em .7em;padding:.4em;align-items:center}
-.cr .dw.google .gpost i{width:3.2em;height:3.2em;border-radius:.4em;background:var(--t1);background-size:cover;background-position:center;flex:none}
+.cr .dw.google .gpost i{width:3.2em;height:3.2em;border-radius:.4em;flex:none}
 .cr .dw.google .gpost>div{flex:1;display:flex;flex-direction:column;gap:.35em}
 .cr .dw.google .gpost em{font-style:normal;align-self:flex-start;font-size:.75em;font-weight:700;color:#1a73e8}
 /* search */
@@ -263,7 +268,7 @@ export const DRAW_CSS = `
 .cr .dw.post .cap em,.cr .dw.ad .cap em{font-style:normal;background:#1d1d1f;color:#fff;padding:.3em .7em;border-radius:99px;font-weight:700;font-size:.78em;flex:none}
 .cr .dw.creator .cap em{font-style:normal;font-size:.75em;font-weight:700;color:var(--c2);flex:none}
 /* story / reel */
-.cr .dw.story,.cr .dw.reel{width:8.5em;height:14em;margin:0 auto;background:linear-gradient(160deg,var(--c1),var(--c2));background-size:cover;background-position:center}
+.cr .dw.story,.cr .dw.reel{width:8.5em;height:14em;margin:0 auto}
 .cr .dw.story .prog{display:flex;gap:.25em;padding:.5em .5em 0}
 .cr .dw.story .prog i{flex:1;height:.22em;border-radius:99px;background:rgba(255,255,255,.55)}
 .cr .dw.story .prog i:first-child{background:#fff}
@@ -274,20 +279,20 @@ export const DRAW_CSS = `
 .cr .dw.reel .side i{width:1em;height:1em;border-radius:99px;background:rgba(255,255,255,.85)}
 /* profile */
 .cr .dw.profile .top{display:flex;align-items:center;gap:.6em;padding:.7em .8em .4em}
-.cr .dw.profile .top i{width:2.6em;height:2.6em;border-radius:99px;background:var(--t1);background-size:cover;background-position:center;flex:none}
+.cr .dw.profile .top i{width:2.6em;height:2.6em;border-radius:99px;flex:none}
 .cr .dw.profile .top b{display:block;font-size:.9em}.cr .dw.profile .top span{font-size:.7em;color:#6e6e73}
 .cr .dw.profile .pb{display:flex;gap:.35em;margin:.3em .6em .5em;padding:.3em}
 .cr .dw.profile .pb span{flex:1;text-align:center;font-size:.7em;font-weight:700;background:#efefef;border-radius:.4em;padding:.4em 0}
 .cr .dw.profile .g3{display:flex;gap:.15em}
-.cr .dw.profile .g3 i{flex:1;height:2.6em;background:var(--t1);background-size:cover;background-position:center}
+.cr .dw.profile .g3 i{flex:1;height:2.6em}
 /* linkpage */
 .cr .dw.linkpage{padding:.8em .8em .7em;display:flex;flex-direction:column;align-items:center;gap:.4em;background:var(--t1)}
-.cr .dw.linkpage .av{width:2.4em;height:2.4em;border-radius:99px;background:var(--c2);background-size:cover;background-position:center}
+.cr .dw.linkpage .av{width:2.4em;height:2.4em;border-radius:99px}
 .cr .dw.linkpage b{font-size:.85em;margin-bottom:.2em}
 .cr .dw.linkpage span{width:100%;text-align:center;font-size:.75em;font-weight:700;background:#fff;border-radius:99px;padding:.4em 0}
 /* grid */
 .cr .dw.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.15em;padding:.15em}
-.cr .dw.grid i{display:block;aspect-ratio:1;background:var(--t1);background-size:cover;background-position:center;position:relative;border-radius:.2em}
+.cr .dw.grid i{display:block;aspect-ratio:1;position:relative;border-radius:.2em}
 .cr .dw.grid i.pin em{position:absolute;left:.3em;bottom:.3em;font-style:normal;font-size:.6em;font-weight:700;background:#fff;padding:.2em .5em;border-radius:99px}
 /* batch */
 .cr .dw.batch{background:none;box-shadow:none;overflow:visible;height:11em}
@@ -296,7 +301,7 @@ export const DRAW_CSS = `
 .cr .dw.batch .ph{height:4.4em}.cr .dw.batch .bar{margin:.5em .6em 0}
 /* graphic / event */
 .cr .dw.graphic,.cr .dw.event{background:none;box-shadow:none;overflow:visible;display:flex;justify-content:center}
-.cr .dw .poster{width:8.5em;height:11em;border-radius:.6em;background:linear-gradient(160deg,var(--c1),var(--c2));background-size:cover;background-position:center;color:#fff;padding:.9em;display:flex;flex-direction:column;box-shadow:0 .7em 2em rgba(0,0,0,.18);position:relative;overflow:hidden}
+.cr .dw .poster{width:8.5em;height:11em;border-radius:.6em;background:linear-gradient(160deg,var(--c1),var(--c2));color:#fff;padding:.9em;display:flex;flex-direction:column;box-shadow:0 .7em 2em rgba(0,0,0,.18);position:relative;overflow:hidden}
 .cr .dw .poster .wash{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.65))}
 .cr .dw .poster>*{position:relative}
 .cr .dw .poster span{font-size:.7em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.9}
@@ -304,7 +309,7 @@ export const DRAW_CSS = `
 .cr .dw .poster em{font-style:normal;font-size:.7em;margin-top:.4em;opacity:.9}
 /* photos */
 .cr .dw.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:.25em;padding:.25em;background:#1d1d1f}
-.cr .dw.photos i{display:block;aspect-ratio:1;border-radius:.25em;background:linear-gradient(135deg,var(--t1),var(--c1));background-size:cover;background-position:center}
+.cr .dw.photos i{display:block;aspect-ratio:1;border-radius:.25em}
 /* ticket */
 .cr .dw.ticket{display:flex}
 .cr .dw.ticket .stub{width:4em;background:var(--c2);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:2px dashed rgba(255,255,255,.6)}
