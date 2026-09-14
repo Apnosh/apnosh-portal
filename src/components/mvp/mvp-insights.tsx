@@ -1420,7 +1420,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} note={cur.locked ? 'Not connected yet. Connect the source that measures it and the line fills in.' : undefined} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />}
         {cur.mv && <RhythmCard mv={cur.mv} range={range} customStart={cStart} customEnd={cEnd} />}
-        {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
+        {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} range={range} customStart={cStart} customEnd={cEnd} />}
       </AccentCtx.Provider>
     </div>
   )
@@ -1931,10 +1931,17 @@ function RhythmCard({ mv, range = '30d', customStart, customEnd }: { mv: MetricV
   )
 }
 
-function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days: number; label: string; smooth?: number }) {
+function HighlightsCard({ mv, days, label, smooth = 7, range = '30d', customStart, customEnd }: { mv: MetricView; days: number; label: string; smooth?: number; range?: ChartRange; customStart?: string; customEnd?: string }) {
   const win_n = Math.max(3, smooth)
   const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
-  const win = raw.slice(-Math.max(days, 14))
+  /* THE SAME DAYS AS THE GRAPH (owner 2026-09-14: "highlights show Aug 13 though the graph starts
+     Aug 16"). This used to take the last N REPORTED days, which reach back before the window when
+     the newest days have not landed yet. Now it is the literal window: it ends today (or the
+     custom end) and starts N-1 days back, exactly as the graph draws. */
+  const isCustom = range === 'custom' && !!customStart && !!customEnd
+  const endMs = isCustom ? trendDayMs(customEnd!) : trendDayMs(localYmd())
+  const startMs = isCustom ? trendDayMs(customStart!) : endMs - (days - 1) * DAY_MS
+  const win = raw.filter((d) => { const t = trendDayMs(d.date); return t >= startMs && t <= endMs })
   const hits = deriveStandouts(win, 4, win_n).filter((h) => Math.abs(h.vsWeekPct) >= 30)
   const noun = mv.unit ?? ''
   /* tap a day's number to see it against its own week (owner 2026-09-04): the day and the
