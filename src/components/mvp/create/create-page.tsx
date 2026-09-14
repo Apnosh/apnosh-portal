@@ -334,7 +334,7 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .m .done{font-weight:700;color:#2e9a78;display:inline-flex;align-items:center;gap:3px}
 .cr .pcb{flex:none;width:262px;border:0;background:none;padding:0 0 2px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:2px;position:relative}
 .cr .pcb.dim{opacity:.55}
-.cr .pcb .st{height:156px;padding:14px 20px}
+.cr .pcb .st{height:138px;padding:12px 20px}
 .cr .pcb .st .dwm{max-width:200px}
 .cr .pcb .st .dwm .dw{font-size:10px}
 .cr .pcb .parts{font-size:12px;color:#6e6e73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

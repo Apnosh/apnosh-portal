@@ -46,6 +46,7 @@ import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, 
 import { TopSegmented } from './top-row'
 import ProofDeck from './proof-deck'
 import { deriveStandouts } from '@/lib/insights/analyst-derive'
+import ReputationRead from './reputation-read'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
@@ -603,7 +604,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
           cards (scoped to the chart's picked range), extras, and campaigns */}
       <AccentCtx.Provider value={dirs[focus.stageKey] ? verdictAccent(dirs[focus.stageKey]) : (STAGE_ACCENT[focus.stageKey] ?? STAGE_ACCENT.shown)}>
       <div style={{ padding: '0 18px' }}>
-        <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
+        <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} reviews={data.reviews} />
         {/* the trend chart and the campaigns live on the Trends tab now (owner 2026-09-04) */}
         <QuickActions />
       </div>
@@ -660,7 +661,7 @@ function StageTop({ stageKey, detail, mv, clientId, onRange, onDir, accent }: { 
 
 // ── The BOTTOM of a stage (under the dots): by-source cards scoped to the
 //    visible chart's range, plus the stage's extras. ──
-function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; detail: InsightsDetail | null; clientId?: string; range: string }) {
+function StageBottom({ stageKey, detail, clientId, range, reviews = [] }: { stageKey: string; detail: InsightsDetail | null; clientId?: string; range: string; /** the synced reviews, for the Reputation read */ reviews?: InsightsReview[] }) {
   if (!detail) return null
   switch (stageKey) {
     case 'shown': {
@@ -700,8 +701,8 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
       return cs ? <SourceBreakdown stage={cs} unit="Guests served" showReconcile={!cs.isEmpty} /> : null
     }
     case 'back': {
-      const cs = computedStage(detail, 5)
-      return cs ? <RangeSources cs={cs} stageNumber={5} clientId={clientId} unit="Reviews" title="Reputation by source" range={range} /> : null
+      /* the rating, what people say, what needs a reply (owner 2026-09-14); replaces the by-source list */
+      return <ReputationRead clientId={clientId} reviews={reviews} />
     }
     default: return null
   }
