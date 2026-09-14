@@ -26,6 +26,7 @@ import { Mark } from '../mark'
 import { GOALS, FILTERS, GUIDE_QS, SITUATION_GOAL, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
 import { CHIP_ORDER, liveForChip, shelfForChip } from '@/lib/campaigns/data/chip-shelf'
 import { ACTION_GROUPS, actionBrief, bundleTotal, partPrice, priceLabel } from '@/lib/campaigns/data/action-shelf'
+import { Drawing, DRAW_CSS, sceneFor } from './drawings'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { hrefFor, firstName, type OrderPerson } from '../people-row'
@@ -45,7 +46,7 @@ const iconFor = (c: ShelfCard) => KIND_ICON[c.id] ?? ACTION_ICON[c.id] ?? GOAL_I
 const YOU_ICON: Record<string, typeof Check> = { Nothing: Check, Approve: Eye, 'Show up': Users }
 
 
-const CREATE_CSS = `
+const CREATE_CSS = DRAW_CSS + `
 .cr .cc-scroll::-webkit-scrollbar{display:none}
 .cr .g{--c1:#4abd98;--c2:#2e9a78}
 /* the goal rail: orbs */
@@ -202,40 +203,8 @@ const CREATE_CSS = `
 .cr .path li.weak .t::after{content:"weakest";font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:#fbeaea;color:#c92d32;margin-left:8px;vertical-align:middle}
 /* product */
 .cr .pp2-hero{margin:0;height:300px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:26px 40px 18px;background:linear-gradient(180deg,var(--t1),#fff 96%)}
+.cr .pp2-hero .art .dw{font-size:12.5px;box-shadow:none}
 .cr .pp2-hero .art{width:100%;max-width:250px;filter:drop-shadow(0 24px 40px rgba(20,60,45,.18)) drop-shadow(0 2px 4px rgba(0,0,0,.06))}
-.cr .dw{background:#fff;color:#1d1d1f;border-radius:14px;overflow:hidden;font-size:12px;width:100%;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.12)}
-.cr .pp2-hero .dw{box-shadow:none}
-.cr .dw .ph{height:78px;background:linear-gradient(135deg,var(--c1),var(--c2));background-size:cover;background-position:center 35%}
-.cr .dw.g .nm{font-weight:700;font-size:15px;padding:9px 12px 0}
-.cr .dw.g .mt{font-size:11px;color:#6e6e73;padding:2px 12px 8px}
-.cr .dw.g .btns{display:flex;gap:5px;padding:0 12px 8px;flex-wrap:wrap}
-.cr .dw.g .btns i{font-style:normal;border:1px solid #d0d0d4;border-radius:99px;padding:3px 8px;font-size:10.5px;font-weight:600;color:#1a73e8;white-space:nowrap}
-.cr .dw.g .btns.dim i{color:#9a9aa0}
-.cr .dw.g .menu{display:flex;flex-direction:column;gap:5px;padding:2px 12px 10px}
-.cr .dw.g .menu b{display:block;height:7px;border-radius:4px;background:#e6e6ea;width:70%}
-.cr .dw.g .menu b+b{width:50%}
-.cr .dw.g .nomenu{padding:2px 12px 10px;font-size:11px;color:#b0b0b5;font-style:italic}
-.cr .dw.now{filter:grayscale(1);opacity:.7}
-.cr .dw.web .bar{display:flex;gap:4px;padding:6px 9px;background:#f0f0f2}
-.cr .dw.web .bar i{width:7px;height:7px;border-radius:99px;background:#cfcfd4}
-.cr .dw.web .nav{display:flex;gap:10px;align-items:center;padding:8px 10px;font-size:11px}
-.cr .dw.web .nav b{font-size:12px;margin-right:auto}
-.cr .dw.web .nav span{color:#6e6e73}
-.cr .dw.ig .hd{display:flex;align-items:center;gap:6px;padding:7px 9px;font-weight:600;font-size:11.5px}
-.cr .dw.ig .hd i{width:16px;height:16px;border-radius:99px;background:linear-gradient(45deg,#f9a,#c5f)}
-.cr .dw.ig .ph{height:96px}
-.cr .dw.ig .cap{display:flex;align-items:center;gap:8px;padding:8px 9px 9px}
-.cr .dw.ig .cap b{display:block;flex:1;height:7px;border-radius:4px;background:#e6e6ea}
-.cr .dw.ig .cap em{font-style:normal;background:#1d1d1f;color:#fff;padding:3px 8px;border-radius:99px;font-weight:700;font-size:10px}
-.cr .dw.sms{background:none;box-shadow:none;display:flex;flex-direction:column;gap:8px;overflow:visible}
-.cr .dw.sms .bub{background:#e9e9eb;color:#1d1d1f;padding:9px 12px;border-radius:16px;border-bottom-left-radius:5px;font-size:12px;line-height:1.35;max-width:88%}
-.cr .dw.sms .bub.me{background:var(--c2);color:#fff;align-self:flex-end;border-radius:16px;border-bottom-right-radius:5px}
-.cr .dw.rev{padding:10px 11px}
-.cr .dw.rev .who{font-weight:700;font-size:11.5px}
-.cr .dw.rev .tx{display:flex;flex-direction:column;gap:5px;padding:6px 0 8px}
-.cr .dw.rev .tx b{display:block;height:7px;border-radius:4px;background:#e6e6ea;width:90%}
-.cr .dw.rev .tx b+b{width:60%}
-.cr .dw.rev .rep{font-size:11px;background:#f5f5f7;border-radius:8px;padding:7px 8px;line-height:1.35}
 .cr .pp2-head{padding:18px 20px 0}
 .cr .pp2-head .eb{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c2)}
 .cr .pp2-head .eb i{width:7px;height:7px;border-radius:99px;background:var(--c2)}
@@ -251,8 +220,7 @@ const CREATE_CSS = `
 .cr .pp2-na .half.after{background:var(--t1)}
 .cr .pp2-na u{text-decoration:none;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6e6e73}
 .cr .pp2-na .after u{color:var(--c2)}
-.cr .pp2-na .dw{font-size:9px}
-.cr .pp2-na .dw .ph{height:44px}.cr .pp2-na .dw.g .nm{font-size:11px;padding:6px 8px 0}.cr .pp2-na .dw.g .mt{font-size:9px;padding:1px 8px 5px}.cr .pp2-na .dw.g .btns{gap:4px;padding:0 8px 6px}.cr .pp2-na .dw.g .btns i{font-size:8.5px;padding:2px 6px}.cr .pp2-na .dw.g .menu{padding:0 8px 8px;gap:4px}.cr .pp2-na .dw.g .menu b{height:5px}.cr .pp2-na .dw.g .nomenu{font-size:9px;padding:0 8px 8px}
+.cr .pp2-na .dw{font-size:7.5px}
 .cr .pp2-na span{font-size:11px;color:#6e6e73;line-height:1.35}
 .cr .pp2-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .cr .pp2-sec span{font-size:12px;color:#aeaeb2;white-space:nowrap}
@@ -277,7 +245,7 @@ const CREATE_CSS = `
 .cr .pp2-tl li i.you{background:#d99a1e;box-shadow:none}
 .cr .pp2-mini{flex:none;width:132px;border:0;background:none;padding:0;text-align:left;font-family:inherit;color:#1d1d1f;cursor:pointer;display:flex;flex-direction:column}
 .cr .pp2-mini .mk{height:100px;border-radius:14px;background:#f5f5f7;display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden}
-.cr .pp2-mini .mk .dw{transform:scale(.8);font-size:9px}
+.cr .pp2-mini .mk .dw{font-size:7px}
 .cr .pp2-mini b{font-size:13px;font-weight:600;margin-top:8px;line-height:1.2}
 .cr .pp2-mini span{font-size:12px;color:#6e6e73}
 .cr .pp-hero{margin:4px 16px 0;height:170px;border-radius:22px;position:relative;overflow:hidden;color:#fff;display:flex;align-items:flex-end;padding:16px;background:linear-gradient(135deg,var(--c1),var(--c2))}
@@ -352,15 +320,11 @@ const CREATE_CSS = `
 .cr .pc2{flex:none;width:176px;border:0;background:none;padding:0 0 2px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:2px;position:relative}
 .cr .pc2.wide{width:236px}
 .cr .pc2.dim{opacity:.55}
-.cr .st{position:relative;height:128px;border-radius:16px;background:var(--t1);display:flex;align-items:center;justify-content:center;padding:10px;overflow:hidden;margin-bottom:6px}
+.cr .st{position:relative;height:128px;border-radius:16px;background:var(--t1);display:flex;align-items:center;justify-content:center;padding:10px 14px;overflow:hidden;margin-bottom:6px}
 .cr .pc2.wide .st{height:160px}
 .cr .st .dwm{width:100%;max-width:156px}
-.cr .st .dwm .dw{font-size:9px;box-shadow:0 8px 20px rgba(0,0,0,.12)}
-.cr .st .dwm .dw .ph{height:44px}.cr .st .dwm .dw.g .nm{font-size:11px;padding:6px 8px 0}.cr .st .dwm .dw.g .mt{font-size:9px;padding:1px 8px 5px}.cr .st .dwm .dw.g .btns{gap:4px;padding:0 8px 6px}.cr .st .dwm .dw.g .btns i{font-size:8.5px;padding:2px 6px}.cr .st .dwm .dw.g .menu,.cr .st .dwm .dw.g .nomenu{display:none}
-.cr .st .dwm .dw.ig .hd{font-size:9.5px;padding:5px 7px}.cr .st .dwm .dw.ig .hd i{width:13px;height:13px}.cr .st .dwm .dw.ig .ph{height:58px}.cr .st .dwm .dw.ig .cap{padding:6px 7px 7px}.cr .st .dwm .dw.ig .cap em{font-size:8.5px;padding:2px 6px}
-.cr .st .dwm .dw.web .nav{font-size:9px;padding:6px 8px;gap:7px}.cr .st .dwm .dw.web .nav b{font-size:10px}.cr .st .dwm .dw.web .ph{height:50px}
-.cr .st .dwm .dw.sms .bub{font-size:10px;padding:7px 10px}
-.cr .st .dwm .dw.rev{padding:8px 9px}.cr .st .dwm .dw.rev .who{font-size:9.5px}.cr .st .dwm .dw.rev .rep{font-size:9px;padding:5px 6px}
+.cr .st .dwm .dw{font-size:8.5px}
+.cr .st .dwm .dw.google .menu,.cr .st .dwm .dw.google .qa,.cr .st .dwm .dw.google .prods,.cr .st .dwm .dw.google .gpost,.cr .st .dwm .dw.google .nomenu{margin-bottom:.3em}
 .cr .st .tag{position:absolute;left:8px;top:8px;z-index:2;font-style:normal;font-weight:700;font-size:10px;padding:3px 8px;border-radius:99px;background:rgba(255,255,255,.95);color:var(--c2);display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .cr .st .tag i{width:5px;height:5px;border-radius:99px;background:var(--c2)}
 .cr .st .chip{position:absolute;left:8px;bottom:8px;z-index:2;font-style:normal;font-weight:700;font-size:10.5px;padding:4px 9px;border-radius:99px;background:#1d1d1f;color:#fff;white-space:nowrap}
@@ -370,10 +334,9 @@ const CREATE_CSS = `
 .cr .m .done{font-weight:700;color:#2e9a78;display:inline-flex;align-items:center;gap:3px}
 .cr .pcb{flex:none;width:262px;border:0;background:none;padding:0 0 2px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:2px;position:relative}
 .cr .pcb.dim{opacity:.55}
-.cr .pcb .st{height:156px;padding:14px}
+.cr .pcb .st{height:156px;padding:14px 20px}
 .cr .pcb .st .dwm{max-width:200px}
-.cr .pcb .st .dwm .dw{font-size:10.5px}
-.cr .pcb .st .dwm .dw .ph{height:56px}.cr .pcb .st .dwm .dw.g .nm{font-size:13px;padding:7px 10px 0}.cr .pcb .st .dwm .dw.g .mt{font-size:10px;padding:1px 10px 6px}.cr .pcb .st .dwm .dw.g .btns{gap:5px;padding:0 10px 7px}.cr .pcb .st .dwm .dw.g .btns i{font-size:9.5px;padding:2px 7px}.cr .pcb .st .dwm .dw.g .btns{padding-bottom:9px}
+.cr .pcb .st .dwm .dw{font-size:10px}
 .cr .pcb .parts{font-size:12px;color:#6e6e73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .pc .pl{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:4px;font-size:12.5px}
 .cr .pc .pl b{font-weight:700;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -719,7 +682,7 @@ export default function CreatePage() {
   const pcService = (c: ShelfCard, wide?: boolean) => { const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
     return (
       <button key={c.id} type="button" onClick={() => open(c)} className={`pc2 press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(STAGE_HUE[c.stage])}>
-        <div className="st"><em className="tag"><i />{T(c.stage)}</em><div className="dwm">{drawing(drawKind(c))}</div></div>
+        <div className="st"><em className="tag"><i />{T(c.stage)}</em><div className="dwm">{draw(c)}</div></div>
         <div className="t">{c.title}</div>
         {why && buy && <div className="why">{why}</div>}
         <div className="m">{isDone ? <b className="done"><Check size={11} strokeWidth={3} /> {T('Done')}</b> : buy ? <>{priceWord(c.price)} · {T(c.ready)}</> : T('Coming soon')}</div>
@@ -733,7 +696,7 @@ export default function CreatePage() {
     const inside = parts.length ? parts.map((p) => p.title) : c.get.filter((g) => g && !/^A plan you approve|^Made by your Apnosh|^Results on your Home/i.test(g))
     return (
       <button key={c.id} type="button" onClick={() => open(c)} className={`pcb press${buy ? '' : ' dim'}`} style={hv(STAGE_HUE[c.stage])}>
-        <div className="st"><em className="chip">{word}{pieces > 1 ? ` · ${T(parts.length ? '{n} parts' : '{n} pieces', { n: pieces })}` : ''}</em><div className="dwm">{drawing(drawKind(c))}</div></div>
+        <div className="st"><em className="chip">{word}{pieces > 1 ? ` · ${T(parts.length ? '{n} parts' : '{n} pieces', { n: pieces })}` : ''}</em><div className="dwm">{draw(c)}</div></div>
         <div className="t">{c.title}</div>
         {inside.length > 0 && <div className="parts">{inside.slice(0, 3).join(' · ')}{inside.length > 3 ? ` · +${inside.length - 3}` : ''}</div>}
         {why && buy && <div className="why">{why}</div>}
@@ -892,36 +855,16 @@ export default function CreatePage() {
      Order in the nav; their post with the button; the text that goes out; the review with the
      reply under it. Nothing in it is invented: where a number is not known the line is a grey
      bar, not a made-up dish. */
-  type DrawKind = 'google' | 'site' | 'post' | 'sms' | 'review'
-  const drawKind = (c: ShelfCard): DrawKind => {
-    if (c.id === 'reviewsreply' || c.id === 'reviewsplan') return 'review'
-    const ch = c.channels.join(' ').toLowerCase()
-    if (/^google/.test(ch)) return 'google'
-    if (/^your site/.test(ch)) return 'site'
-    if (/instagram|tiktok|facebook|social|print|photo|everywhere|anything/.test(ch)) return 'post'
-    if (/email|text/.test(ch)) return 'sms'
-    if (/google|yelp|apple|bing|maps|doordash|uber|grubhub/.test(ch)) return 'google'
-    return 'post'
-  }
+  /* one drawing per card, specific to what the card does (drawings.tsx) */
   const bizName = client?.name || T('Your restaurant')
-  const drawing = (kind: DrawKind, now = false) => {
-    const ph = <div className="ph" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} />
-    const rating = signals?.rating != null ? `${signals.rating.toFixed(1)} · ${(signals.ratingCount ?? 0).toLocaleString()} ${T('reviews')}` : T('Google listing')
-    if (kind === 'google') return (
-      <div className={`dw g${now ? ' now' : ''}`}>{ph}<div className="nm">{bizName}</div><div className="mt">{rating}</div>
-        {now ? <div className="btns dim"><i>{T('Directions')}</i><i>{T('Website')}</i></div> : <div className="btns"><i>{T('Menu')}</i><i>{T('Order')}</i><i>{T('Reserve')}</i><i>{T('Call')}</i></div>}
-        {now ? <div className="nomenu">{T('No menu added')}</div> : <div className="menu"><b /><b /></div>}
-      </div>)
-    if (kind === 'site') return <div className="dw web"><div className="bar"><i /><i /><i /></div><div className="nav"><b>{bizName}</b><span>{T('Menu')}</span><span>{T('Order')}</span><span>{T('Reserve')}</span></div>{ph}</div>
-    if (kind === 'post') return <div className="dw ig"><div className="hd"><i />{bizName}</div>{ph}<div className="cap"><b /><em>{T('Reserve')}</em></div></div>
-    if (kind === 'sms') return <div className="dw sms"><div className="bub">{T('We missed your call. Here is the menu and a link to order.')}</div><div className="bub me">{T('Table for 4 at 7?')}</div></div>
-    return <div className="dw rev"><div className="who">{T('A guest')} · {T('5 stars')}</div><div className="tx"><b /><b /></div><div className="rep"><b>{bizName}</b> {T('Thank you. Come say hi next time.')}</div></div>
-  }
+  const ratingLine = signals?.rating != null ? `${signals.rating.toFixed(1)} · ${(signals.ratingCount ?? 0).toLocaleString()} ${T('reviews')}` : T('Google listing')
+  const tt = (x: string) => T(x)
+  const draw = (c: ShelfCard, now = false) => <Drawing spec={sceneFor(c.id, c.channels)} name={bizName} rating={ratingLine} thumb={thumb} now={now} t={tt} />
   const product = (id: string) => {
     const c = cards[id]
     if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>{T('That one is not on the shelf.')} <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>{T('Back to the shelf')}</button></div>
     const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
-    const kind = drawKind(c)
+    const scene = sceneFor(c.id, c.channels).scene
     const TL: [string, string, boolean][] = c.kind === 'setup'
       ? [[T('Day 0'), T('You order. We read what you already have.'), false], [T('Day 1'), T('We start the work and send you anything we need.'), false], [T('Day 3'), T('You check the result. One tap, or a note.'), true], [c.ready, T('Done, and on your Home.'), false]]
       : c.kind === 'program'
@@ -939,7 +882,7 @@ export default function CreatePage() {
     return (
       <div style={{ ...hv(c.goal), paddingBottom: 100 }}>
         {/* the hero: the drawing on a soft wash of the stage colour that fades into the page */}
-        <div className="pp2-hero" style={hv(STAGE_HUE[c.stage])}><div className="art">{drawing(kind)}</div></div>
+        <div className="pp2-hero" style={hv(STAGE_HUE[c.stage])}><div className="art">{draw(c)}</div></div>
         <div className="pp2-head">
           <div className="eb" style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)} · {word}</div>
           <h1>{c.title}</h1>
@@ -957,11 +900,11 @@ export default function CreatePage() {
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
         {(() => { const ps = buy ? renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T) : null; return ps ? <div className="pp-count" style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.45 }}>{ps}</div> : null })()}
         {/* their listing, now and after: only where there is a real "now" to show (Google) */}
-        {kind === 'google' && buy && (
+        {(scene === 'google' || scene === 'review') && buy && (
           <div className="pp-sec"><h2>{T('Your listing, now and after')}</h2>
             <div className="pp2-na">
-              <div className="half now"><u>{T('Now')}</u>{drawing('google', true)}<span>{gaps.length ? T('Missing: {list}', { list: gaps.slice(0, 3).join(', ') }) : T('As it is today')}</span></div>
-              <div className="half after" style={hv(STAGE_HUE[c.stage])}><u>{T('After')}</u>{drawing('google')}<span>{c.parts ? T('Menu, prices, buttons, answers, pin') : c.get[0]}</span></div>
+              <div className="half now"><u>{T('Now')}</u>{draw(c, true)}<span>{gaps.length ? T('Missing: {list}', { list: gaps.slice(0, 3).join(', ') }) : T('As it is today')}</span></div>
+              <div className="half after" style={hv(STAGE_HUE[c.stage])}><u>{T('After')}</u>{draw(c)}<span>{c.parts ? T('Menu, prices, buttons, answers, pin') : c.get[0]}</span></div>
             </div>
           </div>
         )}
@@ -1002,7 +945,7 @@ export default function CreatePage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> {T('Amber is you. Everything else is us.')}</div>
         </div>
         <div className="pp-sec"><h2>{T('Where it shows up')}</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
-        {goesWith.length > 0 && (<><Sec t={T('Goes well with')} hue={c.goal} /><Shelf>{goesWith.map((x) => <button key={x.id} type="button" onClick={() => open(x)} className="pp2-mini press"><div className="mk">{drawing(drawKind(x))}</div><b>{x.title}</b><span>{isBuyable(x) ? priceWord(x.price) : T('Coming soon')}</span></button>)}</Shelf></>)}
+        {goesWith.length > 0 && (<><Sec t={T('Goes well with')} hue={c.goal} /><Shelf>{goesWith.map((x) => <button key={x.id} type="button" onClick={() => open(x)} className="pp2-mini press"><div className="mk">{draw(x)}</div><b>{x.title}</b><span>{isBuyable(x) ? priceWord(x.price) : T('Coming soon')}</span></button>)}</Shelf></>)}
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
