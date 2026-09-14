@@ -289,7 +289,9 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .say2 .ta::placeholder{color:#aeaeb2}
 .cr .say2 .foot{display:flex;align-items:center;gap:8px;margin-top:6px}
 .cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
-.cr .saywrap{position:sticky;top:0;z-index:20;background:#fff;padding:2px 0 6px;transition:padding .15s}
+.cr .saywrap{position:relative;z-index:20;background:#fff;padding:2px 0 6px}
+.cr .saywrap.stuck{position:sticky;top:0;animation:saydrop .26s cubic-bezier(.2,.7,.3,1) both}
+@keyframes saydrop{from{transform:translateY(-40%);opacity:0}to{transform:none;opacity:1}}
 .cr .saywrap.stuck{padding:8px 0 8px;box-shadow:0 8px 20px -12px rgba(0,0,0,.18)}
 .cr .saywrap.stuck .stages{margin-top:8px}
 .cr .saywrap.stuck .say{margin:0 12px;padding:1.5px;border-radius:99px;box-shadow:0 4px 14px rgba(74,189,152,.14)}
@@ -521,16 +523,18 @@ export default function CreatePage() {
     const sent = sentinelRef.current; if (!sent) return
     const sc = sent.closest('.mvp-frame-scroll') as HTMLElement | null; if (!sc) return
     const wrap = sent.nextElementSibling as HTMLElement | null
-    /* it folds only once its whole open height has scrolled past (owner 2026-09-14), with a
-       little give on the way back up so it does not flap at the edge */
+    /* THE OPEN BOX SCROLLS AWAY WITH THE PAGE (owner 2026-09-14). It is not sticky while open.
+       When what is left of it on screen is about the folded bar's height, the folded bar takes
+       over, stuck at the top. Scrolling back up past that point hands the open box back. */
+    const BAR = 112 // the folded bar with the tabs under it, about
     let full = wrap?.offsetHeight ?? 0
     let isStuck = false
     const onScroll = () => {
       if (!isStuck && wrap) full = wrap.offsetHeight
       const top = sent.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop
       const y = sc.scrollTop
-      if (!isStuck && y > top + full) { isStuck = true; setStuck(true) }
-      else if (isStuck && y < top + full - 40) { isStuck = false; setStuck(false) }
+      if (!isStuck && y > top + full - BAR) { isStuck = true; setStuck(true) }
+      else if (isStuck && y < top + full - BAR - 30) { isStuck = false; setStuck(false) }
     }
     onScroll()
     sc.addEventListener('scroll', onScroll, { passive: true })
