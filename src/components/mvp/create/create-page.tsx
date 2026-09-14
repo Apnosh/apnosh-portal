@@ -294,12 +294,15 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .saywrap.stuck .stages{margin-top:8px}
 .cr .saywrap.stuck .say{margin:0 12px;padding:1.5px;border-radius:99px;box-shadow:0 4px 14px rgba(74,189,152,.14)}
 .cr .saywrap.stuck .say .in{border-radius:99px;padding:5px 6px 5px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.cr .saywrap.stuck .eyebrow{display:none}
+.cr .say,.cr .say .in,.cr .say .ta,.cr .say .foot,.cr .say .foot .btn,.cr .say .mic{transition:all .28s cubic-bezier(.2,.7,.3,1)}
+.cr .say .eyebrow{max-height:26px;overflow:hidden;transition:max-height .22s ease,opacity .18s ease,margin .22s ease}
+.cr .saywrap.stuck .eyebrow{max-height:0;opacity:0;margin:0;width:0;flex:0 0 0;min-width:0;padding:0}
+.cr .saywrap.stuck .say .foot .btn{width:34px;height:34px!important;padding:0;border-radius:99px;justify-content:center;gap:0}
+.cr .saywrap.stuck .say .foot .btn .lbl{display:none}
 .cr .saywrap.stuck .say .ta{flex:1;min-width:0;min-height:0;height:34px!important;margin:0;font-size:14px;line-height:34px;white-space:nowrap;overflow:hidden;padding:0}
 .cr .saywrap.stuck .say .foot{margin:0;gap:6px;flex:none}
 .cr .saywrap.stuck .say .clr{flex:none}
 .cr .saywrap.stuck .say .mic{width:32px;height:32px}
-.cr .saywrap.stuck .say .foot .btn{height:32px!important;padding:0 12px;font-size:13px}
 .cr .saywrap.stuck .say .hits{flex-basis:100%;order:9}
 .cr .say .hits{margin-top:4px;padding-top:4px;border-top:1px solid #e6e6ea}
 .cr .saywrap.stuck .say:has(.hits){border-radius:22px}
@@ -515,10 +518,23 @@ export default function CreatePage() {
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [stuck, setStuck] = useState(false)
   useEffect(() => {
-    const el = sentinelRef.current; if (!el) return
-    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { threshold: 0 })
-    io.observe(el)
-    return () => io.disconnect()
+    const sent = sentinelRef.current; if (!sent) return
+    const sc = sent.closest('.mvp-frame-scroll') as HTMLElement | null; if (!sc) return
+    const wrap = sent.nextElementSibling as HTMLElement | null
+    /* it folds only once its whole open height has scrolled past (owner 2026-09-14), with a
+       little give on the way back up so it does not flap at the edge */
+    let full = wrap?.offsetHeight ?? 0
+    let isStuck = false
+    const onScroll = () => {
+      if (!isStuck && wrap) full = wrap.offsetHeight
+      const top = sent.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop
+      const y = sc.scrollTop
+      if (!isStuck && y > top + full) { isStuck = true; setStuck(true) }
+      else if (isStuck && y < top + full - 40) { isStuck = false; setStuck(false) }
+    }
+    onScroll()
+    sc.addEventListener('scroll', onScroll, { passive: true })
+    return () => sc.removeEventListener('scroll', onScroll)
   }, [view.name])
   const recogRef = useRef<Recog | null>(null)
   const heardRef = useRef('')
@@ -580,7 +596,7 @@ export default function CreatePage() {
       <div className="foot">
         {canHear && <button type="button" className={`mic${listening ? ' on' : ''}`} onClick={hear} aria-label={listening ? T('Stop listening') : T('Speak instead')} aria-pressed={listening}><Mic size={17} /></button>}
         {ask.trim() && !reading ? <button type="button" className="clr" onClick={() => { setAsk(''); setRead(null); askRef.current?.focus() }}>{T('Clear')}</button> : <span style={{ flex: 1 }} />}
-        <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? T('Reading') : T('Plan it')}</button>
+        <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}<span className="lbl">{reading ? T('Reading') : T('Plan it')}</span></button>
       </div>
         {read && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
