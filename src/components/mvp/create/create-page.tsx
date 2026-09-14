@@ -37,7 +37,6 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const GLASS: React.CSSProperties = { background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)' }
 
 const GOAL_ICON: Record<ShelfGoal, typeof Megaphone> = { foryou: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart, reviews: Star, online: ShoppingCart, catering: Users, brand: Share2 }
-const STAGE_ICON: Record<ShelfStage, typeof Eye> = { Awareness: Eye, Interest: Lightbulb, Actions: MousePointerClick, Orders: DoorOpen, Retention: Repeat }
 const STAGE_HUE: Record<ShelfStage, HueKey> = { Awareness: 'mint', Interest: 'nights', Actions: 'newfaces', Orders: 'amber', Retention: 'brand' }
 const KIND_ICON: Record<string, typeof Store> = { design: ImageIcon, 'creative-graphic': ImageIcon, 'creative-social': Share2, 'creative-video': Video, 'creative-photos': Camera, 'creative-copy': PenLine, 'creative-email': Mail, 'creative-print': Ticket, 'creative-logo': Sparkles, 'creative-website': Store, 'creative-ads': Megaphone, 'creative-menu': Tag, 'creative-other': Wrench, story: ImageIcon, gpost: Store, dish: Camera, reel: Video, graphic: ImageIcon, edit: Video, earlyaccess: Mail, slowoffer: Tag, winback: Heart, promoevent: Ticket, launch: Tag, ticket: Ticket, creator: Users, catering: Users, reviewsplan: Star, giftcard: Gift, shoot: Camera, gbp: Store, listings: MapPin, socialprofiles: Share2, measure: BarChart3, emaildeliver: Mail, deliverymenu: ShoppingCart, friction: ShoppingCart, direct: ShoppingCart, website: Store, localseo: MapPin, pos: ShoppingCart, welcome: Mail, birthday: Gift, news: Mail, loyalty: Heart, nights: Moon, firstvisit: MapPin, regulars: Heart, reach: Megaphone, reviewsreply: Star, socialmgmt: Share2, gbpmgmt: Store }
 /* the Actions shelf's bundles and parts (action-shelf.ts) */
@@ -202,6 +201,85 @@ const CREATE_CSS = `
 .cr .path li .n{font-size:12px;font-weight:600;color:var(--c2);margin-top:2px}
 .cr .path li.weak .t::after{content:"weakest";font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:#fbeaea;color:#c92d32;margin-left:8px;vertical-align:middle}
 /* product */
+.cr .pp2-hero{margin:0;height:300px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:26px 40px 18px;background:linear-gradient(180deg,var(--t1),#fff 96%)}
+.cr .pp2-hero .art{width:100%;max-width:250px;filter:drop-shadow(0 24px 40px rgba(20,60,45,.18)) drop-shadow(0 2px 4px rgba(0,0,0,.06))}
+.cr .dw{background:#fff;color:#1d1d1f;border-radius:14px;overflow:hidden;font-size:12px;width:100%;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.cr .pp2-hero .dw{box-shadow:none}
+.cr .dw .ph{height:78px;background:linear-gradient(135deg,var(--c1),var(--c2));background-size:cover;background-position:center 35%}
+.cr .dw.g .nm{font-weight:700;font-size:15px;padding:9px 12px 0}
+.cr .dw.g .mt{font-size:11px;color:#6e6e73;padding:2px 12px 8px}
+.cr .dw.g .btns{display:flex;gap:5px;padding:0 12px 8px;flex-wrap:wrap}
+.cr .dw.g .btns i{font-style:normal;border:1px solid #d0d0d4;border-radius:99px;padding:3px 8px;font-size:10.5px;font-weight:600;color:#1a73e8;white-space:nowrap}
+.cr .dw.g .btns.dim i{color:#9a9aa0}
+.cr .dw.g .menu{display:flex;flex-direction:column;gap:5px;padding:2px 12px 10px}
+.cr .dw.g .menu b{display:block;height:7px;border-radius:4px;background:#e6e6ea;width:70%}
+.cr .dw.g .menu b+b{width:50%}
+.cr .dw.g .nomenu{padding:2px 12px 10px;font-size:11px;color:#b0b0b5;font-style:italic}
+.cr .dw.now{filter:grayscale(1);opacity:.7}
+.cr .dw.web .bar{display:flex;gap:4px;padding:6px 9px;background:#f0f0f2}
+.cr .dw.web .bar i{width:7px;height:7px;border-radius:99px;background:#cfcfd4}
+.cr .dw.web .nav{display:flex;gap:10px;align-items:center;padding:8px 10px;font-size:11px}
+.cr .dw.web .nav b{font-size:12px;margin-right:auto}
+.cr .dw.web .nav span{color:#6e6e73}
+.cr .dw.ig .hd{display:flex;align-items:center;gap:6px;padding:7px 9px;font-weight:600;font-size:11.5px}
+.cr .dw.ig .hd i{width:16px;height:16px;border-radius:99px;background:linear-gradient(45deg,#f9a,#c5f)}
+.cr .dw.ig .ph{height:96px}
+.cr .dw.ig .cap{display:flex;align-items:center;gap:8px;padding:8px 9px 9px}
+.cr .dw.ig .cap b{display:block;flex:1;height:7px;border-radius:4px;background:#e6e6ea}
+.cr .dw.ig .cap em{font-style:normal;background:#1d1d1f;color:#fff;padding:3px 8px;border-radius:99px;font-weight:700;font-size:10px}
+.cr .dw.sms{background:none;box-shadow:none;display:flex;flex-direction:column;gap:8px;overflow:visible}
+.cr .dw.sms .bub{background:#e9e9eb;color:#1d1d1f;padding:9px 12px;border-radius:16px;border-bottom-left-radius:5px;font-size:12px;line-height:1.35;max-width:88%}
+.cr .dw.sms .bub.me{background:var(--c2);color:#fff;align-self:flex-end;border-radius:16px;border-bottom-right-radius:5px}
+.cr .dw.rev{padding:10px 11px}
+.cr .dw.rev .who{font-weight:700;font-size:11.5px}
+.cr .dw.rev .tx{display:flex;flex-direction:column;gap:5px;padding:6px 0 8px}
+.cr .dw.rev .tx b{display:block;height:7px;border-radius:4px;background:#e6e6ea;width:90%}
+.cr .dw.rev .tx b+b{width:60%}
+.cr .dw.rev .rep{font-size:11px;background:#f5f5f7;border-radius:8px;padding:7px 8px;line-height:1.35}
+.cr .pp2-head{padding:18px 20px 0}
+.cr .pp2-head .eb{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c2)}
+.cr .pp2-head .eb i{width:7px;height:7px;border-radius:99px;background:var(--c2)}
+.cr .pp2-head h1{margin:8px 0 8px;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:30px;line-height:1.06;letter-spacing:-.02em;color:#1d1d1f;text-wrap:balance}
+.cr .pp2-head .why{font-size:13px;color:#8a5a0c;margin:-2px 0 8px;font-weight:600}
+.cr .pp2-head p{margin:0;font-size:14.5px;line-height:1.5;color:#6e6e73}
+.cr .pp2-facts{display:flex;gap:8px;margin:18px 20px 0}
+.cr .pp2-facts div{flex:1;min-width:0;background:#f5f5f7;border-radius:14px;padding:12px 12px 10px}
+.cr .pp2-facts b{display:block;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:normal;color:#1d1d1f}
+.cr .pp2-facts span{font-size:11px;color:#6e6e73}
+.cr .pp2-na{display:flex;gap:10px;margin-top:8px}
+.cr .pp2-na .half{flex:1;min-width:0;border-radius:16px;padding:12px 10px 10px;display:flex;flex-direction:column;gap:8px;background:#f5f5f7}
+.cr .pp2-na .half.after{background:var(--t1)}
+.cr .pp2-na u{text-decoration:none;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6e6e73}
+.cr .pp2-na .after u{color:var(--c2)}
+.cr .pp2-na .dw{font-size:9px}
+.cr .pp2-na .dw .ph{height:44px}.cr .pp2-na .dw.g .nm{font-size:11px;padding:6px 8px 0}.cr .pp2-na .dw.g .mt{font-size:9px;padding:1px 8px 5px}.cr .pp2-na .dw.g .btns{gap:4px;padding:0 8px 6px}.cr .pp2-na .dw.g .btns i{font-size:8.5px;padding:2px 6px}.cr .pp2-na .dw.g .menu{padding:0 8px 8px;gap:4px}.cr .pp2-na .dw.g .menu b{height:5px}.cr .pp2-na .dw.g .nomenu{font-size:9px;padding:0 8px 8px}
+.cr .pp2-na span{font-size:11px;color:#6e6e73;line-height:1.35}
+.cr .pp2-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.cr .pp2-sec span{font-size:12px;color:#aeaeb2;white-space:nowrap}
+.cr .pp2-parts{margin-top:2px}
+.cr .pp2-parts .pr{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:0.5px solid #e6e6ea}
+.cr .pp2-parts .pr:first-child{border-top:0}
+.cr .pp2-parts .pr.off{opacity:.45}
+.cr .pp2-parts .ck{width:24px;height:24px;border-radius:12px;background:#2e9a78;border:0;flex:none;position:relative;cursor:pointer;padding:0}
+.cr .pp2-parts .ck::after{content:'';position:absolute;left:8px;top:5px;width:5px;height:9px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(45deg)}
+.cr .pp2-parts .ck.no{background:#fff;border:1.5px solid #e6e6ea}
+.cr .pp2-parts .ck.no::after{display:none}
+.cr .pp2-parts .tx{flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;font-family:inherit;color:#1d1d1f;cursor:pointer;display:flex;flex-direction:column;gap:1px}
+.cr .pp2-parts .tx b{font-size:14.5px;font-weight:600;line-height:1.25}
+.cr .pp2-parts .tx span{font-size:12px;color:#6e6e73}
+.cr .pp2-parts em{font-style:normal;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;flex:none}
+.cr .pp2-tot{margin-top:6px;padding-top:12px;border-top:1px solid #1d1d1f;display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.cr .pp2-tot span{display:block;font-size:12px;color:#6e6e73}
+.cr .pp2-tot b{font-family:'Cal Sans','Inter',sans-serif;font-size:22px;font-weight:600;color:#1d1d1f;font-variant-numeric:normal}
+.cr .pp2-tot .save{font-size:12px;color:#2e9a78;font-weight:600;text-align:right}
+.cr .pp2-tl li i{width:10px;height:10px;border-radius:5px;background:var(--c2);box-shadow:none;margin-top:5px}
+.cr .pp2-tl li::before{left:4px;top:16px}
+.cr .pp2-tl li i.you{background:#d99a1e;box-shadow:none}
+.cr .pp2-mini{flex:none;width:132px;border:0;background:none;padding:0;text-align:left;font-family:inherit;color:#1d1d1f;cursor:pointer;display:flex;flex-direction:column}
+.cr .pp2-mini .mk{height:100px;border-radius:14px;background:#f5f5f7;display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden}
+.cr .pp2-mini .mk .dw{transform:scale(.8);font-size:9px}
+.cr .pp2-mini b{font-size:13px;font-weight:600;margin-top:8px;line-height:1.2}
+.cr .pp2-mini span{font-size:12px;color:#6e6e73}
 .cr .pp-hero{margin:4px 16px 0;height:170px;border-radius:22px;position:relative;overflow:hidden;color:#fff;display:flex;align-items:flex-end;padding:16px;background:linear-gradient(135deg,var(--c1),var(--c2))}
 .cr .pp-hero::after{content:"";position:absolute;right:-10%;top:-50%;width:70%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.12)}
 .cr .pp-hero .glass{position:absolute;top:14px;left:12px;width:52px;height:52px}
@@ -384,12 +462,15 @@ export default function CreatePage() {
   /** The people who are on this client's live orders, for the bottom door. Empty is a fine
    *  answer: the door then says Get help, which is a real place, and never invents a name. */
   const [people, setPeople] = useState<OrderPerson[]>([])
+  /** their newest post's picture, for the drawing on the product sheet; null draws a plain tint */
+  const [thumb, setThumb] = useState<string | null>(null)
 
   useEffect(() => {
     if (!clientId) return
     let live = true
     fetch(`/api/dashboard/why-signals?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSignals(j as Signals) }).catch(() => {})
     fetch(`/api/campaigns/shelf-context?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setCtx(j as ShelfCtx) }).catch(() => {})
+    fetch(`/api/dashboard/social-posts?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { const t = (Array.isArray(j?.posts) ? j.posts : []).find((x: { thumbnailUrl?: string | null }) => x?.thumbnailUrl)?.thumbnailUrl; if (live && t) setThumb(String(t)) }).catch(() => {})
     fetch(`/api/dashboard/people?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as OrderPerson[]) }).catch(() => {})
     fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!live || !Array.isArray(j?.campaigns)) return
@@ -446,18 +527,7 @@ export default function CreatePage() {
   }
 
   /* ── pieces ── */
-  const Coming = () => <span className="pill-w grey">{T('Coming soon')}</span>
   /* small: a quick ask */
-  const Mini = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const buy = isBuyable(c)
-    return (
-      <button type="button" onClick={() => open(c)} className={`card mini press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
-        <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
-        {/* A held card prints NO price and NO ready time. Both are offers, and there is
-            nothing to offer yet. Same rule as the product page's fact strip. */}
-        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{priceWord(c.price)} <span>· {T(c.ready)}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
-      </button>
-    )
-  }
   /* row: a setup */
   const Sec = ({ t, s, hue, more }: { t: string; s?: string; hue: HueKey; more?: () => void }) => (
     <div className="sec" style={hv(hue)}>
@@ -858,10 +928,41 @@ export default function CreatePage() {
     )
   }
 
+  /* THE DRAWING OF THE RESULT (owner 2026-09-14, "the result, drawn", take A): the sheet leads
+     with a small picture of what the owner will HAVE when this is done, built from their own
+     name, rating and newest photo. Their Google card with the buttons on it; their site with
+     Order in the nav; their post with the button; the text that goes out; the review with the
+     reply under it. Nothing in it is invented: where a number is not known the line is a grey
+     bar, not a made-up dish. */
+  type DrawKind = 'google' | 'site' | 'post' | 'sms' | 'review'
+  const drawKind = (c: ShelfCard): DrawKind => {
+    if (c.id === 'reviewsreply' || c.id === 'reviewsplan') return 'review'
+    const ch = (c.channels[0] ?? '').toLowerCase()
+    if (ch.startsWith('google')) return 'google'
+    if (ch.includes('site')) return 'site'
+    if (/instagram|tiktok|facebook/.test(ch)) return 'post'
+    if (/email|text/.test(ch)) return 'sms'
+    return 'google'
+  }
+  const bizName = client?.name || T('Your restaurant')
+  const drawing = (kind: DrawKind, now = false) => {
+    const ph = <div className="ph" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} />
+    const rating = signals?.rating != null ? `${signals.rating.toFixed(1)} · ${(signals.ratingCount ?? 0).toLocaleString()} ${T('reviews')}` : T('Google listing')
+    if (kind === 'google') return (
+      <div className={`dw g${now ? ' now' : ''}`}>{ph}<div className="nm">{bizName}</div><div className="mt">{rating}</div>
+        {now ? <div className="btns dim"><i>{T('Directions')}</i><i>{T('Website')}</i></div> : <div className="btns"><i>{T('Menu')}</i><i>{T('Order')}</i><i>{T('Reserve')}</i><i>{T('Call')}</i></div>}
+        {now ? <div className="nomenu">{T('No menu added')}</div> : <div className="menu"><b /><b /></div>}
+      </div>)
+    if (kind === 'site') return <div className="dw web"><div className="bar"><i /><i /><i /></div><div className="nav"><b>{bizName}</b><span>{T('Menu')}</span><span>{T('Order')}</span><span>{T('Reserve')}</span></div>{ph}</div>
+    if (kind === 'post') return <div className="dw ig"><div className="hd"><i />{bizName}</div>{ph}<div className="cap"><b /><em>{T('Reserve')}</em></div></div>
+    if (kind === 'sms') return <div className="dw sms"><div className="bub">{T('We missed your call. Here is the menu and a link to order.')}</div><div className="bub me">{T('Table for 4 at 7?')}</div></div>
+    return <div className="dw rev"><div className="who">{T('A guest')} · {T('5 stars')}</div><div className="tx"><b /><b /></div><div className="rep"><b>{bizName}</b> {T('Thank you. Come say hi next time.')}</div></div>
+  }
   const product = (id: string) => {
     const c = cards[id]
-    if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>{T('That one is not on the shelf.')} <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>{T('Back to Create')}</button></div>
-    const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
+    if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>{T('That one is not on the shelf.')} <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>{T('Back to the shelf')}</button></div>
+    const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
+    const kind = drawKind(c)
     const TL: [string, string, boolean][] = c.kind === 'setup'
       ? [[T('Day 0'), T('You order. We read what you already have.'), false], [T('Day 1'), T('We start the work and send you anything we need.'), false], [T('Day 3'), T('You check the result. One tap, or a note.'), true], [c.ready, T('Done, and on your Home.'), false]]
       : c.kind === 'program'
@@ -872,50 +973,65 @@ export default function CreatePage() {
     const goesWith = [...new Set(CHIP_ORDER.filter((ch) => shelfForChip(ch, shape).includes(c.id)).flatMap((ch) => liveForChip(ch, shape)))]
       .filter((x) => x !== c.id).map((x) => cards[x]).filter((x): x is ShelfCard => !!x).slice(0, 4)
     const why = whyNow(c)
+    const word = c.parts || c.kind === 'campaign' ? T('Campaign') : c.kind === 'program' ? T('Every month') : T('Service')
+    const bp = c.parts ? bundlePick(c) : null
+    const shownPrice = bp ? (bp.picked.length ? (bp.total.whole ? priceLabel(bp.total.wholeOneTime, bp.total.wholePerMonth) : priceLabel(bp.total.oneTime, bp.total.perMonth)) : '–') : priceWord(c.price)
+    const gaps = signals?.listingGaps ?? []
     return (
       <div style={{ ...hv(c.goal), paddingBottom: 100 }}>
-        <div className="pp-hero">
-          <span className="glass"><Icon /></span>
-          <span className="pill-w mv"><SI /> {T('Moves {stage}', { stage: T(c.stage) })}</span>
-          <div style={{ position: 'relative' }}><h1>{c.title}</h1>{why && buy && <div className="why">{why}</div>}{!buy && <div className="why"><span className="pill-w grey">{T('Coming soon')}</span></div>}</div>
+        {/* the hero: the drawing on a soft wash of the stage colour that fades into the page */}
+        <div className="pp2-hero" style={hv(STAGE_HUE[c.stage])}><div className="art">{drawing(kind)}</div></div>
+        <div className="pp2-head">
+          <div className="eb" style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)} · {word}</div>
+          <h1>{c.title}</h1>
+          {why && buy && <div className="why">{why}</div>}
+          {!buy && <div className="why"><span className="pill-w grey">{T('Coming soon')}</span></div>}
+          <p>{c.plain}</p>
         </div>
         {/* A coming-soon card prints NO price. A price is an offer, and there is nothing to
             offer yet; the reason takes its place. */}
-        <div className="pp-facts">
-          {buy && <div><b>{priceWord(c.price)}</b><span>{T('price')}</span></div>}
-          <div><b>{c.ready}</b><span>{T('ready in')}</span></div><div><b>{T(c.you)}</b><span>{T('you do')}</span></div><div><b>{c.channels.length}</b><span>{T(c.channels.length === 1 ? 'channel' : 'channels')}</span></div>
+        <div className="pp2-facts">
+          {buy && <div><b>{shownPrice}</b><span>{c.parts ? T('whole thing') : T('price')}</span></div>}
+          <div><b>{c.ready}</b><span>{T('ready in')}</span></div>
+          <div><b>{T(c.you)}</b><span>{T('you do')}</span></div>
         </div>
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
-        {(() => { const ps = buy ? renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
-        <div className="pp-sec"><h2>{T('In plain words')}</h2><p>{c.plain}</p></div>
+        {(() => { const ps = buy ? renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T) : null; return ps ? <div className="pp-count" style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.45 }}>{ps}</div> : null })()}
+        {/* their listing, now and after: only where there is a real "now" to show (Google) */}
+        {kind === 'google' && buy && (
+          <div className="pp-sec"><h2>{T('Your listing, now and after')}</h2>
+            <div className="pp2-na">
+              <div className="half now"><u>{T('Now')}</u>{drawing('google', true)}<span>{gaps.length ? T('Missing: {list}', { list: gaps.slice(0, 3).join(', ') }) : T('As it is today')}</span></div>
+              <div className="half after" style={hv(STAGE_HUE[c.stage])}><u>{T('After')}</u>{drawing('google')}<span>{c.parts ? T('Menu, prices, buttons, answers, pin') : c.get[0]}</span></div>
+            </div>
+          </div>
+        )}
         {c.parts ? (() => {
           /* THE TICKABLE LIST (owner 2026-09-12): every part with its own price, all in until the
              owner unticks one. The whole bundle is 15% under the parts; drop a part and it is the
              plain sum of what is left. A part that cannot be bought yet is shown, dim, and not
              counted. */
-          const { parts, picked, total } = bundlePick(c)
+          const { parts, picked, total } = bp!
           const drop = dropped[c.id] ?? []
-          const toggle = (id: string) => setDropped((d) => ({ ...d, [c.id]: drop.includes(id) ? drop.filter((x) => x !== id) : [...drop, id] }))
-          const shown = total.whole ? priceLabel(total.wholeOneTime, total.wholePerMonth) : priceLabel(total.oneTime, total.perMonth)
-          const full = priceLabel(total.oneTime, total.perMonth)
+          const toggle = (pid: string) => setDropped((d) => ({ ...d, [c.id]: drop.includes(pid) ? drop.filter((x) => x !== pid) : [...drop, pid] }))
+          const whole = priceLabel(total.wholeOneTime, total.wholePerMonth)
+          const sum = priceLabel(total.oneTime, total.perMonth)
+          const saves = total.whole ? Math.max(0, total.oneTime - total.wholeOneTime) : 0
           return (
-            <div className="pp-sec"><h2>{T('What you get')}</h2>
-              <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 4 }}>{T('Tick what you need. Untick what you already have.')}</div>
-              {parts.map((p) => { const buy = isBuyable(p); const on = buy && !drop.includes(p.id); const I = iconFor(p)
-                return (
-                  <div key={p.id} className="row" style={{ ...hv(p.goal), padding: '7px 2px', opacity: buy ? 1 : 0.55 }}>
-                    <button type="button" aria-pressed={on} disabled={!buy} onClick={() => toggle(p.id)} className={`st${on ? ' done' : ''}`} style={{ cursor: buy ? 'pointer' : 'default', background: on ? undefined : '#fff', padding: 0 }}>{on && <Check size={13} strokeWidth={3} />}</button>
-                    <button type="button" onClick={() => open(p)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, border: 'none', background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
-                      <Mark hue={p.goal} size={30}><I size={16} /></Mark>
-                      <span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{p.title}</span><span className="s" style={{ display: 'block' }}>{buy ? p.ready : T('Coming soon')}</span></span>
-                      <span className="r"><b style={{ fontSize: 13 }}>{buy ? plabel(p.id) : ''}</b></span>
-                      <ChevronRight size={15} color={C.faint} />
-                    </button>
-                  </div>
-                ) })}
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #e6e6ea' }}>
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{total.whole ? T('Whole thing') : T('{n} of {m} picked', { n: picked.length, m: parts.filter(isBuyable).length })}</span>
-                <span style={{ textAlign: 'right' }}><b style={{ fontFamily: DISPLAY, fontSize: 17, color: C.ink }}>{picked.length ? shown : '–'}</b>{total.whole && full !== shown && <span style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{T('{full} as parts', { full })}</span>}</span>
+            <div className="pp-sec"><div className="pp2-sec"><h2>{T('What you get')}</h2><span>{T('{n} parts · tick what you need', { n: parts.length })}</span></div>
+              <div className="pp2-parts">
+                {parts.map((p) => { const pb = isBuyable(p); const on = pb && !drop.includes(p.id)
+                  return (
+                    <div key={p.id} className={`pr${pb ? '' : ' off'}`}>
+                      <button type="button" aria-pressed={on} disabled={!pb} onClick={() => toggle(p.id)} className={`ck${on ? '' : ' no'}`} aria-label={on ? T('Remove') : T('Add')} />
+                      <button type="button" onClick={() => open(p)} className="tx"><b>{p.title}</b><span>{pb ? p.ready : T('Coming soon')}</span></button>
+                      <em>{pb ? plabel(p.id) : ''}</em>
+                    </div>
+                  ) })}
+              </div>
+              <div className="pp2-tot">
+                <div><span>{total.whole ? T('Whole thing') : T('{n} of {m} picked', { n: picked.length, m: parts.filter(isBuyable).length })}</span><b>{picked.length ? (total.whole ? whole : sum) : '–'}</b></div>
+                {total.whole && saves > 0 && <div className="save">{T('{sum} as parts · saves ${n}', { sum, n: saves.toLocaleString() })}</div>}
               </div>
             </div>
           )
@@ -923,24 +1039,22 @@ export default function CreatePage() {
         {c.partOf && cards[c.partOf] && (() => { const b = cards[c.partOf]!; const I = iconFor(b)
           return <div className="pp-sec"><button type="button" onClick={() => open(b)} className="row press" style={{ ...hv(b.goal), padding: '8px 2px' }}><Mark hue={b.goal} size={34}><I size={18} /></Mark><span className="tx"><span className="s" style={{ display: 'block' }}>{T('Also in')}</span><span className="t" style={{ display: 'block', fontWeight: 600, whiteSpace: 'normal' }}>{b.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{priceWord(b.price)}</b></span><ChevronRight size={15} color={C.faint} /></button></div> })()}
         <div className="pp-sec"><h2>{T('What happens after you order')}</h2>
-          <ul className="tl">{TL.map(([d, t, you], i) => <li key={i}><i className={you ? 'you' : ''} /><span className="d">{d}</span><span className="t">{you ? <b>{t}</b> : t}</span></li>)}</ul>
+          <ul className="tl pp2-tl">{TL.map(([d, t, you], i) => <li key={i}><i className={you ? 'you' : ''} /><span className="d">{d}</span><span className="t">{you ? <b>{t}</b> : t}</span></li>)}</ul>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> {T('Amber is you. Everything else is us.')}</div>
         </div>
         <div className="pp-sec"><h2>{T('Where it shows up')}</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
-        {goesWith.length > 0 && (<><Sec t={T('Goes well with')} hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
+        {goesWith.length > 0 && (<><Sec t={T('Goes well with')} hue={c.goal} /><Shelf>{goesWith.map((x) => <button key={x.id} type="button" onClick={() => open(x)} className="pp2-mini press"><div className="mk">{drawing(drawKind(x))}</div><b>{x.title}</b><span>{isBuyable(x) ? priceWord(x.price) : T('Coming soon')}</span></button>)}</Shelf></>)}
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
-          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? (c.parts ? (() => { const { picked, total } = bundlePick(c); return picked.length ? (total.whole ? priceLabel(total.wholeOneTime, total.wholePerMonth) : priceLabel(total.oneTime, total.perMonth)) : '–' })() : priceWord(c.price)) : T('Not on sale yet')}<span>{buy ? (c.parts ? T('{n} parts picked · we reply with the plan in 2 days', { n: bundlePick(c).picked.length }) : c.handoff.kind === 'request' && c.handoff.what ? T('{cadence} · we reply with the plan in 2 days', { cadence: c.cadence }) : `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}`) : T('We will tell you the day it opens')}</span></div>
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? shownPrice : T('Not on sale yet')}<span>{buy ? (c.parts ? T('{n} parts picked · we reply with the plan in 2 days', { n: bp!.picked.length }) : c.handoff.kind === 'request' && c.handoff.what ? T('{cadence} · we reply with the plan in 2 days', { cadence: c.cadence }) : `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}`) : T('We will tell you the day it opens')}</span></div>
           {buy
-            ? <button type="button" className="btn hue" onClick={() => order(c)} disabled={!!c.parts && bundlePick(c).picked.length === 0}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : c.handoff.kind === 'request' && c.handoff.what ? 'Request' : 'Order')} <ArrowRight size={15} /></button>
+            ? <button type="button" className="btn hue" onClick={() => order(c)} disabled={!!c.parts && bp!.picked.length === 0}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : c.handoff.kind === 'request' && c.handoff.what ? 'Request' : 'Order')} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>{T('Tell me when')}</Link>}
         </div></div>
       </div>
     )
   }
-
-
 
   /* ── the filter sheet ── */
   const filterSheetUI = sheet ? (
