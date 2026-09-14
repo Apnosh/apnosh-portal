@@ -289,6 +289,21 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .say2 .ta::placeholder{color:#aeaeb2}
 .cr .say2 .foot{display:flex;align-items:center;gap:8px;margin-top:6px}
 .cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
+.cr .saywrap{position:sticky;top:0;z-index:20;background:#fff;padding:2px 0 6px;transition:padding .15s}
+.cr .saywrap.stuck{padding:8px 0 8px;box-shadow:0 8px 20px -12px rgba(0,0,0,.18)}
+.cr .saywrap.stuck .stages{margin-top:8px}
+.cr .saywrap.stuck .say{margin:0 12px;padding:1.5px;border-radius:99px;box-shadow:0 4px 14px rgba(74,189,152,.14)}
+.cr .saywrap.stuck .say .in{border-radius:99px;padding:5px 6px 5px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cr .saywrap.stuck .eyebrow{display:none}
+.cr .saywrap.stuck .say .ta{flex:1;min-width:0;min-height:0;height:34px!important;margin:0;font-size:14px;line-height:34px;white-space:nowrap;overflow:hidden;padding:0}
+.cr .saywrap.stuck .say .foot{margin:0;gap:6px;flex:none}
+.cr .saywrap.stuck .say .clr{flex:none}
+.cr .saywrap.stuck .say .mic{width:32px;height:32px}
+.cr .saywrap.stuck .say .foot .btn{height:32px!important;padding:0 12px;font-size:13px}
+.cr .saywrap.stuck .say .hits{flex-basis:100%;order:9}
+.cr .say .hits{margin-top:4px;padding-top:4px;border-top:1px solid #e6e6ea}
+.cr .saywrap.stuck .say:has(.hits){border-radius:22px}
+.cr .saywrap.stuck .say:has(.hits) .in{border-radius:20px}
 .cr .say2 .mic{width:36px;height:36px;border-radius:18px;border:0;background:#f5f5f7;color:#1d1d1f;display:grid;place-items:center;cursor:pointer;flex:none}
 .cr .say2 .mic.on{background:#ec1528;color:#fff;animation:crmic 1.2s ease-in-out infinite}
 @keyframes crmic{0%,100%{box-shadow:0 0 0 0 rgba(236,21,40,.35)}50%{box-shadow:0 0 0 8px rgba(236,21,40,0)}}
@@ -493,6 +508,18 @@ export default function CreatePage() {
   type Recog = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
   const canHear = useSyncExternalStore(() => () => {}, () => { const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }; return !!(w.SpeechRecognition ?? w.webkitSpeechRecognition) }, () => false)
   const [listening, setListening] = useState(false)
+  /* THE BOX IS THE SEARCH BAR TOO (owner 2026-09-14): typing filters the shelf as you go, Plan it
+     still reads the words. On the browse screen the box is sticky: the Create row with the logo
+     and bell scrolls away, the box stays at the top and folds to one line. A 1px sentinel just
+     above it says when it is stuck. */
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const [stuck, setStuck] = useState(false)
+  useEffect(() => {
+    const el = sentinelRef.current; if (!el) return
+    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { threshold: 0 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [view.name])
   const recogRef = useRef<Recog | null>(null)
   const heardRef = useRef('')
   const hear = () => {
@@ -542,6 +569,14 @@ export default function CreatePage() {
     <div className="say"><div className="in say2">
       <div className="eyebrow"><Sparkles /><span className="aur">{T('Describe it')}</span></div>
       <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); describe() } }} rows={2} enterKeyHint="go" placeholder={listening ? T('Listening…') : T('What do you want to do? A video for the new dish, Labor Day hours, more people in on Tuesdays…')} />
+      {(() => { const qq = ask.trim(); if (qq.length < 2 || read) return null; const all = searchCards(qq); const hits = all.slice(0, 5); if (hits.length === 0) return null
+        return (
+          <div className="hits">
+            {hits.map((c) => { const I = iconFor(c); const buy = isBuyable(c)
+              return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '6px 2px' }}><Mark hue={c.goal} size={30}><I size={15} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{buy ? `${priceWord(c.price)} · ${T(c.ready)}` : T('Coming soon')}</span></span><ChevronRight size={15} color={C.faint} /></button> })}
+            {all.length > hits.length && <button type="button" onClick={() => { setQ(qq); go({ name: 'search' }) }} style={{ border: 0, background: 'none', padding: '6px 2px 2px', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mintDk, cursor: 'pointer' }}>{T('See all {n} results', { n: all.length })}</button>}
+          </div>
+        ) })()}
       <div className="foot">
         {canHear && <button type="button" className={`mic${listening ? ' on' : ''}`} onClick={hear} aria-label={listening ? T('Stop listening') : T('Speak instead')} aria-pressed={listening}><Mic size={17} /></button>}
         {ask.trim() && !reading ? <button type="button" className="clr" onClick={() => { setAsk(''); setRead(null); askRef.current?.focus() }}>{T('Clear')}</button> : <span style={{ flex: 1 }} />}
@@ -646,13 +681,11 @@ export default function CreatePage() {
   const STAGES: ShelfStage[] = ['Awareness', 'Interest', 'Actions', 'Orders', 'Retention']
   const sorted = (list: ShelfCard[]) => [...list.filter(isBuyable), ...list.filter((c) => !isBuyable(c))]
   const fits = (c: ShelfCard) => stage == null || c.stage === stage
-  const browseBlock = (
-    <div className="browse">
-      <button type="button" className="srch" onClick={() => go({ name: 'search' })}><Search size={16} /> {T('Search campaigns and services')}</button>
-      <div className="stages cc-scroll">
+  /* the stage tabs live right under the box and stick with it (owner 2026-09-14) */
+  const stagesRow = (
+    <div className="stages cc-scroll" style={{ margin: '10px 16px 0' }}>
         <button type="button" className={`stg${stage == null ? ' on' : ''}`} onClick={() => setStage(null)}>{T('For you')}</button>
         {STAGES.map((s) => <button key={s} type="button" className={`stg${stage === s ? ' on' : ''}`} onClick={() => setStage(s)} style={hv(STAGE_HUE[s])}><i />{T(s)}</button>)}
-      </div>
     </div>
   )
 
@@ -720,10 +753,11 @@ export default function CreatePage() {
       const bundles = sorted(all.filter((c) => !!c.parts))
       return (
         <>
-          {sayBox}
+          {createRow}
+          <div ref={sentinelRef} style={{ height: 1 }} />
+          <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>
           <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
           <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
-          {browseBlock}
           {rail({ t: T('Recommended for you'), list: rec, hue: STAGE_HUE.Actions })}
           {rail({ t: T('Campaigns'), list: bundles, hue: STAGE_HUE.Actions })}
           <Sec t={T('One thing at a time')} s={T('Pick exactly what you need')} hue={STAGE_HUE.Actions} />
@@ -746,10 +780,11 @@ export default function CreatePage() {
     const empty = [rec, creatives, campaigns, setups, monthly, people].every((l) => l.length === 0)
     return (
       <>
-        {sayBox}
+        {createRow}
+        <div ref={sentinelRef} style={{ height: 1 }} />
+        <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>
         <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
         <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
-        {browseBlock}
         {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Pick another stage.')}</div>}
         {rail({ t: T('Recommended for you'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
         {rail({ t: T('Creatives'), list: creatives, hue: 'brand', kind: 'quick' })}
@@ -973,10 +1008,13 @@ export default function CreatePage() {
 
   const title = view.name === 'guide' ? T('Guide me') : view.name === 'product' ? (cards[view.id]?.title ?? T('Create')) : T('Create')
   const backTo = view.name === 'browse' ? undefined : '/dashboard/campaigns/new'
+  const titleEl = <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', textAlign: 'center' }}>{title}</span>
+  /* on the browse screen the Create row is part of the page and scrolls away; the box below it stays */
+  const createRow = <div style={{ background: '#fff', padding: '0 0 2px' }}><TopRow middle={titleEl} /></div>
   return (
-    <MvpShell active="create" header={
+    <MvpShell active="create" noHeader={view.name === 'browse'} header={
       <div style={{ flexShrink: 0, background: '#fff' }}>
-        <div style={{ padding: '0 0 2px' }}><TopRow back={backTo} middle={view.name === 'search' ? searchBar : <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', textAlign: 'center' }}>{title}</span>} /></div>
+        <div style={{ padding: '0 0 2px' }}><TopRow back={backTo} middle={view.name === 'search' ? searchBar : titleEl} /></div>
       </div>
     }>
       <div className="cr" style={{ background: '#fff', minHeight: '100%', fontFamily: "'Inter',system-ui,sans-serif" }}>

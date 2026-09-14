@@ -145,7 +145,12 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   const count = summary?.placeRatingCount ?? sampleN
   const split = summary?.split ?? { positive: 0, neutral: 0, negative: 0, total: 0 }
   const sources = Object.entries(summary?.sources ?? {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])
-  const commentPlatforms = useMemo(() => { const m = new Map<string, number>(); for (const c of comments ?? []) m.set(c.platform, (m.get(c.platform) ?? 0) + 1); return [...m.entries()].sort((a, b) => b[1] - a[1]) }, [comments])
+  /* the comments, summed up (owner 2026-09-14): what was praised and what was knocked, in the
+     reader's own eight-word reasons, most repeated first */
+  const said = useMemo(() => {
+    const pick = (tone: CommentTone) => { const m = new Map<string, number>(); for (const it of read?.items ?? []) if (it.tone === tone && it.why) m.set(it.why.replace(/\.$/, ''), (m.get(it.why) ?? 0) + 1); return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w) }
+    return { loved: pick('love'), knocked: pick('complaint'), asked: pick('question') }
+  }, [read])
 
   /* ── 3. what needs a reply ── */
   /* the queue is the whole listing's backlog, worst first; the page's own recent reviews stand in until it lands */
@@ -188,11 +193,6 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
                 return <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: C.mute }}><span style={{ width: 10, textAlign: 'right', fontWeight: 600, color: C.ink }}>{k}</span><Star size={11} fill={AMBER} color={AMBER} /><span style={{ flex: 1, height: 6, borderRadius: 99, background: C.bg, overflow: 'hidden' }}><span style={{ display: 'block', width: `${w}%`, height: '100%', background: k >= 4 ? TEAL : k === 3 ? C.faint : RED, borderRadius: 99 }} /></span><span style={{ width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{n}</span></div> })}
             </div>
           )}
-          {commentPlatforms.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 10, borderTop: `0.5px solid ${C.line}`, fontSize: 12.5, color: C.mute }}>
-              <MessageCircle size={14} color={TEAL_DK} /> {comments!.length} comments on your posts · {commentPlatforms.map(([p, n]) => `${PLATFORM_WORD[p] ?? p} ${n}`).join(' · ')}
-            </div>
-          )}
           {commentsErr && <div style={{ marginTop: 10, fontSize: 12, color: C.faint }}>Comments could not load right now.</div>}
         </div>
       </div>
@@ -220,11 +220,18 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
         )}
         {!topicsLoading && topics && topics.topics.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{topics.source === 'none' && split.total >= 3 ? 'We could not read the reviews just now. Pull down to try again.' : 'A few more written reviews and the topics guests mention show here.'}</div>}
         {(comments?.length ?? 0) > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {readLoading && !read && <span style={{ fontSize: 12, color: C.faint }}>Reading the comments…</span>}
-            {read && ([['love', 'love it', GREEN], ['question', 'asking', AMBER], ['complaint', 'unhappy', RED]] as [CommentTone, string, string][]).filter(([k]) => toneCount[k] > 0).map(([k, w, col]) => (
-              <span key={k} style={{ fontSize: 12, fontWeight: 700, color: col, background: col + '1a', borderRadius: 99, padding: '4px 10px' }}>{toneCount[k]} comments {w}</span>
-            ))}
+          <div style={{ ...CARD, marginTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 6 }}><MessageCircle size={13} /> In the comments on your posts</div>
+            {readLoading && !read && <div style={{ fontSize: 12.5, color: C.faint }}>Reading the comments…</div>}
+            {read && read.summary && <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{read.summary}</div>}
+            {read && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: read.summary ? 8 : 0, fontSize: 12.5, lineHeight: 1.4 }}>
+                {toneCount.love > 0 && <div><b style={{ color: GREEN, fontWeight: 700 }}>{toneCount.love} love it</b>{said.loved.length > 0 && <span style={{ color: C.mute }}> · {said.loved.join(' · ')}</span>}</div>}
+                {toneCount.complaint > 0 && <div><b style={{ color: RED, fontWeight: 700 }}>{toneCount.complaint} unhappy</b>{said.knocked.length > 0 && <span style={{ color: C.mute }}> · {said.knocked.join(' · ')}</span>}</div>}
+                {toneCount.question > 0 && <div><b style={{ color: AMBER, fontWeight: 700 }}>{toneCount.question} asking</b>{said.asked.length > 0 && <span style={{ color: C.mute }}> · {said.asked.join(' · ')}</span>}</div>}
+                {toneCount.love + toneCount.complaint + toneCount.question === 0 && <div style={{ color: C.faint }}>Nothing that praises or complains, just chatter.</div>}
+              </div>
+            )}
           </div>
         )}
       </div>
