@@ -291,6 +291,7 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
 .cr .saywrap{position:relative;z-index:20;background:#fff;padding:2px 0 6px}
 .cr .saywrap.stuck{position:sticky;top:0;animation:saydrop .26s cubic-bezier(.2,.7,.3,1) both}
+.cr .saywrap.stuck .say,.cr .saywrap.stuck .say .in,.cr .saywrap.stuck .say .ta,.cr .saywrap.stuck .say .foot,.cr .saywrap.stuck .say .foot .btn,.cr .saywrap.stuck .say .mic,.cr .saywrap.stuck .eyebrow{transition:none}
 @keyframes saydrop{from{transform:translateY(-40%);opacity:0}to{transform:none;opacity:1}}
 .cr .saywrap.stuck{padding:8px 0 8px;box-shadow:0 8px 20px -12px rgba(0,0,0,.18)}
 .cr .saywrap.stuck .stages{margin-top:8px}
@@ -519,6 +520,11 @@ export default function CreatePage() {
      above it says when it is stuck. */
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [stuck, setStuck] = useState(false)
+  /* the box's open height, so a spacer can hold its place while the folded bar is stuck: the
+     fold used to shorten the box in the flow and everything under it jumped up (the glitch) */
+  const [openH, setOpenH] = useState(0)
+  /** the wrap's height right now (the folded bar's while stuck), measured, so the spacer is exact */
+  const [wrapH, setWrapH] = useState(0)
   useEffect(() => {
     const sent = sentinelRef.current; if (!sent) return
     const sc = sent.closest('.mvp-frame-scroll') as HTMLElement | null; if (!sc) return
@@ -530,15 +536,18 @@ export default function CreatePage() {
     let full = wrap?.offsetHeight ?? 0
     let isStuck = false
     const onScroll = () => {
-      if (!isStuck && wrap) full = wrap.offsetHeight
+      if (!isStuck && wrap && wrap.offsetHeight !== full) { full = wrap.offsetHeight; setOpenH(full) }
       const top = sent.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop
       const y = sc.scrollTop
       if (!isStuck && y > top + full - BAR) { isStuck = true; setStuck(true) }
       else if (isStuck && y < top + full - BAR - 30) { isStuck = false; setStuck(false) }
     }
+    if (wrap) setOpenH(wrap.offsetHeight)
+    const ro = wrap ? new ResizeObserver(() => setWrapH(wrap.offsetHeight)) : null
+    if (wrap && ro) ro.observe(wrap)
     onScroll()
     sc.addEventListener('scroll', onScroll, { passive: true })
-    return () => sc.removeEventListener('scroll', onScroll)
+    return () => { sc.removeEventListener('scroll', onScroll); ro?.disconnect() }
   }, [view.name])
   const recogRef = useRef<Recog | null>(null)
   const heardRef = useRef('')
@@ -775,7 +784,7 @@ export default function CreatePage() {
         <>
           {createRow}
           <div ref={sentinelRef} style={{ height: 1 }} />
-          <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>
+          <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>{stuck && openH > wrapH && <div aria-hidden style={{ height: openH - wrapH }} />}
           <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
           <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
           {rail({ t: T('Recommended for you'), list: rec, hue: STAGE_HUE.Actions })}
@@ -802,7 +811,7 @@ export default function CreatePage() {
       <>
         {createRow}
         <div ref={sentinelRef} style={{ height: 1 }} />
-        <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>
+        <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>{stuck && openH > wrapH && <div aria-hidden style={{ height: openH - wrapH }} />}
         <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
         <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
         {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Pick another stage.')}</div>}
