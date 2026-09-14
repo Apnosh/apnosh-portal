@@ -200,22 +200,27 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
             const tone = r.bad ? { ink: '#ec1528', bg: '#fde4e6', Icon: AlertCircle }
               : r.team ? (r.ready ? { ink: C.greenDk, bg: tint('mint', .16), Icon: Check } : { ink: '#9a6b17', bg: '#faf1de', Icon: Users })
               : { ink: '#3b6fd4', bg: tint('nights', .16), Icon: Calendar }
+            /* CALM CARD (owner 2026-09-14: "too busy"). Three things only: the state as one coloured
+               word with a dot, two lines of the post, and the networks as quiet grey words. No chip,
+               no logos, no shadow; a hairline holds it. The picture, when there is one, is a small
+               square on the right so the words lead. */
+            const word = (pl: string) => ({ instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', google: 'Google', gbp: 'Google', x: 'X', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' } as Record<string, string>)[pl.toLowerCase()] ?? pl
+            const nets = r.platforms.map(word)
+            const netLine = nets.length > 3 ? `${nets.slice(0, 3).join(', ')} +${nets.length - 3}` : nets.join(', ')
             return (
               <Link key={r.id} href="/dashboard/insights/posts" style={{
-                flex: '0 0 238px', width: 238, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
-                borderRadius: 18, padding: 12, display: 'flex', flexDirection: 'column', gap: 9,
-                border: `0.5px solid ${C.line}`, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.05)',
+                flex: '0 0 224px', width: 224, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
+                borderRadius: 16, padding: '12px 13px 11px', display: 'flex', flexDirection: 'column', gap: 6,
+                border: `0.5px solid ${C.line}`, background: '#fff',
               }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 11.5, fontWeight: 700, padding: '4px 9px 4px 7px', borderRadius: 99, background: tone.bg, color: tone.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <tone.Icon size={12} strokeWidth={2.4} style={{ flexShrink: 0 }} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.when}</span>
-                  </span>
-                  {r.platforms.length > 0 && <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{marks(r.platforms)}</span>}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: tone.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.ink, flexShrink: 0 }} />{r.when}
                 </span>
                 <span style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  {r.media && <span style={{ width: 44, height: 44, borderRadius: 11, flexShrink: 0, background: `center/cover url(${r.media})` }} />}
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 34 }}>{r.text}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.ink, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 36 }}>{r.text}</span>
+                  {r.media && <span style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, background: `center/cover url(${r.media})` }} />}
                 </span>
+                {netLine && <span style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{netLine}</span>}
               </Link>
             )
           })}
