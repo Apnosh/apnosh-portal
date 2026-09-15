@@ -12,10 +12,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { SlidersHorizontal, ChevronLeft } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { listMetricToggles, setMetricToggle, type MetricToggleGroup } from '@/lib/metric-prefs-actions'
-import { C, DISPLAY } from '@/components/mvp/mvp-detail'
+import { C } from '@/components/mvp/mvp-detail'
+import MvpShell from '@/components/mvp/mvp-shell'
 
 const HREF = '/dashboard/insights/metrics'
 
@@ -77,14 +78,11 @@ export function MetricSettingsPage() {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: '#fff', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '22px 18px calc(110px + env(safe-area-inset-bottom))' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button type="button" onClick={done} aria-label="Back" style={{ width: 40, height: 40, borderRadius: 999, border: '1px solid rgba(255,255,255,0.75)', background: 'rgba(240,241,240,0.72)', boxShadow: '0 1px 3px rgba(0,0,0,.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-            <ChevronLeft size={21} />
-          </button>
-          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>Choose your metrics</div>
-        </div>
+    /* INSIDE THE APP FRAME (owner 2026-09-14): this was a window-wide fixed overlay, so on a
+       desktop browser it filled the whole screen while every other screen sits in the phone
+       frame. The shell in focus mode pins the title with its back circle and hides the nav. */
+    <MvpShell active="home" focus title="Choose your metrics" back="/dashboard/insights" backExact>
+      <div style={{ background: '#fff', minHeight: '100%', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, padding: '8px 18px 0' }}>
         <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, margin: '10px 0 6px' }}>
           Switch a metric on to count it in its stage, off to leave it out.
         </div>
@@ -143,13 +141,13 @@ export function MetricSettingsPage() {
             </div>
           )
         })}
-      </div>
       {/* the one way out, pinned to the bottom: Done (switches save as you flip) */}
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '12px 18px calc(14px + env(safe-area-inset-bottom))', background: 'rgba(255,255,255,.86)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', borderTop: '1px solid rgba(0,0,0,.05)' }}>
+      <div style={{ position: 'sticky', bottom: 0, margin: '16px -18px 0', padding: '12px 18px calc(14px + env(safe-area-inset-bottom))', background: 'rgba(255,255,255,.86)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', borderTop: '1px solid rgba(0,0,0,.05)' }}>
         <button type="button" onClick={done} style={{ width: '100%', height: 52, borderRadius: 999, border: 'none', background: C.greenDk, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 6px 18px rgba(46,154,120,.28)' }}>
           Done
         </button>
       </div>
-    </div>
+      </div>
+    </MvpShell>
   )
 }
