@@ -184,7 +184,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
     return (
       <div style={{ marginTop: 16, padding: '0 2px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }}>Coming up</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }}>Coming up</span>
           <span style={{ fontSize: 12, color: C.faint }}>{rows.length === 1 ? '1 thing' : `${rows.length} things`}</span>
           <Link href="/dashboard/insights/posts" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
             Open <ChevronRight size={13} />

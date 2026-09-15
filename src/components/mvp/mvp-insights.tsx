@@ -402,10 +402,11 @@ function ReportButton() {
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.045)'
 /* charts sit on the page too now (owner 2026-09-04): CARD is a spacer, not a card */
 const CARD: React.CSSProperties = { marginTop: 18, padding: '0 2px' }
-const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
+/* every section heading is the size of the stage name (owner 2026-09-14): one weight of heading on the page */
+const H2: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }
 /* a plain list sits on the page, no card (owner 2026-09-04); charts keep CARD */
 const LIST: React.CSSProperties = { marginTop: 16, padding: '0 2px' }
-const H3: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }
+const H3: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }
 const TILE: React.CSSProperties = { background: '#f5f5f7', borderRadius: 14 }
 /* a 36px frosted round button — the page's tools on the stage row */
 const GLASS_CIRCLE: React.CSSProperties = { width: 36, height: 36, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.06)', color: C.ink, textDecoration: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, flexShrink: 0 }

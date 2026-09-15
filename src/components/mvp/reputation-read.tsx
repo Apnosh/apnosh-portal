@@ -44,7 +44,7 @@ interface Queue { queue: { id: string; rating: number | null; author: string; te
 const TEAL = '#14c3c3', TEAL_DK = '#0f9e9e', TEAL_SOFT = 'rgba(20,195,195,.12)'
 const GREEN = '#1fc47a', RED = '#ec1528', AMBER = '#f0a12b'
 const LIST: React.CSSProperties = { marginTop: 18, padding: '0 2px' }
-const H3: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }
+const H3: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }
 const CARD: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14 }
 
 const DEMO: { summary: Summary; topics: Topics; queue: Queue; comments: CommentRow[]; read: CommentRead } = {
