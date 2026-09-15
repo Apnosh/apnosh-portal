@@ -1013,6 +1013,22 @@ export function starsForBars(bars: { sMs?: number; eMs?: number }[], ratingDaily
     return n > 0 ? Math.round((sum / n) * 10) / 10 : null
   })
 }
+/** The average rating SO FAR at each bar: every review from the first bar up to and including
+ *  this one (Σsum ÷ Σn), so the line is continuous once a review has landed and ends exactly on
+ *  the range's average. */
+export function starsRunForBars(bars: { sMs?: number; eMs?: number }[], ratingDaily?: { date: string; sum: number; n: number }[]): (number | null)[] {
+  if (!ratingDaily?.length) return bars.map(() => null)
+  const byDay = new Map(ratingDaily.map((d) => [d.date, d]))
+  let sum = 0, n = 0
+  return bars.map((b) => {
+    if (b.sMs == null) return null
+    const end = b.eMs ?? b.sMs
+    for (let t = b.sMs; t <= end; t += 86_400_000) { const d = byDay.get(isoDate(new Date(t))); if (d) { sum += d.sum; n += d.n } }
+    return n > 0 ? Math.round((sum / n) * 100) / 100 : null
+  })
+}
+/** The colour a rating reads in: red up to two stars, gold for three, green from four. */
+export const starBand = (v: number): string => (v < 2.5 ? '#ec1528' : v < 3.5 ? STAR : '#1fc47a')
 /** The average star rating over a set of days (Σsum ÷ Σn), null when none. */
 export function starsOver(ratingDaily: { date: string; sum: number; n: number }[] | undefined, fromMs: number, toMs: number): number | null {
   if (!ratingDaily?.length) return null
@@ -1036,9 +1052,11 @@ export function ActionsChart({
   showTotal?: boolean
   /* the bar colour — Insights paints each stage in its own hue */
   accent?: string
-  /** Reputation: the average star rating in each bar's span, drawn as a line over the bars on
-   *  its own 1–5 scale (owner 2026-09-15: the reviews graph shows the rating too) */
-  stars?: (number | null)[]
+  /** Reputation (owner 2026-09-15: "the rating is more important than the number"): the graph
+   *  LEADS with the stars. `each` is the average of the reviews in each bar's span, drawn as a
+   *  dot in its rating's colour; `run` is the average so far, drawn as the gold line. The review
+   *  count keeps its bars, small and faint along the bottom. The axis reads in stars. */
+  stars?: { each: (number | null)[]; run: (number | null)[] }
 }) {
   const { C } = useMvpTheme()
   const H = 124
@@ -1046,9 +1064,12 @@ export function ActionsChart({
   const { bars, total, max } = summary
   const dense = bars.length > 8
   const col = accent ?? C.green
-  const starPts = (stars ?? []).map((v, i) => (v == null ? null : { i, v })).filter((p): p is { i: number; v: number } => p != null)
-  const hasStars = starPts.length > 0
+  const eachPts = (stars?.each ?? []).map((v, i) => (v == null ? null : { i, v })).filter((p): p is { i: number; v: number } => p != null)
+  const runPts = (stars?.run ?? []).map((v, i) => (v == null ? null : { i, v })).filter((p): p is { i: number; v: number } => p != null)
+  const hasStars = !!stars && eachPts.length > 0
   const starY = (v: number) => 100 - ((Math.min(5, Math.max(1, v)) - 1) / 4) * 100
+  /* in star mode the count bars stay under the line: at most 38% of the height */
+  const barPct = (v: number) => (v / max) * (hasStars ? 38 : 100)
   const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.card }
   const pickedBar = picked != null ? bars[picked] : null
   return (
@@ -1062,7 +1083,7 @@ export function ActionsChart({
       <div style={{ position: 'relative', height: H, paddingLeft: 34 }}>
         {[1, 0.5, 0].map((f) => (
           <div key={f} style={{ position: 'absolute', left: 0, right: 0, bottom: `${f * 100}%`, display: 'flex', alignItems: 'flex-end', pointerEvents: 'none' }}>
-            <span style={{ width: 30, fontSize: 10, color: C.faint, textAlign: 'right', paddingRight: 4, transform: f === 0 ? 'translateY(0)' : f === 1 ? 'translateY(50%)' : 'translateY(50%)', lineHeight: 1 }}>{axisLabel(max * f)}</span>
+            <span style={{ width: 30, fontSize: 10, color: hasStars ? STAR : C.faint, fontWeight: hasStars ? 700 : 400, textAlign: 'right', paddingRight: 4, transform: f === 0 ? 'translateY(0)' : f === 1 ? 'translateY(50%)' : 'translateY(50%)', lineHeight: 1 }}>{hasStars ? `${1 + f * 4}★` : axisLabel(max * f)}</span>
             <span style={{ flex: 1, borderTop: `1px solid ${C.ghost}`, opacity: f === 0 ? 1 : 0.7 }} />
           </div>
         ))}
@@ -1083,7 +1104,7 @@ export function ActionsChart({
                   /* the holder centres; the bar inside animates (its grow keyframe owns `transform`,
                      so the centring cannot live on the same element) */
                   <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
-                    <div className="mvp-grow" style={{ width: '100%', height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', /* no glow on the bars (owner 2026-09-14); the picked one just reads at full colour */ transition: 'opacity .15s' }} />
+                    <div className="mvp-grow" style={{ width: '100%', height: `${barPct(b.value)}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.2 : hasStars ? 0.38 : 1, borderRadius: '4px 4px 0 0', /* no glow on the bars (owner 2026-09-14); the picked one just reads at full colour */ transition: 'opacity .15s' }} />
                   </div>
                 )}
               </div>
@@ -1095,14 +1116,14 @@ export function ActionsChart({
           {hasStars && (
             <>
               <svg viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-                {starPts.length > 1 && <polyline points={starPts.map((p) => `${p.i + 0.5},${starY(p.v)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={1.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
+                {/* the average so far: one continuous gold line that ends on the range's number */}
+                {runPts.length > 1 && <polyline points={runPts.map((p) => `${p.i + 0.5},${starY(p.v)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.4} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
               </svg>
-              {starPts.map((p) => (
-                <span key={p.i} aria-hidden style={{ position: 'absolute', left: `${((p.i + 0.5) / bars.length) * 100}%`, bottom: `${100 - starY(p.v)}%`, width: dense ? 6 : 8, height: dense ? 6 : 8, marginLeft: dense ? -3 : -4, marginBottom: dense ? -3 : -4, borderRadius: 99, background: STAR, boxShadow: '0 0 0 1.5px #fff', pointerEvents: 'none' }} />
-              ))}
-              {[5, 3, 1].map((s) => (
-                <span key={s} aria-hidden style={{ position: 'absolute', right: -2, bottom: `${100 - starY(s)}%`, transform: s === 1 ? 'translateY(0)' : s === 5 ? 'translateY(0)' : 'translateY(50%)', fontSize: 9.5, fontWeight: 700, color: STAR, lineHeight: 1, pointerEvents: 'none' }}>{s}★</span>
-              ))}
+              {/* each span that had a review: a dot at its own average, in its rating's colour */}
+              {eachPts.map((p) => {
+                const d = dense ? 7 : 10
+                return <span key={p.i} aria-hidden title={`${p.v.toFixed(1)}★`} style={{ position: 'absolute', left: `${((p.i + 0.5) / bars.length) * 100}%`, bottom: `${100 - starY(p.v)}%`, width: d, height: d, marginLeft: -d / 2, marginBottom: -d / 2, borderRadius: 99, background: starBand(p.v), boxShadow: '0 0 0 2px #fff', pointerEvents: 'none' }} />
+              })}
             </>
           )}
         </div>
@@ -1121,11 +1142,20 @@ export function ActionsChart({
           const b = pickedBar
           const delta = b.value - b.compare
           const dpct = b.compare ? Math.round((delta / b.compare) * 100) : null
+          if (hasStars) {
+            const each = stars!.each[picked!], run = stars!.run[picked!]
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                <b style={{ color: C.ink, fontWeight: 700 }}>{b.tip}</b>
+                {each != null ? <span><b style={{ color: starBand(each), fontWeight: 700 }}>{each.toFixed(1)}★</b> from {b.value.toLocaleString()} {b.value === 1 ? 'review' : 'reviews'}</span> : <span>no reviews</span>}
+                {run != null && <span style={{ color: C.faint, flexShrink: 0 }}>· <b style={{ color: STAR, fontWeight: 700 }}>{run.toFixed(1)}★</b> so far</span>}
+              </div>
+            )
+          }
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
               <b style={{ color: C.ink, fontWeight: 700 }}>{b.tip}</b>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><b style={{ color: C.ink, fontWeight: 700 }}>{b.value.toLocaleString()}</b> {noun}</span>
-              {hasStars && stars?.[picked!] != null && <span style={{ fontWeight: 700, color: STAR, flexShrink: 0 }}>{stars[picked!]!.toFixed(1)}★</span>}
               {dpct != null && <span style={{ fontWeight: 700, color: delta > 0 ? C.greenDk : delta < 0 ? '#c0564f' : C.mute, flexShrink: 0 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : ''}{Math.abs(dpct)}%</span>}
               {/* THE DAY IT IS MEASURED AGAINST, by name (owner 2026-09-11). "vs 1,204 earlier"
                   left the owner guessing which day; the bar has always known. */}
