@@ -92,6 +92,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
   const usualViews = usual((x) => x.reach)
   const ratio = usualViews && counted ? views / usualViews : null
   const ratioInk = ratio == null ? C.mute : ratio >= 1.2 ? C.greenDk : ratio <= 0.6 ? C.coral : C.mute
+  const isBest = counted && others.length >= 3 && others.every((o) => o.reach <= views)
 
   const stats: Array<{ Icon: typeof Heart; label: string; n: number; usual: number | null }> = [
     { Icon: Heart, label: 'Likes', n: sum((x) => x.likes), usual: usual((x) => x.likes) },
@@ -211,57 +212,49 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
         style={{ width: '100%', maxWidth: 480, maxHeight: '90dvh', overflowY: 'auto', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 0 calc(24px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.2)' }}>
         <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
 
-        {/* ── the post itself ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px' }}>
-          <span style={{ width: 64, height: 64, borderRadius: 16, flexShrink: 0, position: 'relative', overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4', display: 'grid', placeItems: 'center' }}>
-            {!best.thumbnailUrl && <><span style={{ position: 'absolute', inset: 0, background: hero, opacity: .18 }} /><ImageIcon size={20} color={C.faint} /></>}
+        {/* ── THE POSTER (owner 2026-09-15: "A, with more detail as you scroll"). The post itself,
+            big, with the networks and date on it. Then one number, one sentence on how it
+            compares, four small counts, the caption, two buttons. The detail sections follow
+            below, unchanged, for whoever keeps scrolling. ── */}
+        <div style={{ margin: '0 12px', position: 'relative', aspectRatio: '4 / 5', maxHeight: 440, borderRadius: 22, overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4' }}>
+          {!best.thumbnailUrl && <><span style={{ position: 'absolute', inset: 0, background: hero, opacity: .18 }} /><span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><ImageIcon size={28} color={C.faint} /></span></>}
+          <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 90, background: 'linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0))', pointerEvents: 'none' }} />
+          <button type="button" onClick={onClose} aria-label="Close" style={{ position: 'absolute', right: 10, top: 10, width: 32, height: 32, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.88)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
+          <span style={{ position: 'absolute', left: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 8, color: '#fff', fontSize: 12.5, fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,.5)' }}>
+            <span style={{ display: 'inline-flex' }}>{platforms.slice(0, 4).map((pl, i) => <span key={pl} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: 99, background: '#fff', boxShadow: '0 0 0 1.5px rgba(255,255,255,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={pl} size={12} /></span>)}</span>
+            <span>{kind}{date ? ` · ${date}` : ''}{multi ? ` · ${platforms.map(name).join(', ')}` : ''}</span>
           </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.ink, lineHeight: 1.15, letterSpacing: '-.01em' }}>{kind}{date ? ` · ${date}` : ''}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
-              <span style={{ display: 'inline-flex' }}>{platforms.slice(0, 4).map((pl, i) => <span key={pl} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={pl} size={12} /></span>)}</span>
-              <span style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{multi ? `${platforms.map(name).join(', ')}` : name(best.platform)}</span>
-            </span>
-          </span>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, borderRadius: 99, border: 'none', background: '#f2f2f5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={16} /></button>
-        </div>
-        {best.caption && <div style={{ padding: '10px 16px 0', fontSize: 13, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
-        {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
-            this post already picked, by the vendor's own post id; a post the ad platforms cannot
-            boost lands on the screen's normal list. */}
-        <div style={{ display: 'flex', gap: 8, padding: '12px 16px 0', flexWrap: 'wrap' }}>
-          <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px 0 12px', borderRadius: 99, textDecoration: 'none', fontSize: 12.5, fontWeight: 700, color: '#fff', background: `linear-gradient(135deg, ${C.green}, ${C.greenDk})`, boxShadow: '0 6px 14px rgba(46,154,120,.35)', whiteSpace: 'nowrap' }}>
-            <TrendingUp size={14} /> Boost post
-          </Link>
-          {!multi && best.permalink && openPill(best.permalink, best.platform)}
         </div>
 
-        {/* ── the headline, against your usual ── */}
-        <div style={{ margin: '16px 16px 0', borderRadius: 20, padding: '16px 16px 14px', color: '#fff', background: hero, position: 'relative', overflow: 'hidden' }}>
-          <span style={{ position: 'absolute', right: -40, top: -60, width: 180, height: 180, borderRadius: 99, background: 'rgba(255,255,255,.14)' }} />
-          <div style={{ position: 'relative' }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', opacity: .85 }}>Views{multi ? ' · everywhere' : ''}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 2 }}>
-              <span style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1 }}>{counted ? views.toLocaleString() : DASH}</span>
-              {ratio != null && <span style={{ fontSize: 13, fontWeight: 700, padding: '4px 9px', borderRadius: 99, background: 'rgba(255,255,255,.92)', color: ratioInk }}>{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}× your usual</span>}
-            </div>
-            <div style={{ fontSize: 12.5, opacity: .9, marginTop: 6 }}>
-              {!counted ? (rows.every((x) => x.unreported) ? 'This kind of post does not report views.' : 'Still counting. Numbers land within a day.')
-                : usualViews != null ? `Your usual post here does ${Math.round(usualViews).toLocaleString()}.` : 'A few more posts and this will say how it compares.'}
-            </div>
+        {/* ── one number, one sentence ── */}
+        <div style={{ padding: '16px 20px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: C.ink }}>{counted ? views.toLocaleString() : DASH}</span>
+            <span style={{ fontSize: 14, color: C.mute }}>{counted ? 'people saw it' : ''}</span>
           </div>
-        </div>
-
-        {/* ── the four, against usual ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, margin: '10px 16px 0' }}>
-          {stats.map((s) => { const up = s.usual != null && s.usual > 0 ? s.n / s.usual : null
-            return (
-              <div key={s.label} style={{ background: C.bg, borderRadius: 14, padding: '10px 8px 9px', textAlign: 'center' }}>
-                <s.Icon size={14} color={C.mute} />
-                <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.ink, marginTop: 3, letterSpacing: '-.01em' }}>{compact(s.n)}</div>
-                <div style={{ fontSize: 10.5, color: up == null ? C.faint : up >= 1.2 ? C.greenDk : up <= 0.6 ? C.coral : C.mute, marginTop: 1, whiteSpace: 'nowrap' }}>{up == null ? s.label : `${up >= 10 ? Math.round(up) : up.toFixed(1)}× usual`}</div>
+          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>
+            {!counted ? (rows.every((x) => x.unreported) ? 'This kind of post does not report views.' : 'Still counting. Numbers land within a day.')
+              : ratio != null ? <><span style={{ color: ratioInk, fontWeight: 700 }}>{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}×</span> what your posts usually do{isBest ? '. Your best on this screen.' : '.'}</>
+              : 'A few more posts and this will say how it compares.'}
+          </div>
+          {/* the four, small, one line */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+            {stats.map((s) => (
+              <div key={s.label}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</div>
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 1 }}>{s.label.toLowerCase()}</div>
               </div>
-            ) })}
+            ))}
+          </div>
+          {best.caption && <div style={{ marginTop: 14, fontSize: 13, color: C.mute, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
+          {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
+              this post already picked, by the vendor's own post id. */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: C.ink }}>
+              <TrendingUp size={15} /> Boost
+            </Link>
+            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: C.bg }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
+          </div>
         </div>
 
         {/* ── how they watched ── */}
