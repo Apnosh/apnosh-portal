@@ -312,7 +312,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
   return (
     <MvpShell active="home" back="/dashboard" backExact middle={<TopSegmented options={[['insights', 'Insights'], ['trends', 'Trends']]} value={tab} onChange={setTab} />}>
-      <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
+      <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}.mvp-swipe::-webkit-scrollbar{display:none;height:0}
 .mvp-swipe::-webkit-scrollbar{display:none}
 .mvp-spin{animation:mvpspin .8s linear infinite}
 @keyframes mvpspin{to{transform:rotate(360deg)}}`}</style>
@@ -2735,7 +2735,6 @@ function AllPostsTile({ total }: { total?: number }) {
         </span>
         <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>See all{typeof total === 'number' ? ` ${total}` : ''}</span>
       </div>
-      <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap' }}>Every post, sorted</div>
     </Link>
   )
 }
@@ -2784,7 +2783,7 @@ const QUICK: { label: string; short: string; href: string; hue: HueKey; Icon: ty
    which looked like more results to read rather than things to do. */
 function QuickActions() {
   return (
-    <div style={{ marginTop: 22, padding: '0 2px 4px' }}>
+    <div style={{ marginTop: 16, padding: '0 2px 4px' }}>
       <div style={{ ...H3, marginBottom: 10, padding: '0 2px' }}>Do something with this</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {QUICK.map((q) => (
