@@ -20,6 +20,24 @@ import MvpShell from '@/components/mvp/mvp-shell'
 import { BrandOrMark } from '@/components/mvp/mvp-insights'
 
 /* the logo a source wears on its row; the Google family shares the Google mark */
+/** The row already shows the source's logo, so the metric's name drops the app name
+ *  (owner 2026-09-14): "Google Maps views" → "Maps views", "Instagram reach" → "Reach". */
+const PLAIN: Record<string, string> = {
+  'Website in Google': 'Website in search',
+  'Menu opens on Google': 'Menu opens',
+  'Instagram visits': 'Profile visits',
+  'Facebook visits': 'Page visits',
+  'TikTok profile views': 'Profile views',
+  'Instagram taps': 'Profile taps',
+  'Facebook actions': 'Page actions',
+}
+function plainLabel(label: string): string {
+  const o = PLAIN[label]
+  if (o) return o
+  const s = label.replace(/\b(Google Search|Google Maps|Google|Instagram|TikTok|Facebook|LinkedIn|YouTube|Yelp)\s*/g, (m) => m.startsWith('Google Search') ? 'Search ' : m.startsWith('Google Maps') ? 'Maps ' : '').replace(/\s{2,}/g, ' ').trim()
+  return s ? s[0].toUpperCase() + s.slice(1) : label
+}
+
 const LOGO_OF: Record<string, string> = { google_business_profile: 'google', google_analytics: 'google', google_search_console: 'google', gbp: 'google' }
 
 const HREF = '/dashboard/insights/metrics'
@@ -115,11 +133,9 @@ export function MetricSettingsPage() {
                     <BrandOrMark provider={LOGO_OF[it.provider] ?? it.provider} size={16} />
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{it.label}</span>
-                    {(it.optional || !it.available) && (
-                      <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>
-                        {it.available ? 'Optional' : it.hint}
-                      </span>
+                    <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{plainLabel(it.label)}</span>
+                    {!it.available && (
+                      <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>{it.hint}</span>
                     )}
                   </span>
                   {it.available ? (
