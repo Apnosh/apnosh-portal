@@ -557,7 +557,11 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
     go()
     const raf = requestAnimationFrame(go)
     const t = setTimeout(() => { progRef.current = false }, 160)
-    return () => { cancelAnimationFrame(raf); clearTimeout(t) }
+    /* a viewport resize (rotation, the keyboard, a split view) re-snaps a scroll-snap row to
+       whatever slide is nearest; put it back on the picked stage */
+    const onResize = () => { progRef.current = true; go(); setTimeout(() => { progRef.current = false }, 160) }
+    window.addEventListener('resize', onResize)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); window.removeEventListener('resize', onResize) }
   }, [idx, tab])
   // a finished swipe picks the stage it landed on
   const onSwipe = () => {
