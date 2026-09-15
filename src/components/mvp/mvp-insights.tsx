@@ -538,16 +538,27 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
     try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
   }
   // keep the carousel on the selected stage (mount + deep-link arriving late)
+  /* ...AND after a trip to Trends and back (owner 2026-09-14): the carousel unmounts on Trends
+     and comes back scrolled to the first slide while the stage is still Reputation, so the page
+     showed Awareness at Reputation's height, cut off. The tab is a dependency now, and the
+     scroll is retried on the next frame in case the slides have no width yet. */
   useEffect(() => {
+    if (tab === 'trends') return
     const el = swipeRef.current
     if (!el) return
-    const want = idx * el.clientWidth
-    if (Math.abs(el.scrollLeft - want) < 2) return
-    progRef.current = true
-    el.scrollTo({ left: want, behavior: 'auto' })
-    const t = setTimeout(() => { progRef.current = false }, 120)
-    return () => clearTimeout(t)
-  }, [idx])
+    const go = () => {
+      const w = el.clientWidth
+      if (w <= 0) return
+      const want = idx * w
+      if (Math.abs(el.scrollLeft - want) < 2) return
+      progRef.current = true
+      el.scrollTo({ left: want, behavior: 'auto' })
+    }
+    go()
+    const raf = requestAnimationFrame(go)
+    const t = setTimeout(() => { progRef.current = false }, 160)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t) }
+  }, [idx, tab])
   // a finished swipe picks the stage it landed on
   const onSwipe = () => {
     const el = swipeRef.current
