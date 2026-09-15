@@ -68,12 +68,16 @@ export async function GET(req: NextRequest) {
     fetchAll(admin, 'local_reviews', 'rating, created_at_platform, reply_text, source', 'created_at_platform', clientId),
   ])
 
+  /* ?from=YYYY-MM-DD&to=YYYY-MM-DD scopes every count to the reviews posted in that span (the
+     Insights range, owner 2026-09-15); without them the numbers describe the whole listing */
+  const from = req.nextUrl.searchParams.get('from'), to = req.nextUrl.searchParams.get('to')
+  const inWindow = (at: string) => { const d = at.slice(0, 10); return (!from || d >= from) && (!to || d <= to) }
   const rows: RevRow[] = [
     ...g.map((r) => ({ rating: Number(r.rating ?? 0), at: String(r.posted_at ?? ''), replied: !!(r.response_text && String(r.response_text).trim()), repliedAt: String(r.responded_at ?? ''), source: String(r.source ?? '') })),
     /* local_reviews carries no reply timestamp, so those rows count toward the
        rate and simply cannot contribute to the speed. */
     ...l.map((r) => ({ rating: Number(r.rating ?? 0), at: String(r.created_at_platform ?? ''), replied: !!(r.reply_text && String(r.reply_text).trim()), repliedAt: '', source: String(r.source ?? '') })),
-  ].filter((r) => r.rating > 0)
+  ].filter((r) => r.rating > 0 && inWindow(r.at))
 
   // Ranges, not equality, so every rating in [1,5] lands in exactly one bucket.
   const split = {

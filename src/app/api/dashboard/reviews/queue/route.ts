@@ -40,5 +40,9 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: 'Could not read your reviews.' }, { status: 502 })
 
-  return NextResponse.json(buildQueue((data ?? []) as ReviewRow[], Date.now()))
+  /* ?from&to (YYYY-MM-DD): only the reviews posted in that span, so the Reputation read's
+     "needs a reply" matches the range picked on Insights (owner 2026-09-15) */
+  const from = req.nextUrl.searchParams.get('from'), to = req.nextUrl.searchParams.get('to')
+  const rows = ((data ?? []) as ReviewRow[]).filter((r) => { const d = String((r as { posted_at?: string | null }).posted_at ?? '').slice(0, 10); return (!from || d >= from) && (!to || d <= to) })
+  return NextResponse.json(buildQueue(rows, Date.now()))
 }

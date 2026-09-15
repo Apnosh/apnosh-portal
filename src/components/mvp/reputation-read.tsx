@@ -20,9 +20,10 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Check, ChevronRight, Loader2, MessageCircle, Send, Sparkles, Star } from 'lucide-react'
+import { Check, ChevronRight, Heart, Loader2, MessageCircle, Send, Sparkles, Star, ThumbsDown } from 'lucide-react'
 import { C, DISPLAY } from './tokens'
 import { loadComments, type CommentRow } from './mvp-inbox'
+import { useSharedRange } from './mvp-home'
 import type { CommentReadItem, CommentTone } from '@/app/api/dashboard/comment-read/route'
 
 export interface ReadReview { id: string; authorName: string; rating: number; text: string | null; source: string; postedAt: string; replied: boolean; needsReply: boolean }
@@ -43,6 +44,34 @@ interface Queue { queue: { id: string; rating: number | null; author: string; te
 
 const TEAL = '#14c3c3', TEAL_DK = '#0f9e9e', TEAL_SOFT = 'rgba(20,195,195,.12)'
 const GREEN = '#1fc47a', RED = '#ec1528', AMBER = '#f0a12b'
+
+/** Loved / Complaints (owner 2026-09-15: "more visually stunning"): a tinted card with a big
+ *  faint watermark of its icon, each topic a name with its count in the display face and a bar
+ *  under it sized against the card's biggest topic, the guest's own words in small italics. */
+function TopicCard({ tone, title, empty, items }: { tone: 'love' | 'complaint'; title: string; empty: string; items: { name: string; count: number; quote: string | null }[] }) {
+  const col = tone === 'love' ? GREEN : RED
+  const dk = tone === 'love' ? '#178f5a' : '#c4121f'
+  const wash = tone === 'love' ? 'linear-gradient(165deg, #e6f9ef 0%, #f6fdf9 55%, #ffffff 100%)' : 'linear-gradient(165deg, #ffe9eb 0%, #fff5f6 55%, #ffffff 100%)'
+  const Icon = tone === 'love' ? Heart : ThumbsDown
+  const max = Math.max(1, ...items.map((t) => t.count))
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 18, padding: '14px 12px 12px', background: wash, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
+      <Icon aria-hidden size={92} strokeWidth={1.4} color={col} style={{ position: 'absolute', right: -22, top: -18, opacity: 0.10, transform: 'rotate(-12deg)', pointerEvents: 'none' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: dk, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}><Icon size={13} strokeWidth={2.6} fill={col} color={col} /> {title}</div>
+      {items.length === 0 && <div style={{ fontSize: 12.5, color: C.faint }}>{empty}</div>}
+      {items.map((t, i) => (
+        <div key={t.name} style={{ marginBottom: i === items.length - 1 ? 0 : 11 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: dk, lineHeight: 1, flexShrink: 0 }}>{t.count}</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 99, background: 'rgba(0,0,0,.06)', marginTop: 5, overflow: 'hidden' }}><div style={{ width: `${Math.max(8, Math.round((t.count / max) * 100))}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${col}, ${dk})` }} /></div>
+          {t.quote && <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.35, marginTop: 4, fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{t.quote}”</div>}
+        </div>
+      ))}
+    </div>
+  )
+}
 const LIST: React.CSSProperties = { marginTop: 18, padding: '0 2px' }
 const H3: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }
 const CARD: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14 }
@@ -141,15 +170,21 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
     setRBusy(null)
   }
 
+  /* THE SAME DAYS AS THE GRAPH (owner 2026-09-15): every section reads the range picked on
+     Insights (7d, 30d, 90d, 1y or custom), so "what people say" is what they said THIS month and
+     "needs a reply" is what came in this month, not the whole history. */
+  const win = useSharedRange()
+  const q = `clientId=${clientId}&from=${win.from}&to=${win.to}`
   useEffect(() => {
     if (!clientId || demo) return
     let live = true
-    fetch(`/api/dashboard/review-summary?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSummary(j as Summary) }).catch(() => {})
-    fetch(`/api/dashboard/review-topics?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) { setTopics(j as Topics | null); setTopicsLoading(false) } }).catch(() => { if (live) setTopicsLoading(false) })
-    fetch(`/api/dashboard/reviews/queue?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j?.queue) setQueue(j as Queue) }).catch(() => {})
-    loadComments(clientId).then((rows) => { if (live) setComments(rows) }).catch(() => { if (live) { setComments([]); setCommentsErr(true) } })
+    setTopicsLoading(true)
+    fetch(`/api/dashboard/review-summary?${q}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSummary(j as Summary) }).catch(() => {})
+    fetch(`/api/dashboard/review-topics?${q}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) { setTopics(j as Topics | null); setTopicsLoading(false) } }).catch(() => { if (live) setTopicsLoading(false) })
+    fetch(`/api/dashboard/reviews/queue?${q}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j?.queue) setQueue(j as Queue) }).catch(() => {})
+    loadComments(clientId).then((rows) => { if (live) setComments(rows.filter((c) => { const d = String(c.createdAt ?? '').slice(0, 10); return d >= win.from && d <= win.to })) }).catch(() => { if (live) { setComments([]); setCommentsErr(true) } })
     return () => { live = false }
-  }, [clientId, demo])
+  }, [clientId, demo, q, win.from, win.to])
 
   /* the comments, read once they are here: tone and a suggested reply for the ones that want one */
   useEffect(() => {
@@ -170,8 +205,9 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   const stars = summary?.stars ?? {}
   let sampleN = 0, sampleSum = 0
   for (const k of [1, 2, 3, 4, 5]) { const n = stars[String(k)] ?? 0; sampleN += n; sampleSum += k * n }
-  const rating = summary?.placeRating ?? (sampleN ? Math.round((sampleSum / sampleN) * 10) / 10 : null)
-  const count = summary?.placeRatingCount ?? sampleN
+  /* the window's own average and count; Google's overall listing rating is the small line under */
+  const rating = sampleN ? Math.round((sampleSum / sampleN) * 10) / 10 : null
+  const count = sampleN
   const split = summary?.split ?? { positive: 0, neutral: 0, negative: 0, total: 0 }
   const sources = Object.entries(summary?.sources ?? {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])
   /* the comments, summed up (owner 2026-09-14): what was praised and what was knocked, in the
@@ -197,15 +233,21 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
     <>
       {/* 1 · your rating */}
       <div style={LIST}>
-        <div style={{ ...H3, marginBottom: 8 }}>Your rating</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={H3}>Your rating</span>
+          <span style={{ fontSize: 11.5, color: C.faint }}>{win.label}</span>
+        </div>
         <div style={CARD}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
             <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{rating != null ? rating.toFixed(1) : '–'}</span>
             <span style={{ paddingBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
               <StarsRow n={rating ?? 0} size={15} />
-              <span style={{ fontSize: 12.5, color: C.mute }}>{count ? `${count.toLocaleString()} reviews` : 'No reviews yet'}{sources.length ? ` · ${sources.map(([s, n]) => `${SOURCE_WORD[s] ?? s} ${n}`).join(' · ')}` : ''}</span>
+              <span style={{ fontSize: 12.5, color: C.mute }}>{count ? `${count.toLocaleString()} ${count === 1 ? 'review' : 'reviews'} ${win.range === '1y' ? 'this year' : win.range === 'custom' ? 'in this span' : `in ${win.days === 91 ? 90 : win.days} days`}` : `No reviews ${win.range === 'custom' ? 'in this span' : win.label.replace('last', 'in the last')}`}{sources.length ? ` · ${sources.map(([s, n]) => `${SOURCE_WORD[s] ?? s} ${n}`).join(' · ')}` : ''}</span>
             </span>
           </div>
+          {summary?.placeRating != null && (
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>Google shows <b style={{ color: C.mute, fontWeight: 600 }}>{summary.placeRating.toFixed(1)}</b> overall from {Number(summary.placeRatingCount ?? 0).toLocaleString()} reviews</div>
+          )}
           {split.total > 0 && (
             <>
               <div style={{ display: 'flex', height: 8, borderRadius: 99, overflow: 'hidden', marginTop: 14, gap: 2 }}>
@@ -228,23 +270,16 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
 
       {/* 2 · what people say */}
       <div style={LIST}>
-        <div style={{ ...H3, marginBottom: 8 }}>What people say</div>
-        {(topics?.summary || read?.summary) && (
-          <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.5, marginBottom: 10 }}>{topics?.summary}{topics?.summary && read?.summary ? ' ' : ''}{read?.summary}</div>
-        )}
-        {(topicsLoading && !topics) && <div style={{ fontSize: 13, color: C.faint, marginBottom: 8 }}>Reading your reviews…</div>}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={H3}>What people say</span>
+          <span style={{ fontSize: 11.5, color: C.faint }}>{win.label}</span>
+        </div>
+        {/* the summary sentence is gone (owner 2026-09-15): the two cards say it */}
+        {topicsLoading && <div style={{ fontSize: 13, color: C.faint, marginBottom: 8 }}>Reading your reviews…</div>}
         {(loved.length > 0 || knocked.length > 0) && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div style={CARD}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: GREEN, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}>Loved</div>
-              {loved.length === 0 && <div style={{ fontSize: 12.5, color: C.faint }}>Nothing singled out yet.</div>}
-              {loved.map((t) => <div key={t.name} style={{ marginBottom: 8 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 600, color: C.ink }}><span>{t.name}</span><span style={{ color: GREEN }}>{t.positive}</span></div>{t.quote && <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{t.quote}”</div>}</div>)}
-            </div>
-            <div style={CARD}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: RED, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}>Knocked</div>
-              {knocked.length === 0 && <div style={{ fontSize: 12.5, color: C.faint }}>No complaints that repeat.</div>}
-              {knocked.map((t) => <div key={t.name} style={{ marginBottom: 8 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 600, color: C.ink }}><span>{t.name}</span><span style={{ color: RED }}>{t.negative}</span></div>{t.negQuote && <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{t.negQuote}”</div>}</div>)}
-            </div>
+            <TopicCard tone="love" title="Loved" empty="Nothing singled out yet." items={loved.map((t) => ({ name: t.name, count: t.positive, quote: t.quote ?? null }))} />
+            <TopicCard tone="complaint" title="Complaints" empty="No complaints that repeat." items={knocked.map((t) => ({ name: t.name, count: t.negative, quote: t.negQuote ?? null }))} />
           </div>
         )}
         {!topicsLoading && topics && topics.topics.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{topics.source === 'none' && split.total >= 3 ? 'We could not read your reviews right now. Try again a little later.' : 'A few more written reviews and the topics guests mention show here.'}</div>}

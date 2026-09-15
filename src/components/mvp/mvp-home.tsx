@@ -977,6 +977,26 @@ export function useChartRange(src: ChartSrc): {
   return { range, setRange, cStart, setCStart, cEnd, setCEnd, summary }
 }
 
+/** The one shared range, for sections that draw no chart of their own (the Reputation read):
+ *  the picked span as dates, days and a label, so "Your rating" and "What people say" describe the
+ *  same days the graph above them does (owner 2026-09-15: "all the sections should be for the
+ *  last 30 or whichever timeframe is selected, not everything always"). */
+export function useSharedRange(): { range: ChartRange; from: string; to: string; days: number; label: string } {
+  const { range, cStart, cEnd } = useSyncExternalStore(subscribe, readShared, () => SERVER_STATE)
+  return useMemo(() => {
+    const t = new Date(); const today = new Date(t.getFullYear(), t.getMonth(), t.getDate())
+    const back = (n: number) => isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - n))
+    if (range === 'custom' && cStart && cEnd) {
+      const lo = cStart <= cEnd ? cStart : cEnd, hi = cStart <= cEnd ? cEnd : cStart
+      const days = Math.max(1, Math.round((Date.parse(hi) - Date.parse(lo)) / 86_400_000) + 1)
+      const f = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return { range, from: lo, to: hi, days, label: `${f(lo)} – ${f(hi)}` }
+    }
+    const days = range === '7d' ? 7 : range === '90d' ? 91 : range === '1y' ? 365 : 30
+    return { range, from: back(days - 1), to: isoDate(today), days, label: range === '1y' ? 'last 12 months' : `last ${days === 91 ? 90 : days} days` }
+  }, [range, cStart, cEnd])
+}
+
 /* Freshness gate for the hero delta. Beyond ~a period + grace with no new data,
    a "this period vs last" arrow compares two OLD windows and calls the older one
    "now" — that is the "stuck down" bug. When stale, the hero shows an honest
@@ -1056,7 +1076,7 @@ export function ActionsChart({
    *  LEADS with the stars. `each` is the average of the reviews in each bar's span, drawn as a
    *  dot in its rating's colour; `run` is the average so far, drawn as the gold line. The review
    *  count keeps its bars, small and faint along the bottom. The axis reads in stars. */
-  stars?: { each: (number | null)[]; run: (number | null)[] }
+  stars?: { each: (number | null)[] }
 }) {
   const { C } = useMvpTheme()
   const H = 124
@@ -1064,12 +1084,11 @@ export function ActionsChart({
   const { bars, total, max } = summary
   const dense = bars.length > 8
   const col = accent ?? C.green
-  const eachPts = (stars?.each ?? []).map((v, i) => (v == null ? null : { i, v })).filter((p): p is { i: number; v: number } => p != null)
-  const runPts = (stars?.run ?? []).map((v, i) => (v == null ? null : { i, v })).filter((p): p is { i: number; v: number } => p != null)
-  const hasStars = !!stars && eachPts.length > 0
-  const starY = (v: number) => 100 - ((Math.min(5, Math.max(1, v)) - 1) / 4) * 100
-  /* in star mode the count bars stay under the line: at most 38% of the height */
-  const barPct = (v: number) => (v / max) * (hasStars ? 38 : 100)
+  /* STAR MODE (owner 2026-09-15): a plain bar chart where each bar's HEIGHT is that span's average
+     rating on a 1–5 scale; a span with no review has no bar. Tap a bar for the stars and the count. */
+  const hasStars = !!stars && stars.each.some((v) => v != null)
+  const starPct = (v: number) => ((Math.min(5, Math.max(1, v)) - 1) / 4) * 100
+  const barPct = (v: number) => (v / max) * 100
   const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.card }
   const pickedBar = picked != null ? bars[picked] : null
   return (
@@ -1083,7 +1102,7 @@ export function ActionsChart({
       <div style={{ position: 'relative', height: H, paddingLeft: 34 }}>
         {[1, 0.5, 0].map((f) => (
           <div key={f} style={{ position: 'absolute', left: 0, right: 0, bottom: `${f * 100}%`, display: 'flex', alignItems: 'flex-end', pointerEvents: 'none' }}>
-            <span style={{ width: 30, fontSize: 10, color: hasStars ? STAR : C.faint, fontWeight: hasStars ? 700 : 400, textAlign: 'right', paddingRight: 4, transform: f === 0 ? 'translateY(0)' : f === 1 ? 'translateY(50%)' : 'translateY(50%)', lineHeight: 1 }}>{hasStars ? `${1 + f * 4}★` : axisLabel(max * f)}</span>
+            <span style={{ width: 30, fontSize: 10, color: C.faint, textAlign: 'right', paddingRight: 4, transform: f === 0 ? 'translateY(0)' : f === 1 ? 'translateY(50%)' : 'translateY(50%)', lineHeight: 1 }}>{hasStars ? <>{1 + f * 4}<span style={{ color: STAR }}>★</span></> : axisLabel(max * f)}</span>
             <span style={{ flex: 1, borderTop: `1px solid ${C.ghost}`, opacity: f === 0 ? 1 : 0.7 }} />
           </div>
         ))}
@@ -1099,30 +1118,23 @@ export function ActionsChart({
                 {/* a day no source has reported yet: a faint dashed stub, not an
                     empty slot — the window is current, the numbers are en route */}
                 {hasStars ? (
-                  /* ONE LINE ONLY (owner 2026-09-15: "too much going on"): in star mode the bars are
-                     gone; a span that got a review shows a short tick under the line in its rating's
-                     colour, and that is all */
-                  stars!.each[i] != null && <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: dense ? 3 : 4, height: 9, borderRadius: 2, background: starBand(stars!.each[i]!) }} />
+                  stars!.each[i] != null && (
+                    <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
+                      <div className="mvp-grow" style={{ width: '100%', height: `${starPct(stars!.each[i]!)}%`, minHeight: 6, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', transition: 'opacity .15s' }} />
+                    </div>
+                  )
                 ) : pending ? (
                   <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55, boxSizing: 'border-box' }} />
                 ) : (
                   /* the holder centres; the bar inside animates (its grow keyframe owns `transform`,
                      so the centring cannot live on the same element) */
                   <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: '100%', display: 'flex', alignItems: 'flex-end' }}>
-                    <div className="mvp-grow" style={{ width: '100%', height: `${barPct(b.value)}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.2 : hasStars ? 0.38 : 1, borderRadius: '4px 4px 0 0', /* no glow on the bars (owner 2026-09-14); the picked one just reads at full colour */ transition: 'opacity .15s' }} />
+                    <div className="mvp-grow" style={{ width: '100%', height: `${barPct(b.value)}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', /* no glow on the bars (owner 2026-09-14); the picked one just reads at full colour */ transition: 'opacity .15s' }} />
                   </div>
                 )}
               </div>
             )
           })}
-          {/* THE RATING LINE (reputation): your average rating so far, one gold line on a 1–5 scale,
-              ending on the range's number. Nothing else on the plot. */}
-          {hasStars && (
-            <svg viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-              {runPts.length > 1 && <polyline points={runPts.map((p) => `${p.i + 0.5},${starY(p.v)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
-              {runPts.length === 1 && <circle cx={runPts[0].i + 0.5} cy={starY(runPts[0].v)} r={0.12} fill={STAR} />}
-            </svg>
-          )}
         </div>
       </div>
       <div style={{ display: 'flex', gap: dense ? 3 : 10, marginTop: 5, paddingLeft: 34 }}>
@@ -1140,12 +1152,11 @@ export function ActionsChart({
           const delta = b.value - b.compare
           const dpct = b.compare ? Math.round((delta / b.compare) * 100) : null
           if (hasStars) {
-            const each = stars!.each[picked!], run = stars!.run[picked!]
+            const each = stars!.each[picked!]
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                 <b style={{ color: C.ink, fontWeight: 700 }}>{b.tip}</b>
-                {each != null ? <span><b style={{ color: starBand(each), fontWeight: 700 }}>{each.toFixed(1)}★</b> from {b.value.toLocaleString()} {b.value === 1 ? 'review' : 'reviews'}</span> : <span>no reviews</span>}
-                {run != null && <span style={{ color: C.faint, flexShrink: 0 }}>· <b style={{ color: STAR, fontWeight: 700 }}>{run.toFixed(1)}★</b> so far</span>}
+                {each != null ? <span><b style={{ color: C.ink, fontWeight: 700 }}>{each.toFixed(1)}<span style={{ color: STAR }}>★</span></b> · <b style={{ color: C.ink, fontWeight: 700 }}>{b.value.toLocaleString()}</b> {b.value === 1 ? 'review' : 'reviews'}</span> : <span>no reviews</span>}
               </div>
             )
           }

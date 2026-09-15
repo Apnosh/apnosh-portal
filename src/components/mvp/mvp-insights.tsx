@@ -42,7 +42,12 @@ import { useClient } from '@/lib/client-context'
 import { isShelfShape, type ShelfShape } from '@/lib/clients/shape'
 import { stageLabelFor, stageExplainFor } from '@/lib/clients/shape-words'
 import { isProTier } from '@/lib/entitlements'
-import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, bucketsFor, starsForBars, starsRunForBars, starsOver, starBand, STAR, type MetricView, type ChartRange } from './mvp-home'
+import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, bucketsFor, starsForBars, starsOver, STAR, type MetricView, type ChartRange } from './mvp-home'
+
+/** "4.2★" the way the page writes a rating: the number in ink, only the star in gold (owner 2026-09-15). */
+function StarNum({ v, size, weight = 600 }: { v: number; size: number; weight?: number }) {
+  return <span style={{ fontFamily: DISPLAY, fontSize: size, fontWeight: weight, color: C.ink, letterSpacing: '-.02em', lineHeight: 1 }}>{v.toFixed(1)}<span style={{ color: STAR }}>★</span></span>
+}
 
 /** The rating's change against the window just before it, as the pill reads it: "▲ 0.3★",
  *  "▼ 1.0★", "steady", or "(new)" when the earlier window had no reviews. */
@@ -1335,7 +1340,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
   const shown = useCountUp(total)
   /* REPUTATION (owner 2026-09-15): the bars count the reviews, the line over them is the stars.
      Beside the number, the average rating over the whole picked range (Σstars ÷ reviews). */
-  const stars = mv.ratingDaily ? { each: starsForBars(summary.bars, mv.ratingDaily), run: starsRunForBars(summary.bars, mv.ratingDaily) } : undefined
+  const stars = mv.ratingDaily ? { each: starsForBars(summary.bars, mv.ratingDaily) } : undefined
   const b0 = summary.bars[0], bN = summary.bars[summary.bars.length - 1]
   const winFrom = b0?.sMs ?? null, winTo = bN ? (bN.eMs ?? bN.sMs ?? null) : null
   const avgStars = mv.ratingDaily && winFrom != null && winTo != null ? starsOver(mv.ratingDaily, winFrom, winTo) : null
@@ -1355,7 +1360,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
               beside it, and the pill is the rating against the window before. */}
           {starMode ? (
             <>
-              <span aria-label="Average rating in this range" style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: avgStars != null ? starBand(avgStars) : C.faint }}>{avgStars != null ? `${avgStars.toFixed(1)}★` : '–'}</span>
+              <span aria-label="Average rating in this range">{avgStars != null ? <StarNum v={avgStars} size={40} weight={500} /> : <span style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, color: C.faint }}>–</span>}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 4, minWidth: 0 }}>
                 <span style={{ fontSize: 13, color: C.mute }}>{total.toLocaleString()} {total === 1 ? 'review' : 'reviews'}</span>
                 {sd && (
@@ -1511,13 +1516,13 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
   const rowPrev = mv?.ratingDaily ? starsOver(mv.ratingDaily, winStart - days * DAY_MS, winStart - DAY_MS) : null
   const rowSd = starDelta(rowStars, rowPrev)
   const starMode = !!mv?.ratingDaily
-  const starRun: number[] = []
+  /* the sparkline in star mode: a small bar per day that got a review, its height the day's rating */
+  const starBars: { i: number; v: number }[] = []
   if (starMode) {
     const byDay = new Map(mv!.ratingDaily!.map((d) => [trendDayMs(d.date), d]))
-    let s = 0, k = 0
-    for (const d of winDays) { const r = byDay.get(d.t); if (r) { s += r.sum; k += r.n } if (k > 0) starRun.push(s / k) }
+    winDays.forEach((d, i) => { const r = byDay.get(d.t); if (r && r.n > 0) starBars.push({ i, v: r.sum / r.n }) })
   }
-  const starPts = starRun.map((v, i) => `${(i / Math.max(1, starRun.length - 1)) * W},${H - 3 - ((Math.min(5, Math.max(1, v)) - 1) / 4) * (H - 6)}`)
+  const starSlot = W / Math.max(1, winDays.length)
   /* the sparkline wears the stage's own colour (owner 2026-09-12); the % keeps the up/down colour */
   const rowCol = accent.main
   return (
@@ -1528,9 +1533,10 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
         {locked && <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>not connected</span>}
       </span>
       <span style={{ flex: 1, minWidth: 0, height: H }}>
-        {starMode ? (starRun.length > 1 && (
+        {starMode ? (starBars.length > 0 && (
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }} aria-hidden>
-            <polyline points={starPts.join(' ')} fill="none" stroke={STAR} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+            <line x1={0} y1={H - 1} x2={W} y2={H - 1} stroke={C.line} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+            {starBars.map((b) => { const h = ((Math.min(5, Math.max(1, b.v)) - 1) / 4) * (H - 4) + 1; return <rect key={b.i} x={b.i * starSlot + starSlot * 0.2} y={H - 1 - h} width={Math.max(1.2, starSlot * 0.6)} height={h} fill={rowCol} rx={0.6} /> })}
           </svg>
         )) : roll.length > 1 && (
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }} aria-hidden>
@@ -1542,7 +1548,7 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
         {starMode ? (
           <>
-            <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: rowStars != null ? starBand(rowStars) : C.faint, letterSpacing: '-.01em' }}>{rowStars != null ? `${rowStars.toFixed(1)}★` : DASH}</span>
+            <span style={{ display: 'block' }}>{rowStars != null ? <StarNum v={rowStars} size={16} /> : <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.faint }}>{DASH}</span>}</span>
             <span style={{ display: 'block', fontSize: 11, color: C.mute, marginTop: 1 }}>{total != null ? `${total.toLocaleString()} ${total === 1 ? 'review' : 'reviews'}` : ''}{rowSd && rowSd.up != null && <span style={{ marginLeft: 5, fontWeight: 700, color: rowSd.up ? TREND_GREEN : TREND_RED }}>{rowSd.up ? '▲' : '▼'}{rowSd.text}</span>}</span>
           </>
         ) : (
@@ -1699,10 +1705,8 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const yStar = (v: number) => yBot - ((Math.min(5, Math.max(1, v)) - 1) / 4) * (yBot - yTop)
   /* the gold line is the average SO FAR in the window (continuous once a review lands, ending on
      the number in the words above); each day that had a review is a dot in its rating's colour */
-  let sSum = 0, sN = 0
-  const starRun: (number | null)[] = starByDay ? days.map((d) => { const r = starByDay.get(d.t); if (r) { sSum += r.sum; sN += r.n } return sN > 0 ? sSum / sN : null }) : []
   const starEach: (number | null)[] = starByDay ? days.map((d) => { const r = starByDay.get(d.t); return r && r.n > 0 ? r.sum / r.n : null }) : []
-  const starPts = starRun.map((v, i) => (v == null ? null : { x: xOf(i), y: yStar(v), v })).filter((p): p is { x: number; y: number; v: number } => p != null)
+  const starN: number[] = starByDay ? days.map((d) => starByDay.get(d.t)?.n ?? 0) : []
   const avgStars = starByDay ? starsOver(mv?.ratingDaily, startMs, endMs) : null
   const prevStars = starByDay ? starsOver(mv?.ratingDaily, startMs - (endMs - startMs + DAY_MS), startMs - DAY_MS) : null
   const starSd = starDelta(avgStars, prevStars)
@@ -1793,8 +1797,8 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {starByDay ? (
           /* reputation reads in stars: the window's average, and how it moved against the window before */
           avgStars == null ? <span style={{ fontSize: 13.5, color: C.mute }}>No reviews in this range yet.</span> : (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: starBand(avgStars) }}>
-              {avgStars.toFixed(1)}★ <span style={{ color: C.mute, fontWeight: 500 }}>average</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: C.ink }}>
+              <StarNum v={avgStars} size={15} weight={700} /> <span style={{ color: C.mute, fontWeight: 500 }}>average</span>
               {starSd && starSd.up != null && <span style={{ color: starSd.up ? TREND_GREEN : TREND_RED }}>{starSd.up ? '▲' : '▼'}{starSd.text} <span style={{ color: C.mute, fontWeight: 500 }}>vs the period before</span></span>}
               {starSd && starSd.up == null && starSd.text === 'steady' && <span style={{ color: C.mute, fontWeight: 500 }}>· same as the period before</span>}
             </span>
@@ -1874,9 +1878,11 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         ))}
         {/* the latest average, at the line's end */}
         {!starByDay && <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={trendCol} stroke="#fff" strokeWidth={1.5} />}
-        {/* the stars: one gold line, the average so far, ending on the number in the words above */}
-        {starPts.length > 1 && <polyline points={starPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.6} strokeLinejoin="round" strokeLinecap="round" />}
-        {starPts.length > 0 && <circle cx={starPts[starPts.length - 1].x} cy={starPts[starPts.length - 1].y} r={3.5} fill={STAR} stroke="#fff" strokeWidth={1.5} />}
+        {/* THE STARS AS BARS (owner 2026-09-15): one bar per day that got a review, its height the
+            day's average rating on the 1–5 axis, in the stage's colour; a day with none stays empty */}
+        {starByDay && starEach.map((v, i) => v == null ? null : (
+          <rect key={`sb${i}`} x={xOf(i) - Math.max(1.5, slot * 0.3)} y={Math.min(yStar(v), yBot - 6)} width={Math.max(3, slot * 0.6)} height={Math.max(6, yBot - yStar(v))} rx={1.5} fill={trendCol} opacity={pick != null && pick !== i ? 0.35 : 1} />
+        ))}
         {clusters.map((c) => {
           const multi = c.last !== c.first
           const tag = multi ? `${c.first}–${c.last}` : String(c.first)
@@ -1894,7 +1900,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {pick != null && (
           <g>
             <line x1={xOf(pick)} y1={yTop} x2={xOf(pick)} y2={yBot} stroke={C.ink} strokeOpacity={0.35} strokeWidth={1} />
-            {starByDay ? (starRun[pick] != null && <circle cx={xOf(pick)} cy={yStar(starRun[pick]!)} r={4} fill="#fff" stroke={STAR} strokeWidth={2} />) : <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={trendCol} strokeWidth={2} />}
+            {!starByDay && <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={trendCol} strokeWidth={2} />}
           </g>
         )}
       </svg>
@@ -1908,9 +1914,8 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {pick != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
             <b style={{ color: C.ink }}>{fmtDay(days[pick].t)}</b>
-            <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun}{smooth > 1 ? ' a day, on average' : ''}</span>
-            {starEach[pick] != null && <b style={{ color: starBand(starEach[pick]!) }}>{starEach[pick]!.toFixed(1)}★ that day</b>}
-            {starRun[pick] != null && <span style={{ color: C.faint }}>· <b style={{ color: STAR }}>{starRun[pick]!.toFixed(1)}★</b> so far</span>}
+            {!starByDay && <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun}{smooth > 1 ? ' a day, on average' : ''}</span>}
+            {starByDay && (starEach[pick] != null ? <span>· <b style={{ color: C.ink }}>{starEach[pick]!.toFixed(1)}<span style={{ color: STAR }}>★</span></b> · <b style={{ color: C.ink }}>{starN[pick]}</b> {starN[pick] === 1 ? 'review' : 'reviews'}</span> : <span>· no reviews</span>)}
           </div>
         ) : null}
       </div>

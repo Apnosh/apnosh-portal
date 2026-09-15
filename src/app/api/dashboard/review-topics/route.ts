@@ -191,10 +191,14 @@ export async function GET(req: NextRequest) {
     fetchAll(admin, 'local_reviews', 'rating, text, created_at_platform', 'created_at_platform', clientId),
   ])
 
+  /* ?from&to (YYYY-MM-DD): read only the reviews posted in that span, the same days the Insights
+     graph shows (owner 2026-09-15); the window is part of the cache signature below */
+  const from = req.nextUrl.searchParams.get('from') ?? '', to = req.nextUrl.searchParams.get('to') ?? ''
+  const inWindow = (at: string) => { const d = at.slice(0, 10); return (!from || d >= from) && (!to || d <= to) }
   const rows = [
     ...g.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.review_text as string) ?? null, at: String(r.posted_at ?? '') })),
     ...l.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.text as string) ?? null, at: String(r.created_at_platform ?? '') })),
-  ].filter((r) => r.rating > 0)
+  ].filter((r) => r.rating > 0 && inWindow(r.at))
 
   // Signature of the review set — changes only when a new review arrives (count
   // grows) or the newest date moves. Lets us skip the model call when nothing
@@ -212,7 +216,8 @@ export async function GET(req: NextRequest) {
   // must not be served to an owner who reads Spanish. Switching the language
   // recomputes once and then caches per language.
   // v3: the payload now carries the reviews behind each count.
-  const sig = `v3:${lang}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
+  // v4: the window is part of the signature, so a 7-day read never serves as a 30-day one.
+  const sig = `v4:${lang}:${from}:${to}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
 
   // Cache hit → return the stored breakdown instantly, no model call. Wrapped so
   // a missing cache table (migration not applied) just falls through to live.
