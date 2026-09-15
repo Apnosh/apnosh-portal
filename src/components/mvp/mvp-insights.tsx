@@ -1703,7 +1703,6 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const starRun: (number | null)[] = starByDay ? days.map((d) => { const r = starByDay.get(d.t); if (r) { sSum += r.sum; sN += r.n } return sN > 0 ? sSum / sN : null }) : []
   const starEach: (number | null)[] = starByDay ? days.map((d) => { const r = starByDay.get(d.t); return r && r.n > 0 ? r.sum / r.n : null }) : []
   const starPts = starRun.map((v, i) => (v == null ? null : { x: xOf(i), y: yStar(v), v })).filter((p): p is { x: number; y: number; v: number } => p != null)
-  const starDots = starEach.map((v, i) => (v == null ? null : { x: xOf(i), y: yStar(v), v })).filter((p): p is { x: number; y: number; v: number } => p != null)
   const avgStars = starByDay ? starsOver(mv?.ratingDaily, startMs, endMs) : null
   const prevStars = starByDay ? starsOver(mv?.ratingDaily, startMs - (endMs - startMs + DAY_MS), startMs - DAY_MS) : null
   const starSd = starDelta(avgStars, prevStars)
@@ -1838,7 +1837,15 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           </linearGradient>
         </defs>
         {/* axis: three numbers, hairlines */}
-        {yTicks.map((v, i) => (
+        {/* REPUTATION IS ONE LINE (owner 2026-09-15: "too much going on"): the star axis, the gold
+            line of your average so far, and a tick per review under it. No count line, no fill,
+            no fitted line. */}
+        {starByDay ? [5, 3, 1].map((s) => (
+          <g key={`sa${s}`}>
+            <line x1={padL} y1={yStar(s)} x2={W - padR} y2={yStar(s)} stroke={C.line} strokeWidth={0.6} opacity={s === 1 ? 1 : 0.6} />
+            <text x={padL - 6} y={yStar(s)} textAnchor="end" dominantBaseline="central" fontSize={9} fontWeight={700} fill={STAR}>{s}★</text>
+          </g>
+        )) : yTicks.map((v, i) => (
           <g key={i}>
             <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke={C.line} strokeWidth={0.6} opacity={v === 0 ? 1 : 0.6} />
             {(!flatZero || v === 0) && <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>}
@@ -1846,10 +1853,10 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         ))}
         {/* the same window one period earlier */}
         {/* the trend: a 7-day rolling average */}
-        <path d={area} fill={`url(#${gid})`} />
-        <path d={line} fill="none" stroke={trendCol} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+        {!starByDay && <path d={area} fill={`url(#${gid})`} />}
+        {!starByDay && <path d={line} fill="none" stroke={trendCol} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />}
         {/* the period's trend: the fitted straight line the verdict above is read from */}
-        {fit && fitIdx && (
+        {!starByDay && fit && fitIdx && (
           <line x1={xOf(fitIdx.a)} y1={Math.min(yBot, yAt(Math.max(0, fit.start)))} x2={xOf(fitIdx.b)} y2={Math.min(yBot, yAt(Math.max(0, fit.end)))} stroke={trendCol} strokeWidth={1.4} strokeOpacity={0.55} strokeDasharray="5 4" strokeLinecap="round" />
         )}
         {/* Reviews, on the same axis and just under the plot: one tick each,
@@ -1866,15 +1873,10 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           />
         ))}
         {/* the latest average, at the line's end */}
-        <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={trendCol} stroke="#fff" strokeWidth={1.5} />
-        {/* the stars, over the reviews, on their own scale */}
-        {starPts.length > 0 && (
-          <g>
-            {starPts.length > 1 && <polyline points={starPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.6} strokeLinejoin="round" strokeLinecap="round" />}
-            {starDots.map((p, i) => <circle key={`st${i}`} cx={p.x} cy={p.y} r={4} fill={starBand(p.v)} stroke="#fff" strokeWidth={1.5} />)}
-            {[5, 3, 1].map((s) => <text key={`sl${s}`} x={W - padR + 2} y={yStar(s)} textAnchor="start" dominantBaseline="central" fontSize={8} fontWeight={700} fill={STAR}>{s}★</text>)}
-          </g>
-        )}
+        {!starByDay && <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={trendCol} stroke="#fff" strokeWidth={1.5} />}
+        {/* the stars: one gold line, the average so far, ending on the number in the words above */}
+        {starPts.length > 1 && <polyline points={starPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.6} strokeLinejoin="round" strokeLinecap="round" />}
+        {starPts.length > 0 && <circle cx={starPts[starPts.length - 1].x} cy={starPts[starPts.length - 1].y} r={3.5} fill={STAR} stroke="#fff" strokeWidth={1.5} />}
         {clusters.map((c) => {
           const multi = c.last !== c.first
           const tag = multi ? `${c.first}–${c.last}` : String(c.first)
@@ -1892,7 +1894,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {pick != null && (
           <g>
             <line x1={xOf(pick)} y1={yTop} x2={xOf(pick)} y2={yBot} stroke={C.ink} strokeOpacity={0.35} strokeWidth={1} />
-            <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={trendCol} strokeWidth={2} />
+            {starByDay ? (starRun[pick] != null && <circle cx={xOf(pick)} cy={yStar(starRun[pick]!)} r={4} fill="#fff" stroke={STAR} strokeWidth={2} />) : <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={trendCol} strokeWidth={2} />}
           </g>
         )}
       </svg>

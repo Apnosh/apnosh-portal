@@ -1098,7 +1098,12 @@ export function ActionsChart({
                     readout when a bar is picked, not on the graph */}
                 {/* a day no source has reported yet: a faint dashed stub, not an
                     empty slot — the window is current, the numbers are en route */}
-                {pending ? (
+                {hasStars ? (
+                  /* ONE LINE ONLY (owner 2026-09-15: "too much going on"): in star mode the bars are
+                     gone; a span that got a review shows a short tick under the line in its rating's
+                     colour, and that is all */
+                  stars!.each[i] != null && <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: dense ? 3 : 4, height: 9, borderRadius: 2, background: starBand(stars!.each[i]!) }} />
+                ) : pending ? (
                   <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '52%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55, boxSizing: 'border-box' }} />
                 ) : (
                   /* the holder centres; the bar inside animates (its grow keyframe owns `transform`,
@@ -1110,21 +1115,13 @@ export function ActionsChart({
               </div>
             )
           })}
-          {/* THE RATING LINE (reputation): each bar's average stars, on its own 1–5 scale over the
-              bars, a dot per span that had a review and a line joining them; the ★ marks on the
-              right edge name the scale */}
+          {/* THE RATING LINE (reputation): your average rating so far, one gold line on a 1–5 scale,
+              ending on the range's number. Nothing else on the plot. */}
           {hasStars && (
-            <>
-              <svg viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-                {/* the average so far: one continuous gold line that ends on the range's number */}
-                {runPts.length > 1 && <polyline points={runPts.map((p) => `${p.i + 0.5},${starY(p.v)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.4} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
-              </svg>
-              {/* each span that had a review: a dot at its own average, in its rating's colour */}
-              {eachPts.map((p) => {
-                const d = dense ? 7 : 10
-                return <span key={p.i} aria-hidden title={`${p.v.toFixed(1)}★`} style={{ position: 'absolute', left: `${((p.i + 0.5) / bars.length) * 100}%`, bottom: `${100 - starY(p.v)}%`, width: d, height: d, marginLeft: -d / 2, marginBottom: -d / 2, borderRadius: 99, background: starBand(p.v), boxShadow: '0 0 0 2px #fff', pointerEvents: 'none' }} />
-              })}
-            </>
+            <svg viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+              {runPts.length > 1 && <polyline points={runPts.map((p) => `${p.i + 0.5},${starY(p.v)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={2.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
+              {runPts.length === 1 && <circle cx={runPts[0].i + 0.5} cy={starY(runPts[0].v)} r={0.12} fill={STAR} />}
+            </svg>
           )}
         </div>
       </div>
