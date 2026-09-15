@@ -20,7 +20,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Check, ChevronRight, Heart, Loader2, MessageCircle, Send, Sparkles, Star, ThumbsDown } from 'lucide-react'
+import { Check, ChevronRight, Loader2, MessageCircle, Send, Sparkles, Star } from 'lucide-react'
 import { C, DISPLAY } from './tokens'
 import { loadComments, type CommentRow } from './mvp-inbox'
 import { useSharedRange } from './mvp-home'
@@ -45,28 +45,19 @@ interface Queue { queue: { id: string; rating: number | null; author: string; te
 const TEAL = '#14c3c3', TEAL_DK = '#0f9e9e', TEAL_SOFT = 'rgba(20,195,195,.12)'
 const GREEN = '#1fc47a', RED = '#ec1528', AMBER = '#f0a12b'
 
-/** Loved / Complaints (owner 2026-09-15: "more visually stunning"): a tinted card with a big
- *  faint watermark of its icon, each topic a name with its count in the display face and a bar
- *  under it sized against the card's biggest topic, the guest's own words in small italics. */
+/** Loved / Complaints: the plain card (owner 2026-09-15, back from the tinted version). A label
+ *  in its colour, each topic with its count, the guest's own words under it. Shared by the
+ *  reviews and the comments so both read the same way. */
 function TopicCard({ tone, title, empty, items }: { tone: 'love' | 'complaint'; title: string; empty: string; items: { name: string; count: number; quote: string | null }[] }) {
   const col = tone === 'love' ? GREEN : RED
-  const dk = tone === 'love' ? '#178f5a' : '#c4121f'
-  const wash = tone === 'love' ? 'linear-gradient(165deg, #e6f9ef 0%, #f6fdf9 55%, #ffffff 100%)' : 'linear-gradient(165deg, #ffe9eb 0%, #fff5f6 55%, #ffffff 100%)'
-  const Icon = tone === 'love' ? Heart : ThumbsDown
-  const max = Math.max(1, ...items.map((t) => t.count))
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 18, padding: '14px 12px 12px', background: wash, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
-      <Icon aria-hidden size={92} strokeWidth={1.4} color={col} style={{ position: 'absolute', right: -22, top: -18, opacity: 0.10, transform: 'rotate(-12deg)', pointerEvents: 'none' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: dk, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 10 }}><Icon size={13} strokeWidth={2.6} fill={col} color={col} /> {title}</div>
+    <div style={CARD}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: col, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}>{title}</div>
       {items.length === 0 && <div style={{ fontSize: 12.5, color: C.faint }}>{empty}</div>}
-      {items.map((t, i) => (
-        <div key={t.name} style={{ marginBottom: i === items.length - 1 ? 0 : 11 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-            <span style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: dk, lineHeight: 1, flexShrink: 0 }}>{t.count}</span>
-          </div>
-          <div style={{ height: 5, borderRadius: 99, background: 'rgba(0,0,0,.06)', marginTop: 5, overflow: 'hidden' }}><div style={{ width: `${Math.max(8, Math.round((t.count / max) * 100))}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${col}, ${dk})` }} /></div>
-          {t.quote && <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.35, marginTop: 4, fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{t.quote}”</div>}
+      {items.map((t) => (
+        <div key={t.name} style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13.5, fontWeight: 600, color: C.ink }}><span style={{ minWidth: 0 }}>{t.name}</span><span style={{ color: col, flexShrink: 0 }}>{t.count}</span></div>
+          {t.quote && <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>“{t.quote}”</div>}
         </div>
       ))}
     </div>
@@ -212,10 +203,23 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   const sources = Object.entries(summary?.sources ?? {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])
   /* the comments, summed up (owner 2026-09-14): what was praised and what was knocked, in the
      reader's own eight-word reasons, most repeated first */
-  const said = useMemo(() => {
-    const pick = (tone: CommentTone) => { const m = new Map<string, number>(); for (const it of read?.items ?? []) if (it.tone === tone && it.why) m.set(it.why.replace(/\.$/, ''), (m.get(it.why) ?? 0) + 1); return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w) }
-    return { loved: pick('love'), knocked: pick('complaint'), asked: pick('question') }
-  }, [read])
+  /* THE COMMENTS, BROKEN DOWN THE SAME WAY AS THE REVIEWS (owner 2026-09-15): Loved and
+     Complaints, each reason the reader gave counted up, with the comment itself as the quote */
+  const commentTopics = useMemo(() => {
+    const textOf = new Map((comments ?? []).map((c) => [c.id, c.text]))
+    const pick = (tone: CommentTone) => {
+      const m = new Map<string, { count: number; quote: string | null }>()
+      for (const it of read?.items ?? []) {
+        if (it.tone !== tone || !it.why) continue
+        const w = it.why.replace(/\.$/, '')
+        const k = w.charAt(0).toUpperCase() + w.slice(1)
+        const cur = m.get(k)
+        if (cur) cur.count++; else m.set(k, { count: 1, quote: textOf.get(it.id) ?? null })
+      }
+      return [...m.entries()].sort((x, y) => y[1].count - x[1].count).slice(0, 4).map(([name, v]) => ({ name, count: v.count, quote: v.quote }))
+    }
+    return { loved: pick('love'), complaints: pick('complaint'), asked: pick('question') }
+  }, [read, comments])
 
   /* ── 3. what needs a reply ── */
   /* the queue is the whole listing's backlog, worst first; the page's own recent reviews stand in until it lands */
@@ -284,18 +288,18 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
         )}
         {!topicsLoading && topics && topics.topics.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{topics.source === 'none' && split.total >= 3 ? 'We could not read your reviews right now. Try again a little later.' : 'A few more written reviews and the topics guests mention show here.'}</div>}
         {(comments?.length ?? 0) > 0 && (
-          <div style={{ ...CARD, marginTop: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 6 }}><MessageCircle size={13} /> In the comments on your posts</div>
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}><MessageCircle size={13} /> In the comments on your posts</div>
             {readLoading && !read && <div style={{ fontSize: 12.5, color: C.faint }}>Reading the comments…</div>}
-            {read && read.summary && <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{read.summary}</div>}
-            {read && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: read.summary ? 8 : 0, fontSize: 12.5, lineHeight: 1.4 }}>
-                {toneCount.love > 0 && <div><b style={{ color: GREEN, fontWeight: 700 }}>{toneCount.love} love it</b>{said.loved.length > 0 && <span style={{ color: C.mute }}> · {said.loved.join(' · ')}</span>}</div>}
-                {toneCount.complaint > 0 && <div><b style={{ color: RED, fontWeight: 700 }}>{toneCount.complaint} unhappy</b>{said.knocked.length > 0 && <span style={{ color: C.mute }}> · {said.knocked.join(' · ')}</span>}</div>}
-                {toneCount.question > 0 && <div><b style={{ color: AMBER, fontWeight: 700 }}>{toneCount.question} asking</b>{said.asked.length > 0 && <span style={{ color: C.mute }}> · {said.asked.join(' · ')}</span>}</div>}
-                {toneCount.love + toneCount.complaint + toneCount.question === 0 && <div style={{ color: C.faint }}>Nothing that praises or complains, just chatter.</div>}
+            {read && (toneCount.love + toneCount.complaint > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <TopicCard tone="love" title={`Loved · ${toneCount.love}`} empty="Nothing singled out yet." items={commentTopics.loved} />
+                <TopicCard tone="complaint" title={`Complaints · ${toneCount.complaint}`} empty="No complaints." items={commentTopics.complaints} />
               </div>
-            )}
+            ) : (
+              <div style={{ fontSize: 12.5, color: C.faint }}>Nothing that praises or complains, just chatter.</div>
+            ))}
+            {read && toneCount.question > 0 && <div style={{ fontSize: 12.5, lineHeight: 1.4, marginTop: 8 }}><b style={{ color: AMBER, fontWeight: 700 }}>{toneCount.question} asking</b>{commentTopics.asked.length > 0 && <span style={{ color: C.mute }}> · {commentTopics.asked.map((a) => a.name).join(' · ')}</span>}</div>}
           </div>
         )}
       </div>
