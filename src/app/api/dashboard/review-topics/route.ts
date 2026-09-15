@@ -12,7 +12,7 @@
  * real review order, so a topic can never claim more mentions than there are
  * reviews, and topic names / quotes must appear in the reviews.
  */
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -200,36 +200,29 @@ export async function GET(req: NextRequest) {
     ...l.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.text as string) ?? null, at: String(r.created_at_platform ?? '') })),
   ].filter((r) => r.rating > 0 && inWindow(r.at))
 
-  // Signature of the review set — changes only when a new review arrives (count
-  // grows) or the newest date moves. Lets us skip the model call when nothing
-  // changed since we last analyzed.
   const lang = await (async () => {
     try {
       const { getClientLanguage } = await import('@/lib/i18n/language')
       return await getClientLanguage(clientId)
     } catch { return 'en' as const }
   })()
-  // v2: bump when the analysis payload shape changes (added negQuote) so cached
-  // rows recompute even though the reviews are unchanged.
-  // The LANGUAGE is part of the signature: the topic names and the summary are
-  // now written in the owner's reading language, so a cached English breakdown
-  // must not be served to an owner who reads Spanish. Switching the language
-  // recomputes once and then caches per language.
-  // v3: the payload now carries the reviews behind each count.
-  // v4: the window is part of the signature, so a 7-day read never serves as a 30-day one.
-  const sig = `v4:${lang}:${from}:${to}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
-
-  // Cache hit → return the stored breakdown instantly, no model call. Wrapped so
-  // a missing cache table (migration not applied) just falls through to live.
+  /* THE READ IS CACHED PER WINDOW AND SERVED AT ONCE (owner 2026-09-15: "what people say
+     should load instantly; it doesn't need to update more than once a day"). One cache row per
+     client holds a map of windows; a window's entry is served straight from the cache whenever
+     it exists, and is recomputed in the background when it is older than a day or the reviews
+     behind it changed. The first read of a window is the only one that waits on the model. */
+  const winKey = `${from || 'all'}:${to || 'all'}`
+  const sig = `v4:${lang}:${winKey}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
+  type Entry = { summary: string | null; topics: Topic[]; sig: string; computed_at: string }
+  type Store = { windows?: Record<string, Entry>; summary?: string | null; topics?: Topic[] }
+  const DAY = 24 * 60 * 60 * 1000
+  let store: Store | null = null
   try {
-    const { data: cached } = await admin
-      .from('review_topic_cache')
-      .select('payload, review_sig')
-      .eq('client_id', clientId)
-      .maybeSingle()
-    if (cached && cached.review_sig === sig && cached.payload) {
-      const p = cached.payload as { summary?: string | null; topics?: Topic[] }
-      return NextResponse.json({ summary: p.summary ?? null, topics: p.topics ?? [], source: 'cache' })
+    const { data: cached } = await admin.from('review_topic_cache').select('payload, review_sig, computed_at').eq('client_id', clientId).maybeSingle()
+    if (cached?.payload) {
+      store = cached.payload as Store
+      /* an older row (one window, top-level summary/topics) counts as the all-time window */
+      if (!store.windows && Array.isArray(store.topics)) store = { windows: { 'all:all': { summary: store.summary ?? null, topics: store.topics, sig: String(cached.review_sig ?? ''), computed_at: String(cached.computed_at ?? new Date(0).toISOString()) } } }
     }
   } catch { /* cache table absent — compute live */ }
 
@@ -239,26 +232,35 @@ export async function GET(req: NextRequest) {
     negative: rows.filter((r) => r.rating < 3).length,
     total: rows.length,
   }
-
   const withTextRows = rows
     .filter((r) => r.text && r.text.trim().length > 1)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 50)
   const items = withTextRows.map((r) => ({ rating: r.rating, text: redact(r.text!.trim()).slice(0, 400), at: r.at }))
 
-  const ai = items.length >= 3 ? await analyze(items, counts, readApiKey(), lang) : null
-  const topics = ai ? buildTopics(ai.rawTopics, items) : []
-
-  // Only cache a real (successful) analysis, so a transient model failure isn't
-  // frozen in until the next new review.
-  if (ai) {
+  /* compute this window and write it into the map (other windows kept) */
+  const compute = async (): Promise<Entry | null> => {
+    const ai = items.length >= 3 ? await analyze(items, counts, readApiKey(), lang) : null
+    if (!ai) return null
+    const entry: Entry = { summary: ai.summary, topics: buildTopics(ai.rawTopics, items), sig, computed_at: new Date().toISOString() }
     try {
+      const { data: latest } = await admin.from('review_topic_cache').select('payload').eq('client_id', clientId).maybeSingle()
+      const cur = (latest?.payload as Store | null) ?? store ?? {}
+      const windows = { ...(cur.windows ?? {}), [winKey]: entry }
       await admin.from('review_topic_cache').upsert(
-        { client_id: clientId, payload: { summary: ai.summary, topics }, review_sig: sig, computed_at: new Date().toISOString() },
+        { client_id: clientId, payload: { windows }, review_sig: sig, computed_at: entry.computed_at },
         { onConflict: 'client_id' },
       )
     } catch { /* ignore cache write failure */ }
+    return entry
   }
 
-  return NextResponse.json({ summary: ai?.summary ?? null, topics, source: ai ? 'ai' : 'none' })
+  const entry = store?.windows?.[winKey]
+  if (entry) {
+    const fresh = Date.now() - Date.parse(entry.computed_at) < DAY
+    if (!fresh && entry.sig !== sig) after(async () => { try { await compute() } catch { /* next open tries again */ } })
+    return NextResponse.json({ summary: entry.summary ?? null, topics: entry.topics ?? [], source: 'cache' })
+  }
+  const made = await compute()
+  return NextResponse.json({ summary: made?.summary ?? null, topics: made?.topics ?? [], source: made ? 'ai' : 'none' })
 }

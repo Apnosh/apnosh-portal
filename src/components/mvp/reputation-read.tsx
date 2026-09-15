@@ -136,6 +136,30 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   const [rBusy, setRBusy] = useState<string | null>(null)
   const [rSent, setRSent] = useState<Record<string, string>>({})
   const [rErr, setRErr] = useState<Record<string, string>>({})
+  /* COMMENTS ARE ANSWERED HERE TOO (owner 2026-09-15: "the suggested reply should go directly
+     to the comment"). The card used to link to the Inbox, which has no comments tab, so it
+     landed on notifications. Now Use this reply opens a box under the comment with the
+     suggestion in it, and Send posts it through the same route the post sheet uses. */
+  const [cOpen, setCOpen] = useState<Set<string>>(new Set())
+  const [cDraft, setCDraft] = useState<Record<string, string>>({})
+  const [cBusy, setCBusy] = useState<string | null>(null)
+  const [cSent, setCSent] = useState<Record<string, string[]>>({})
+  const [cErr, setCErr] = useState<Record<string, string>>({})
+  const openCommentReply = (id: string, seed?: string) => { setCOpen((o) => new Set(o).add(id)); if (seed != null) setCDraft((d) => ({ ...d, [id]: d[id] || seed })) }
+  const sendCommentReply = async (c: CommentRow) => {
+    const text = (cDraft[c.id] ?? '').trim()
+    if (!text || !clientId || cBusy) return
+    setCBusy(c.id); setCErr((e) => ({ ...e, [c.id]: '' }))
+    try {
+      const r = await fetch('/api/dashboard/social-comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, commentId: c.id, postId: c.postId, accountId: c.accountId, text }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(String(j.error ?? 'not posted'))
+      setCSent((m) => ({ ...m, [c.id]: [...(m[c.id] ?? []), text] }))
+      setCDraft((d) => ({ ...d, [c.id]: '' }))
+      setCOpen((o) => { const n = new Set(o); n.delete(c.id); return n })
+    } catch { setCErr((e) => ({ ...e, [c.id]: 'We could not post this reply. Try again in a moment.' })) }
+    setCBusy(null)
+  }
   const openReply = (id: string, seed?: string) => { setROpen((o) => new Set(o).add(id)); if (seed != null) setRDraft((d) => ({ ...d, [id]: seed })) }
   const suggest = async (id: string, rating: number) => {
     setRBusy(`draft:${id}`); setRErr((e) => ({ ...e, [id]: '' }))
@@ -347,17 +371,39 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
                   )}
                 </div>
               ) })}
-            {openComments.map((c) => { const it = toneOf.get(c.id)!; const col = it.tone === 'complaint' ? RED : AMBER
+            {openComments.map((c) => { const it = toneOf.get(c.id)!; const col = it.tone === 'complaint' ? RED : AMBER; const isOpen = cOpen.has(c.id); const sentList = cSent[c.id] ?? []
               return (
-                <Link key={c.id} href="/dashboard/inbox?tab=comments" style={{ ...CARD, textDecoration: 'none', color: 'inherit', display: 'block', borderLeft: `3px solid ${col}`, flex: '0 0 84%', maxWidth: 340, scrollSnapAlign: 'start', boxSizing: 'border-box' }}>
+                <div key={c.id} style={{ ...CARD, borderLeft: `3px solid ${col}`, flex: '0 0 84%', maxWidth: 340, scrollSnapAlign: 'start', boxSizing: 'border-box' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontWeight: 600, fontSize: 13.5 }}>{c.authorName}</span>
                     <span style={{ fontSize: 10, fontWeight: 700, color: col, background: col + '1a', borderRadius: 99, padding: '2px 7px' }}>{it.tone === 'complaint' ? 'Unhappy' : 'Question'}</span>
                     <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{PLATFORM_WORD[c.platform] ?? c.platform} · {ago(c.createdAt)}</span>
                   </div>
-                  <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.text}</div>
-                  {it.reply && <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, background: TEAL_SOFT, fontSize: 12.5, color: C.ink, lineHeight: 1.4 }}><span style={{ fontSize: 10.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Suggested reply</span>{it.reply}</div>}
-                </Link>
+                  <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 4, display: isOpen ? 'block' : '-webkit-box', WebkitLineClamp: isOpen ? undefined : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.text}</div>
+                  {sentList.map((t, i) => <div key={i} style={{ marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${TEAL}`, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}><b style={{ color: TEAL_DK, fontWeight: 700 }}>You</b> {t}</div>)}
+                  {isOpen ? (
+                    <div style={{ marginTop: 10, padding: '10px 10px 10px 12px', borderRadius: 14, background: C.bg }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: TEAL_DK }}>Your reply</div>
+                      <textarea value={cDraft[c.id] ?? ''} onChange={(e) => setCDraft((d) => ({ ...d, [c.id]: e.target.value }))} rows={3} autoFocus placeholder={`Reply to ${c.authorName}…`}
+                        style={{ display: 'block', width: '100%', marginTop: 4, border: 0, outline: 0, resize: 'none', background: 'none', font: 'inherit', fontSize: 13.5, lineHeight: 1.45, color: C.ink, padding: 0, boxSizing: 'border-box' }} />
+                      {cErr[c.id] && <div style={{ fontSize: 12, color: RED, marginTop: 4 }}>{cErr[c.id]}</div>}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 6, gap: 8 }}>
+                        <button type="button" onClick={() => setCOpen((o) => { const n = new Set(o); n.delete(c.id); return n })} style={{ border: 0, background: 'none', padding: '0 6px', font: 'inherit', fontSize: 12.5, fontWeight: 600, color: C.mute, cursor: 'pointer' }}>Cancel</button>
+                        <button type="button" onClick={() => sendCommentReply(c)} disabled={cBusy != null || !(cDraft[c.id] ?? '').trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 14px', borderRadius: 99, border: 0, background: TEAL_DK, color: '#fff', font: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: (cDraft[c.id] ?? '').trim() ? 1 : .5 }}>
+                          {cBusy === c.id ? <Loader2 size={13} className="mvp-spin" /> : <Send size={13} />} Post reply
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {it.reply && sentList.length === 0 && <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, background: TEAL_SOFT, fontSize: 12.5, color: C.ink, lineHeight: 1.4 }}><span style={{ fontSize: 10.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Suggested reply</span>{it.reply}</div>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                        {sentList.length > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: TEAL_DK }}><Check size={12} strokeWidth={3} /> Replied</span>}
+                        <button type="button" onClick={() => openCommentReply(c.id, sentList.length === 0 ? (it.reply ?? '') : '')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 0, background: 'none', padding: 0, font: 'inherit', fontSize: 12, fontWeight: 700, color: sentList.length ? C.mute : TEAL_DK, cursor: 'pointer' }}><MessageCircle size={13} /> {sentList.length ? 'Reply again' : it.reply ? 'Use this reply' : 'Reply'}</button>
+                      </div>
+                    </>
+                  )}
+                </div>
               ) })}
           </div>
         )}
