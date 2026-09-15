@@ -95,6 +95,9 @@ export interface MetricView {
   monthly: { label: string; value: number; ym: string }[]
   tiles: { key: string; label: string; value: string; configured: boolean }[]
   lastDataDate: string      // freshest day with data (data frontier); '' if none
+  /** reputation only: per day, the sum of the star ratings received and how many (so any
+   *  span's average rating is Σsum ÷ Σn) */
+  ratingDaily?: { date: string; sum: number; n: number }[]
 }
 
 export interface MvpHomeData {
@@ -838,7 +841,8 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const yr = Number(mo.ym.slice(0, 4)); const mi = Number(mo.ym.slice(5, 7))
       const priorKey = `${yr - 1}-${String(mi).padStart(2, '0')}`
       // The last month is the current, still-accruing one → not settled.
-      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}`, settled: i < last12.length - 1, elapsed: true, ago: byKey.get(priorKey) ?? 0 }
+      const s0 = new Date(yr, mi - 1, 1), e0 = new Date(yr, mi, 0)
+      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}`, settled: i < last12.length - 1, elapsed: true, ago: byKey.get(priorKey) ?? 0, sMs: s0.getTime(), eMs: e0.getTime() }
     })
   } else {
     curLbl = 'Custom'; cmpLbl = 'Prior period'; cmpFrame = 'vs prior period'
@@ -852,7 +856,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       // itself is still filling in.
       const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
       const settled = frontier ? dt.getTime() < frontier.getTime() : i < span - 1
-      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt), sMs: dt.getTime(), cMs: prior.getTime() }
     })
   }
 
@@ -993,8 +997,32 @@ export function relDate(lastDataDate: string): string {
   return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+/** The star colour the whole portal uses for a rating. */
+export const STAR = '#f0a12b'
+
+/** Average star rating inside each bar's span (a day, a week, a month), from the per-day
+ *  star sums: Σsum ÷ Σn, null when no review landed in that span. */
+export function starsForBars(bars: { sMs?: number; eMs?: number }[], ratingDaily?: { date: string; sum: number; n: number }[]): (number | null)[] {
+  if (!ratingDaily?.length) return bars.map(() => null)
+  const byDay = new Map(ratingDaily.map((d) => [d.date, d]))
+  return bars.map((b) => {
+    if (b.sMs == null) return null
+    const end = b.eMs ?? b.sMs
+    let sum = 0, n = 0
+    for (let t = b.sMs; t <= end; t += 86_400_000) { const d = byDay.get(isoDate(new Date(t))); if (d) { sum += d.sum; n += d.n } }
+    return n > 0 ? Math.round((sum / n) * 10) / 10 : null
+  })
+}
+/** The average star rating over a set of days (Σsum ÷ Σn), null when none. */
+export function starsOver(ratingDaily: { date: string; sum: number; n: number }[] | undefined, fromMs: number, toMs: number): number | null {
+  if (!ratingDaily?.length) return null
+  let sum = 0, n = 0
+  for (const d of ratingDaily) { const t = Date.parse(d.date + 'T00:00:00'); if (t >= fromMs && t <= toMs) { sum += d.sum; n += d.n } }
+  return n > 0 ? Math.round((sum / n) * 10) / 10 : null
+}
+
 export function ActionsChart({
-  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action', showTotal = true, accent,
+  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action', showTotal = true, accent, stars,
 }: {
   range: ChartRange; setRange: (r: ChartRange) => void
   cStart: string; setCStart: (s: string) => void
@@ -1008,6 +1036,9 @@ export function ActionsChart({
   showTotal?: boolean
   /* the bar colour — Insights paints each stage in its own hue */
   accent?: string
+  /** Reputation: the average star rating in each bar's span, drawn as a line over the bars on
+   *  its own 1–5 scale (owner 2026-09-15: the reviews graph shows the rating too) */
+  stars?: (number | null)[]
 }) {
   const { C } = useMvpTheme()
   const H = 124
@@ -1015,6 +1046,9 @@ export function ActionsChart({
   const { bars, total, max } = summary
   const dense = bars.length > 8
   const col = accent ?? C.green
+  const starPts = (stars ?? []).map((v, i) => (v == null ? null : { i, v })).filter((p): p is { i: number; v: number } => p != null)
+  const hasStars = starPts.length > 0
+  const starY = (v: number) => 100 - ((Math.min(5, Math.max(1, v)) - 1) / 4) * 100
   const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.card }
   const pickedBar = picked != null ? bars[picked] : null
   return (
@@ -1055,6 +1089,22 @@ export function ActionsChart({
               </div>
             )
           })}
+          {/* THE RATING LINE (reputation): each bar's average stars, on its own 1–5 scale over the
+              bars, a dot per span that had a review and a line joining them; the ★ marks on the
+              right edge name the scale */}
+          {hasStars && (
+            <>
+              <svg viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+                {starPts.length > 1 && <polyline points={starPts.map((p) => `${p.i + 0.5},${starY(p.v)}`).join(' ')} fill="none" stroke={STAR} strokeWidth={1.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
+              </svg>
+              {starPts.map((p) => (
+                <span key={p.i} aria-hidden style={{ position: 'absolute', left: `${((p.i + 0.5) / bars.length) * 100}%`, bottom: `${100 - starY(p.v)}%`, width: dense ? 6 : 8, height: dense ? 6 : 8, marginLeft: dense ? -3 : -4, marginBottom: dense ? -3 : -4, borderRadius: 99, background: STAR, boxShadow: '0 0 0 1.5px #fff', pointerEvents: 'none' }} />
+              ))}
+              {[5, 3, 1].map((s) => (
+                <span key={s} aria-hidden style={{ position: 'absolute', right: -2, bottom: `${100 - starY(s)}%`, transform: s === 1 ? 'translateY(0)' : s === 5 ? 'translateY(0)' : 'translateY(50%)', fontSize: 9.5, fontWeight: 700, color: STAR, lineHeight: 1, pointerEvents: 'none' }}>{s}★</span>
+              ))}
+            </>
+          )}
         </div>
       </div>
       <div style={{ display: 'flex', gap: dense ? 3 : 10, marginTop: 5, paddingLeft: 34 }}>
@@ -1075,6 +1125,7 @@ export function ActionsChart({
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
               <b style={{ color: C.ink, fontWeight: 700 }}>{b.tip}</b>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><b style={{ color: C.ink, fontWeight: 700 }}>{b.value.toLocaleString()}</b> {noun}</span>
+              {hasStars && stars?.[picked!] != null && <span style={{ fontWeight: 700, color: STAR, flexShrink: 0 }}>{stars[picked!]!.toFixed(1)}★</span>}
               {dpct != null && <span style={{ fontWeight: 700, color: delta > 0 ? C.greenDk : delta < 0 ? '#c0564f' : C.mute, flexShrink: 0 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : ''}{Math.abs(dpct)}%</span>}
               {/* THE DAY IT IS MEASURED AGAINST, by name (owner 2026-09-11). "vs 1,204 earlier"
                   left the owner guessing which day; the bar has always known. */}

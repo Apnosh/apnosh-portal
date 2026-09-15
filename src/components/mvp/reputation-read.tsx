@@ -247,7 +247,7 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
             </div>
           </div>
         )}
-        {!topicsLoading && topics && topics.topics.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{topics.source === 'none' && split.total >= 3 ? 'We could not read the reviews just now. Pull down to try again.' : 'A few more written reviews and the topics guests mention show here.'}</div>}
+        {!topicsLoading && topics && topics.topics.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{topics.source === 'none' && split.total >= 3 ? 'We could not read your reviews right now. Try again a little later.' : 'A few more written reviews and the topics guests mention show here.'}</div>}
         {(comments?.length ?? 0) > 0 && (
           <div style={{ ...CARD, marginTop: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 6 }}><MessageCircle size={13} /> In the comments on your posts</div>
@@ -271,14 +271,15 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
           <span style={H3}>Needs a reply{openTotal > 0 ? ` · ${openTotal}` : ''}</span>
           <Link href="/dashboard/inbox?tab=reviews" style={{ fontSize: 11.5, fontWeight: 600, color: TEAL_DK, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 2 }}>Open Inbox <ChevronRight size={13} /></Link>
         </div>
-        {openReviewTotal > 5 && <div style={{ fontSize: 12, color: C.faint, marginBottom: 6 }}>The worst 5 of {openReviewTotal} waiting{queue && queue.critical > 0 ? ` · ${queue.critical} one- or two-star` : ''}</div>}
         {openReviews.length === 0 && openComments.length === 0 ? (
           <div style={{ ...CARD, fontSize: 13, color: C.mute }}>{queue && queue.unreachable > 0 ? `${queue.unreachable} older ${queue.unreachable === 1 ? 'review has' : 'reviews have'} no reply, and Google gives us no address to answer them.` : 'Nothing waiting. Every review and comment that wanted an answer has one.'}</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          /* the waiting reviews and comments run SIDEWAYS, one card at a time (owner 2026-09-15),
+             so the section stays one card tall however many are waiting */
+          <div className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory', margin: '0 -16px', padding: '0 16px 4px', WebkitOverflowScrolling: 'touch', alignItems: 'flex-start' }}>
             {openReviews.map((r) => { const isOpen = rOpen.has(r.id); const sentTx = rSent[r.id]; const col = r.rating <= 2 ? RED : r.rating === 3 ? AMBER : TEAL
               return (
-                <div key={r.id} style={{ ...CARD, borderLeft: `3px solid ${col}` }}>
+                <div key={r.id} style={{ ...CARD, borderLeft: `3px solid ${col}`, flex: '0 0 84%', maxWidth: 340, scrollSnapAlign: 'start', boxSizing: 'border-box' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontWeight: 600, fontSize: 13.5 }}>{r.author}</span><StarsRow n={r.rating} size={11} />
                     <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{SOURCE_WORD[r.source] ?? r.source} · {ago(r.postedAt)}</span>
@@ -309,7 +310,7 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
               ) })}
             {openComments.map((c) => { const it = toneOf.get(c.id)!; const col = it.tone === 'complaint' ? RED : AMBER
               return (
-                <Link key={c.id} href="/dashboard/inbox?tab=comments" style={{ ...CARD, textDecoration: 'none', color: 'inherit', display: 'block', borderLeft: `3px solid ${col}` }}>
+                <Link key={c.id} href="/dashboard/inbox?tab=comments" style={{ ...CARD, textDecoration: 'none', color: 'inherit', display: 'block', borderLeft: `3px solid ${col}`, flex: '0 0 84%', maxWidth: 340, scrollSnapAlign: 'start', boxSizing: 'border-box' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontWeight: 600, fontSize: 13.5 }}>{c.authorName}</span>
                     <span style={{ fontSize: 10, fontWeight: 700, color: col, background: col + '1a', borderRadius: 99, padding: '2px 7px' }}>{it.tone === 'complaint' ? 'Unhappy' : 'Question'}</span>
@@ -323,12 +324,7 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
         )}
       </div>
 
-      {/* 4 · reply pace */}
-      {summary && summary.reply.total > 0 && (
-        <div style={{ ...LIST, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
-          You replied to <b style={{ color: C.ink }}>{summary.reply.replied} of {summary.reply.total}</b> reviews{summary.reply.medianHours != null ? <>, usually within <b style={{ color: C.ink }}>{summary.reply.medianHours < 48 ? `${Math.round(summary.reply.medianHours)} hours` : `${Math.round(summary.reply.medianHours / 24)} days`}</b></> : ''}.{summary.reply.unansweredNegative > 0 ? <> <b style={{ color: RED }}>{summary.reply.unansweredNegative} bad {summary.reply.unansweredNegative === 1 ? 'one is' : 'ones are'} still waiting.</b></> : ''}
-        </div>
-      )}
+      {/* the reply-pace line is gone (owner 2026-09-15) */}
     </>
   )
 }

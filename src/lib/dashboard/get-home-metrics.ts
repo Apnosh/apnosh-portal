@@ -43,6 +43,9 @@ export interface HomeInstance {
   sub: HomeSub
   total: number
   rating: number | null
+  /** reputation only: the SUM of the star ratings received each sub-period, aligned with
+   *  `vals` (whose entry is the count), so any span's average rating is sum ÷ count */
+  ratingSum?: (number | null)[]
   breakdown: HomeBreakdownItem[]
 }
 
@@ -106,7 +109,7 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier
      so a 1-2 day source lag (e.g. Google) never reads as a real drop. */
   const inWindow = (d: Date): boolean => d >= earliestDay && d <= frontier
 
-  const makeInst = (vals: (number | null)[], start: string, sub: HomeSub, inDays: Date[]): HomeInstance => {
+  const makeInst = (vals: (number | null)[], start: string, sub: HomeSub, inDays: Date[], ratingSum?: (number | null)[]): HomeInstance => {
     const total = vals.reduce<number>((s, v) => s + (v ?? 0), 0)
     let rating: number | null = null
     let breakdown: HomeBreakdownItem[]
@@ -131,7 +134,7 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier
         return { label: c.label, value: (c.money ? '$' : '') + fmtCompact(sum), icon: c.icon }
       })
     }
-    return { vals, start, sub, total, rating, breakdown }
+    return ratingSum ? { vals, start, sub, total, rating, ratingSum, breakdown } : { vals, start, sub, total, rating, breakdown }
   }
 
   /* ── Week: up to 8 weeks of daily bars (Sun–Sat) ── */
@@ -158,12 +161,14 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier
   for (let k = monthsAvail - 1; k >= 0; k--) {
     const first = new Date(today.getFullYear(), today.getMonth() - k, 1)
     const dim = daysInMonth(first.getFullYear(), first.getMonth())
-    const vals: (number | null)[] = [], inDays: Date[] = []
+    const vals: (number | null)[] = [], inDays: Date[] = [], rs: (number | null)[] = []
     for (let d = 0; d < dim; d++) {
       const day = startOfDay(new Date(first.getFullYear(), first.getMonth(), d + 1))
-      if (inWindow(day)) { vals.push(dayVal(day)); inDays.push(day) } else vals.push(null)
+      if (inWindow(day)) { vals.push(dayVal(day)); inDays.push(day); rs.push(cfg.rate?.ratingSum.get(ymd(day)) ?? 0) } else { vals.push(null); rs.push(null) }
     }
-    base.month.push(makeInst(vals, ymd(first), 'day', inDays))
+    /* the daily star sums ride along for the rate metric, so the charts can draw the
+       average rating over any span (owner 2026-09-15) */
+    base.month.push(makeInst(vals, ymd(first), 'day', inDays, cfg.rate ? rs : undefined))
   }
 
   /* ── Year: up to 5 years of monthly bars ── */

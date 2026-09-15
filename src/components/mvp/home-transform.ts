@@ -9,7 +9,7 @@
 import type { MvpHomeData, MetricView } from './mvp-home'
 import { buildCandidates, markLead, type SuggestionFacts } from '@/lib/dashboard/suggestions'
 
-export interface HomeInstance { vals: (number | null)[]; start: string; total: number; breakdown: { label: string; value: string; icon: string }[] }
+export interface HomeInstance { vals: (number | null)[]; start: string; total: number; ratingSum?: (number | null)[]; breakdown: { label: string; value: string; icon: string }[] }
 export interface HomeMetric { key: string; label: string; sub: string; fmt: string; hasData: boolean; week: HomeInstance[]; month: HomeInstance[]; year: HomeInstance[] }
 export interface AgendaItem { id: string; type: string; urgency: string; label: string; detail?: string }
 export interface ComingUpItem { date: string; label: string; hook: string; weight: number; daysUntil: number; queuedCount: number }
@@ -60,13 +60,21 @@ function buildMetricView(m: HomeMetric): MetricView {
   // data frontier (the last day Google/social has reliably reported), so every
   // entry here is a real, settled day — the newest is the frontier.
   const daily: { date: string; value: number }[] = []
+  /* reputation only: each day's star-rating sum beside its review count, so a chart can
+     say "4.6★ over these days" for any span (sum ÷ count), never an average of averages */
+  const ratingDaily: { date: string; sum: number; n: number }[] = []
   for (const mo of months) {
     const d0 = new Date(mo.start + 'T00:00:00')
     ;(mo.vals ?? []).forEach((v, i) => {
-      if (v != null) daily.push({ date: ymd(new Date(d0.getFullYear(), d0.getMonth(), 1 + i)), value: Number(v) })
+      if (v == null) return
+      const date = ymd(new Date(d0.getFullYear(), d0.getMonth(), 1 + i))
+      daily.push({ date, value: Number(v) })
+      const rs = mo.ratingSum?.[i]
+      if (rs != null) ratingDaily.push({ date, sum: Number(rs), n: Number(v) })
     })
   }
   daily.sort((a, b) => a.date.localeCompare(b.date))
+  ratingDaily.sort((a, b) => a.date.localeCompare(b.date))
   const dmap = new Map(daily.map((d) => [d.date, d.value]))
   const lastDataDate = daily.length ? daily[daily.length - 1].date : ''
 
@@ -171,6 +179,7 @@ function buildMetricView(m: HomeMetric): MetricView {
     key: m.key, tabLabel: meta.tab, heroLabel: meta.heroLabel, heroSub: meta.heroSub, unit: meta.unit,
     total, weekPct, monthPct, prevMonthLabel: yoyLabel,
     chart, chartStart: chartStartISO, daily, monthly, tiles, lastDataDate,
+    ...(ratingDaily.length ? { ratingDaily } : {}),
   }
 }
 
