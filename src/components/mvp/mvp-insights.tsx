@@ -44,6 +44,10 @@ import { stageLabelFor, stageExplainFor } from '@/lib/clients/shape-words'
 import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, bucketsFor, starsForBars, starsOver, STAR, type MetricView, type ChartRange } from './mvp-home'
 
+/** THE REPUTATION GRAPH COUNTS REVIEWS (owner 2026-09-15: "just the number of reviews"); the star
+ *  breakdown lives in "Your rating" under it. Flip this to draw the ratings on the graphs again. */
+const RATING_ON_GRAPH = false
+
 /** "4.2★" the way the page writes a rating: the number in ink, only the star in gold (owner 2026-09-15). */
 function StarNum({ v, size, weight = 600 }: { v: number; size: number; weight?: number }) {
   return <span style={{ fontFamily: DISPLAY, fontSize: size, fontWeight: weight, color: C.ink, letterSpacing: '-.02em', lineHeight: 1 }}>{v.toFixed(1)}<span style={{ color: STAR }}>★</span></span>
@@ -1340,14 +1344,14 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
   const shown = useCountUp(total)
   /* REPUTATION (owner 2026-09-15): the bars count the reviews, the line over them is the stars.
      Beside the number, the average rating over the whole picked range (Σstars ÷ reviews). */
-  const stars = mv.ratingDaily ? { each: starsForBars(summary.bars, mv.ratingDaily) } : undefined
+  const stars = RATING_ON_GRAPH && mv.ratingDaily ? { each: starsForBars(summary.bars, mv.ratingDaily) } : undefined
   const b0 = summary.bars[0], bN = summary.bars[summary.bars.length - 1]
   const winFrom = b0?.sMs ?? null, winTo = bN ? (bN.eMs ?? bN.sMs ?? null) : null
   const avgStars = mv.ratingDaily && winFrom != null && winTo != null ? starsOver(mv.ratingDaily, winFrom, winTo) : null
   /* the window just before, the same length, for the rating's own up/down */
   const prevStars = mv.ratingDaily && winFrom != null && winTo != null ? starsOver(mv.ratingDaily, winFrom - (winTo - winFrom + DAY_MS), winFrom - DAY_MS) : null
   const sd = starDelta(avgStars, prevStars)
-  const starMode = !!mv.ratingDaily
+  const starMode = RATING_ON_GRAPH && !!mv.ratingDaily
 
   return (
     <>
@@ -1515,7 +1519,7 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
   const rowStars = mv?.ratingDaily ? starsOver(mv.ratingDaily, winStart, winEnd) : null
   const rowPrev = mv?.ratingDaily ? starsOver(mv.ratingDaily, winStart - days * DAY_MS, winStart - DAY_MS) : null
   const rowSd = starDelta(rowStars, rowPrev)
-  const starMode = !!mv?.ratingDaily
+  const starMode = RATING_ON_GRAPH && !!mv?.ratingDaily
   /* the sparkline in star mode: a small bar per day that got a review, its height the day's rating */
   const starBars: { i: number; v: number }[] = []
   if (starMode) {
@@ -1701,7 +1705,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   /* REPUTATION (owner 2026-09-15): the stars ride over the review line on their own 1–5 scale.
      Each point is the average rating of the reviews in the same rolling window the line uses
      (Σstars ÷ reviews), skipped where no review landed; the ★ marks on the right name the scale. */
-  const starByDay = mv?.ratingDaily ? new Map(mv.ratingDaily.map((d) => [trendDayMs(d.date), d])) : null
+  const starByDay = RATING_ON_GRAPH && mv?.ratingDaily ? new Map(mv.ratingDaily.map((d) => [trendDayMs(d.date), d])) : null
   const yStar = (v: number) => yBot - ((Math.min(5, Math.max(1, v)) - 1) / 4) * (yBot - yTop)
   /* the gold line is the average SO FAR in the window (continuous once a review lands, ending on
      the number in the words above); each day that had a review is a dot in its rating's colour */
