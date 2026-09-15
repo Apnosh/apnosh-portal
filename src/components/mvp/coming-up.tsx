@@ -200,35 +200,51 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
             const tone = r.bad ? { ink: '#ec1528', bg: '#fde4e6', Icon: AlertCircle }
               : r.team ? (r.ready ? { ink: C.greenDk, bg: tint('mint', .16), Icon: Check } : { ink: '#9a6b17', bg: '#faf1de', Icon: Users })
               : { ink: '#3b6fd4', bg: tint('nights', .16), Icon: Calendar }
-            /* A POST PREVIEW (owner 2026-09-14): the same 164x256 tile as Recent posts under it, so
-               what is coming and what went out read as one flow. The picture fills it (a soft
-               network-tinted pane when there is none), the networks sit top-left, the state is a
-               small chip top-right, and the caption sits at the bottom, on a scrim over a photo. */
+            /* PREVIEW, TITLE, CAPTION, DATE (owner 2026-09-14): a landscape preview on top (a soft
+               tinted pane holding the network marks when there is no picture), a short title lifted
+               from the caption's first clause, the caption under it, and one small line with the
+               state or time and where it goes. Its own shape, so it never reads as a Recent post. */
             const has = !!r.media
+            const word = (pl: string) => ({ instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', google: 'Google', gbp: 'Google', x: 'X', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' } as Record<string, string>)[pl.toLowerCase()] ?? pl
+            const nets = r.platforms.map(word)
+            const netLine = nets.length > 2 ? `${nets.slice(0, 2).join(', ')} +${nets.length - 2}` : nets.join(', ')
+            const clean = r.text.replace(/\s+/g, ' ').trim()
+            const firstClause = clean.split(/[.!?\n]|\s?[—–]\s?|\s-\s|:\s/)[0].trim()
+            const title = firstClause.length > 44 ? firstClause.slice(0, 42).replace(/\s+\S*$/, '') + '…' : firstClause
+            /* the caption under the title is what FOLLOWS the title, so the same words never read twice */
+            const rest = clean.slice(firstClause.length).replace(/^[\s.!?:—–-]+/, '')
+            const caption = rest || clean
             return (
               <Link key={r.id} href="/dashboard/insights/posts" style={{
-                position: 'relative', flex: '0 0 164px', width: 164, height: 256, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
-                borderRadius: 18, overflow: 'hidden', background: has ? '#111' : '#fff', backgroundImage: has ? `url(${r.media})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
-                border: has ? 'none' : `0.5px solid ${C.line}`, boxShadow: '0 1px 3px rgba(0,0,0,.08), 0 8px 20px rgba(0,0,0,.05)',
+                flex: '0 0 236px', width: 236, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
+                borderRadius: 18, padding: 8, display: 'flex', flexDirection: 'column', gap: 0,
+                border: `0.5px solid ${C.line}`, background: '#fff',
               }}>
-                {!has && <span style={{ position: 'absolute', inset: 0, background: gradOf(r.bad ? 'red' : r.team ? (r.ready ? 'mint' : 'amber') : 'nights'), opacity: .13 }} />}
-                {has && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '70%', background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.35) 40%, rgba(0,0,0,.82) 100%)' }} />}
-                <span style={{ position: 'absolute', left: 9, top: 38, display: 'inline-flex', alignItems: 'center' }}>
-                  {r.platforms.slice(0, 4).map((pl, i) => (
-                    <span key={pl + i} style={{ marginLeft: i ? -7 : 0, width: 25, height: 25, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.24)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <BrandOrMark provider={pl} size={14} />
+                <span style={{ position: 'relative', display: 'block', height: 112, borderRadius: 12, overflow: 'hidden', background: has ? `#111 center/cover url(${r.media})` : '#fff' }}>
+                  {!has && <span style={{ position: 'absolute', inset: 0, background: gradOf(r.bad ? 'red' : r.team ? (r.ready ? 'mint' : 'amber') : 'nights'), opacity: .14 }} />}
+                  {!has && (
+                    <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {r.platforms.slice(0, 4).map((pl, i) => (
+                        <span key={pl + i} style={{ marginLeft: i ? -8 : 0, width: 34, height: 34, borderRadius: 99, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <BrandOrMark provider={pl} size={18} />
+                        </span>
+                      ))}
                     </span>
-                  ))}
+                  )}
+                  <span style={{ position: 'absolute', left: 8, top: 8, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, padding: '3px 7px', borderRadius: 99, background: has ? 'rgba(255,255,255,.92)' : tone.bg, color: tone.ink, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 16px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <tone.Icon size={11} strokeWidth={2.6} style={{ flexShrink: 0 }} />{r.when}
+                  </span>
                 </span>
-                <span style={{ position: 'absolute', left: 8, top: 9, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, padding: '3px 7px', borderRadius: 99, background: has ? 'rgba(255,255,255,.92)' : tone.bg, color: tone.ink, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 16px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  <tone.Icon size={11} strokeWidth={2.6} style={{ flexShrink: 0 }} />{r.when}
+                <span style={{ display: 'block', padding: '9px 6px 2px' }}>
+                  <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title || 'A post'}</span>
+                  <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 12.5, color: C.mute, lineHeight: 1.4, marginTop: 3, minHeight: 35 }}>{caption}</span>
+                  <span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{netLine}</span>
                 </span>
-                <span style={{ position: 'absolute', left: 11, right: 11, bottom: 11, fontSize: has ? 12.5 : 14, lineHeight: 1.4, color: has ? '#fff' : C.ink, display: '-webkit-box', WebkitLineClamp: has ? 4 : 7, WebkitBoxOrient: 'vertical', overflow: 'hidden', textShadow: has ? '0 1px 6px rgba(0,0,0,.4)' : 'none' }}>{r.text}</span>
               </Link>
             )
           })}
           {rows.length > shown.length && (
-            <Link href="/dashboard/insights/posts" style={{ flex: '0 0 120px', width: 120, height: 256, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Link href="/dashboard/insights/posts" style={{ flex: '0 0 120px', width: 120, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <span style={{ width: 34, height: 34, borderRadius: 11, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ChevronRight size={16} color={C.greenDk} />
               </span>
