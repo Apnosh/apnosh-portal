@@ -185,7 +185,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
       <div style={{ marginTop: 16, padding: '0 2px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
           <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }}>Coming up</span>
-          <Link href="/dashboard/insights/posts" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+          <Link href="/dashboard/insights/coming-up" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
             Open <ChevronRight size={13} />
           </Link>
         </div>
@@ -214,7 +214,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
             const rest = clean.slice(firstClause.length).replace(/^[\s.!?:—–-]+/, '')
             const caption = rest || clean
             return (
-              <Link key={r.id} href="/dashboard/insights/posts" style={{
+              <Link key={r.id} href="/dashboard/insights/coming-up" style={{
                 flex: '0 0 236px', width: 236, scrollSnapAlign: 'start', boxSizing: 'border-box', textDecoration: 'none', color: 'inherit',
                 borderRadius: 18, padding: 8, display: 'flex', flexDirection: 'column', gap: 0,
                 border: `0.5px solid ${C.line}`, background: '#fff',
@@ -243,7 +243,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
             )
           })}
           {rows.length > shown.length && (
-            <Link href="/dashboard/insights/posts" style={{ flex: '0 0 120px', width: 120, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Link href="/dashboard/insights/coming-up" style={{ flex: '0 0 120px', width: 120, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <span style={{ width: 34, height: 34, borderRadius: 11, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ChevronRight size={16} color={C.greenDk} />
               </span>
