@@ -34,6 +34,8 @@ export interface MetricToggle {
   /** which stage this metric feeds — shown as the row's sub-line */
   stageLabel: string
   providerLabel: string
+  /** the source's raw key (instagram, google_business_profile, …), for its logo on the row */
+  provider: string
   enabled: boolean
   /** an OPTIONAL metric: off by default, switching on adds it to the sums */
   optional: boolean
@@ -100,6 +102,7 @@ export async function listMetricToggles(selectedClientId?: string): Promise<Metr
           label: shortLabelFor(id),
           stageLabel: STAGE_NAMES[stage],
           providerLabel,
+          provider: def.provider,
           optional: kind === 'optional',
           enabled: kind === 'summed' ? !prefs.disabled.has(id) : prefs.enabled.has(id),
           available,

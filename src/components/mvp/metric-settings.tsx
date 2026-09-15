@@ -17,6 +17,10 @@ import { useClient } from '@/lib/client-context'
 import { listMetricToggles, setMetricToggle, type MetricToggleGroup } from '@/lib/metric-prefs-actions'
 import { C } from '@/components/mvp/mvp-detail'
 import MvpShell from '@/components/mvp/mvp-shell'
+import { BrandOrMark } from '@/components/mvp/mvp-insights'
+
+/* the logo a source wears on its row; the Google family shares the Google mark */
+const LOGO_OF: Record<string, string> = { google_business_profile: 'google', google_analytics: 'google', google_search_console: 'google', gbp: 'google' }
 
 const HREF = '/dashboard/insights/metrics'
 
@@ -102,42 +106,38 @@ export function MetricSettingsPage() {
                 <span style={{ width: 9, height: 9, borderRadius: 99, background: hue, flexShrink: 0 }} />
                 <span style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em' }}>{g.stageLabel}</span>
               </div>
-              {g.providers.map((pr, pi) => (
-                <div key={pr.providerLabel} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 4px 6px' }}>{pr.providerLabel}</div>
-                  <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
-                    {pr.items.map((it, ii) => (
-                      <div key={it.id}>
-                        {ii > 0 && <div style={{ height: '0.5px', background: 'rgba(0,0,0,.07)', marginLeft: 14 }} />}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px' }}>
-                          <span style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{it.label}</span>
-                            {(it.optional || !it.available) && (
-                              <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>
-                                {it.available ? 'Optional' : it.hint}
-                              </span>
-                            )}
-                          </span>
-                          {it.available ? (
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={it.enabled}
-                              aria-label={it.label}
-                              onClick={() => flip(gi, pi, ii)}
-                              style={{ flexShrink: 0, width: 46, height: 28, borderRadius: 99, border: 'none', cursor: 'pointer', background: it.enabled ? hue : '#d8dade', position: 'relative', transition: 'background .15s', padding: 0 }}
-                            >
-                              <span style={{ position: 'absolute', top: 3, left: it.enabled ? 21 : 3, width: 22, height: 22, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left .15s' }} />
-                            </button>
-                          ) : (
-                            <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: C.faint, letterSpacing: '.03em' }}>—</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              {/* FLAT ROWS (owner 2026-09-14): no provider headings and no card behind them. Each
+                  row carries its source's logo, the metric's name, and the switch, with a hairline
+                  between rows. */}
+              {g.providers.map((pr, pi) => pr.items.map((it, ii) => (
+                <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 2px', borderTop: pi === 0 && ii === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: it.available ? 1 : .45 }}>
+                    <BrandOrMark provider={LOGO_OF[it.provider] ?? it.provider} size={16} />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{it.label}</span>
+                    {(it.optional || !it.available) && (
+                      <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>
+                        {it.available ? 'Optional' : it.hint}
+                      </span>
+                    )}
+                  </span>
+                  {it.available ? (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={it.enabled}
+                      aria-label={it.label}
+                      onClick={() => flip(gi, pi, ii)}
+                      style={{ flexShrink: 0, width: 46, height: 28, borderRadius: 99, border: 'none', cursor: 'pointer', background: it.enabled ? hue : '#d8dade', position: 'relative', transition: 'background .15s', padding: 0 }}
+                    >
+                      <span style={{ position: 'absolute', top: 3, left: it.enabled ? 21 : 3, width: 22, height: 22, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .15s' }} />
+                    </button>
+                  ) : (
+                    <span style={{ flexShrink: 0, width: 46, textAlign: 'center', color: C.faint, fontSize: 13 }}>—</span>
+                  )}
                 </div>
-              ))}
+              )))}
             </div>
           )
         })}
