@@ -99,7 +99,8 @@ export default function ComingUpPage() {
 
   /* the week strip: seven days from today, a dot where something goes out */
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d })
-  const countOn = (d: Date) => (data?.waiting ?? []).filter((p) => dayKey(p.scheduledFor) === dayKey(d.toISOString().slice(0, 10) + 'T12:00:00')).length
+  const localKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` // local day, never the UTC one
+  const countOn = (d: Date) => (data?.waiting ?? []).filter((p) => dayKey(p.scheduledFor) === localKey(d)).length
   const byDay = new Map<string, Post[]>()
   for (const p of [...(data?.waiting ?? [])].sort((a, b) => String(a.scheduledFor ?? '9').localeCompare(String(b.scheduledFor ?? '9')))) { const k = dayKey(p.scheduledFor); byDay.set(k, [...(byDay.get(k) ?? []), p]) }
   const total = (data?.waiting.length ?? 0) + (data?.withTeam.length ?? 0)
