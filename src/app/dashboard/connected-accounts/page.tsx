@@ -95,6 +95,8 @@ export default function ConnectedAccountsPage() {
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<UnifiedConnection | null>(null)
   const [banner, setBanner] = useState<{ ok: boolean; text: string } | null>(null)
+  /* the social login the owner just came back from (platform + handle), read off the return URL */
+  const [justLinked, setJustLinked] = useState<{ platform: string; username: string | null } | null>(null)
   /* Ask the server what is actually configured instead of trusting the hardcoded
    * CATALOG (the pre-hardening onboarding bug: a hand-maintained constant nobody
    * updates when a key lands in Vercel). Fail OPEN — if the check itself fails,
@@ -143,25 +145,37 @@ export default function ConnectedAccountsPage() {
     if (vendor.status !== 'pending' && !cameBack && !freshlyLinked && staleMs < 10 * 60_000) return
     autoChecked.current = true
     ;(async () => {
-      setBanner({ ok: true, text: 'Checking your social login...' })
+      const who = justLinked ? `${SOCIAL_PLATFORM_LABEL[justLinked.platform] ?? 'Social'}${justLinked.username ? ` @${justLinked.username.replace(/^@/, '')}` : ''}` : null
+      setBanner({ ok: true, text: who ? `${who} connected. Checking the login...` : 'Checking your social login...' })
       const r = await syncConnection(vendor.source, vendor.id, clientId || undefined)
       if (r.success) {
-        setBanner({ ok: true, text: 'Linked. Pulling in your recent posts now.' })
+        setBanner({ ok: true, text: who ? `${who} connected. Pulling in your recent posts now.` : 'Linked. Pulling in your recent posts now.' })
         load()
       } else {
         /* say exactly where the chain is stuck — a silent card reads as broken */
         setBanner({ ok: false, text: r.error })
       }
     })()
-  }, [connections, loading, load, clientId])
+  }, [connections, loading, load, clientId, justLinked])
 
+  /* THE LOGIN THAT JUST HAPPENED (owner 2026-09-15: "it logged in and I could not tell it
+   * worked, so I tapped again and got the permissions screen"). Zernio sends the owner back
+   * with connected=<platform>&username=<handle> on the same URL as our ?connected=social. Say
+   * which account linked, by name, and show its row green at once — before the vendor's own
+   * account list and the first sync catch up — so there is nothing left to tap twice. */
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
     const NAME: Record<string, string> = { square: 'Square', clover: 'Clover', ayrshare: 'Social accounts', social: 'Social accounts' }
     const connected = p.get('connected')
+    const linkedPlatform = p.getAll('connected').find((v) => v !== 'social' && SOCIAL_PLATFORM_LABEL[v])
     const connectError = p.get('connect_error')
     const gbp = p.get('gbp')
-    if (connected && NAME[connected]) setBanner({ ok: true, text: `${NAME[connected]} connected. Your sales will show up shortly.` })
+    if (linkedPlatform) {
+      const username = p.get('username')
+      setJustLinked({ platform: linkedPlatform, username })
+      setBanner({ ok: true, text: `${SOCIAL_PLATFORM_LABEL[linkedPlatform]} connected${username ? `: @${username.replace(/^@/, '')}` : ''}. Pulling in your posts now.` })
+    }
+    else if (connected && NAME[connected]) setBanner({ ok: true, text: `${NAME[connected]} connected. Your sales will show up shortly.` })
     else if (connected) setBanner({ ok: true, text: 'Connected.' })
     else if (gbp === 'connected') setBanner({ ok: true, text: 'Google Business connected. Your numbers are on the way.' })
     else if (gbp === 'pending') setBanner({ ok: true, text: 'Google login worked. One step left: tap Google Business Profile below to finish.' })
@@ -187,7 +201,13 @@ export default function ConnectedAccountsPage() {
 
   /* Social vendor rows expand to one row per platform the owner has linked;
    * a vendor row with nothing linked yet stays visible as "Setting up". */
-  const display = expandSocial(connections)
+  const display = expandSocial(connections.map((c) => {
+    /* the platform that just linked reads as connected right away, even if the vendor's
+       account list has not caught up on this load */
+    if (!justLinked || c.source !== 'channel_connections' || !SOCIAL_VENDORS.includes(c.platform)) return c
+    if ((c.linkedPlatforms ?? []).includes(justLinked.platform)) return c
+    return { ...c, status: 'connected' as const, friendlyStatus: 'Connected', linkedPlatforms: [...(c.linkedPlatforms ?? []), justLinked.platform], accountCounts: { ...(c.accountCounts ?? {}), [justLinked.platform]: 1 }, accountName: justLinked.username ? `@${justLinked.username.replace(/^@/, '')}` : c.accountName }
+  }))
   const attention = display.filter(c => needsAttention(c.status))
   const ok = display.filter(c => !needsAttention(c.status))
   const connectedCount = display.filter(c => c.status === 'connected').length
