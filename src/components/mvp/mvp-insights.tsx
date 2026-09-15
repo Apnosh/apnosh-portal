@@ -1429,7 +1429,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
               screen could read "up 785%" here and "down 86%" there. */}
 
         </div>
-        {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
+        {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} customStart={cStart} customEnd={cEnd} />)}
       </div>
       {/* the range row sits between the stage list and the picked stage's graph (owner 2026-09-11) */}
       <div style={{ margin: '14px 0 6px' }}>{rangeRow}</div>
@@ -1442,7 +1442,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
   )
 }
 
-function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7 }: { smooth?: number; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
+function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7, customStart, customEnd }: { smooth?: number; customStart?: string; customEnd?: string; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
   // the row's total is the SAME by-source headline the Insights tab shows for this window
   // (the series' own sum can differ by definition); the % stays the series' read
   const { stage: rs } = useRangeStage(cs, stageNumber, clientId, range)
@@ -1459,7 +1459,14 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
   const pts = roll.map((v, i) => `${(i / Math.max(1, roll.length - 1)) * W},${H - 3 - (v / mx) * (H - 6)}`)
   const t0 = series.length ? trendDayMs(series[0].date) : 0, t1 = series.length ? trendDayMs(series[series.length - 1].date) : 1
   const pins = campaigns.map((c) => (c.shippedAt ? trendDayMs(c.shippedAt) : NaN)).filter((ms) => Number.isFinite(ms) && ms >= t0 && ms <= t1)
-  const dn = (sm?.deltaPct ?? 0) < 0
+  /* the row's percentage is the period's trend, the same number the graph below calls
+     "Trending up 33%", not this window against the one before it (owner 2026-09-14) */
+  const isCustom = range === 'custom' && !!customStart && !!customEnd
+  const winEnd = isCustom ? trendDayMs(customEnd!) : trendDayMs(localYmd())
+  const winStart = isCustom ? trendDayMs(customStart!) : winEnd - (days - 1) * DAY_MS
+  const winDays = raw.map((d) => ({ t: trendDayMs(d.date), v: d.value ?? 0 })).filter((d) => d.t >= winStart && d.t <= winEnd)
+  const trend = winDays.some((d) => d.v > 0) ? fitTrend(winDays, winEnd) : null // nothing counted → no verdict
+  const dn = (trend?.pct ?? 0) < 0
   /* the sparkline wears the stage's own colour (owner 2026-09-12); the % keeps the up/down colour */
   const rowCol = accent.main
   return (
@@ -1479,7 +1486,8 @@ function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, fir
       </span>
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
         <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{locked ? '0' : total != null ? total.toLocaleString() : DASH}</span>
-        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
+        {trend && !locked && Math.abs(trend.pct) >= 5 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(trend.pct) > 999 ? 'sharply' : `${Math.abs(trend.pct)}%`}</span>}
+        {trend && !locked && Math.abs(trend.pct) < 5 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: C.mute }}>steady</span>}
       </span>
     </button>
   )
@@ -1518,6 +1526,24 @@ function trendCompact(n: number): string { const v = Math.round(n); return v >= 
 // a trend instead of a jagged connect-the-dots.
 
 // mean of the daily series in [a, b) — the honest before/after read on a launch
+/** THE PERIOD'S TREND, one place (owner 2026-09-14: the stage rows' percentages are the same
+ *  number as "Trending up 33%" under the graph). A straight line fitted through the window's
+ *  reported days, leaving out the last three (still filling in) and the empty days before the
+ *  first real number; the verdict is where the line ends against where it starts. */
+const TREND_LAG_DAYS = 3
+function fitTrend(days: { t: number; v: number }[], endMs: number): { pct: number; a: number; b: number; start: number; end: number } | null {
+  const from = Math.max(0, days.findIndex((d) => d.v > 0))
+  const to = days.reduce((k, d, i) => (d.t <= endMs - TREND_LAG_DAYS * DAY_MS ? i : k), -1)
+  if (to - from + 1 < 5) return null
+  const ys = days.slice(from, to + 1).map((d) => d.v)
+  const n = ys.length, mx = (n - 1) / 2, my = ys.reduce((t, y) => t + y, 0) / n
+  let sxy = 0, sxx = 0
+  ys.forEach((y, i) => { sxy += (i - mx) * (y - my); sxx += (i - mx) * (i - mx) })
+  const slope = sxx > 0 ? sxy / sxx : 0
+  const start = my - slope * mx, end = my + slope * mx
+  return { pct: Math.round(((end - start) / Math.max(start, my * 0.1, 1)) * 100), a: from, b: to, start, end }
+}
+
 function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): { mean: number; n: number } {
   let sum = 0, n = 0
   for (const d of dayMs) { if (d.t >= a && d.t < b) { sum += d.v; n++ } }
@@ -1576,21 +1602,9 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
      still filling them in), and days before the first real number are left out (they are
      "not counted yet", not "quiet"). The fitted line is drawn, dashed, so the words match a
      line the owner can see. */
-  const LAG_DAYS = 3
-  const fitFrom = Math.max(0, days.findIndex((d) => d.v > 0))
-  const fitTo = days.reduce((k, d, i) => (d.t <= endMs - LAG_DAYS * DAY_MS ? i : k), -1)
-  const fitIdx = fitTo - fitFrom + 1 >= 5 ? { a: fitFrom, b: fitTo } : null
-  const fit = (() => {
-    if (!fitIdx) return null
-    const ys = days.slice(fitIdx.a, fitIdx.b + 1).map((d) => d.v)
-    const n = ys.length, mx = (n - 1) / 2, my = ys.reduce((t, y) => t + y, 0) / n
-    let sxy = 0, sxx = 0
-    ys.forEach((y, i) => { sxy += (i - mx) * (y - my); sxx += (i - mx) * (i - mx) })
-    const slope = sxx > 0 ? sxy / sxx : 0
-    const start = my - slope * mx, end = my + slope * mx
-    return { start, end, mean: my }
-  })()
-  const trendPct = fit ? Math.round(((fit.end - fit.start) / Math.max(fit.start, fit.mean * 0.1, 1)) * 100) : null
+  const fit = fitTrend(days, endMs)
+  const fitIdx = fit ? { a: fit.a, b: fit.b } : null
+  const trendPct = fit ? fit.pct : null
   /* the line wears its STAGE's own colour (owner 2026-09-12: back to the original colours after a
      day in the up/down verdict colours); the trending words still say the direction */
   const trendCol = A.main
