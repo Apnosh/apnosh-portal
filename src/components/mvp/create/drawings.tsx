@@ -199,6 +199,13 @@ export function Drawing({ spec, name, rating, now = false, t }: DrawProps): Reac
 /* Drawn at base size 12px; card and sheet scale the whole thing with `font-size` on `.dw`. */
 export const DRAW_CSS = `
 
+/* NO WORDS ON THE DRAWINGS (owner 2026-09-15): every label, name, price and caption is set in
+   transparent ink, so pills, rows and posters keep their shape and read as shapes. The only
+   "ink" left is the line drawing. */
+.cr .dw,.cr .dw *{color:transparent!important;text-shadow:none!important;-webkit-text-fill-color:transparent;user-select:none}
+.cr .dw .mf,.cr .dw .mf *{color:rgba(29,29,31,.34)!important}
+.cr .dw.story .mf,.cr .dw.story .mf *,.cr .dw.reel .mf,.cr .dw.reel .mf *{color:rgba(255,255,255,.5)!important}
+
 /* print */
 .cr .dw.print{padding:1em .9em .9em;background:#f5f5f7;min-height:9em}
 .cr .dw.print .tent{position:absolute;right:.8em;top:.8em;width:5.2em;height:3.6em;background:#fff;border-radius:.4em .4em 0 0;box-shadow:0 .4em 1em rgba(0,0,0,.12);transform:skewY(-6deg);display:flex;align-items:flex-end;padding:.4em;font-size:.7em;font-weight:700;color:#6e6e73}
