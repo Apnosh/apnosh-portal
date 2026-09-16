@@ -15,7 +15,7 @@ export type Scene =
   | 'site' | 'sitemenu' | 'order' | 'reserve' | 'sticky' | 'gift' | 'fix' | 'catering'
   | 'post' | 'story' | 'reel' | 'profile' | 'linkpage' | 'grid' | 'batch' | 'graphic' | 'photos' | 'creator' | 'ad' | 'ticket' | 'event' | 'calendar'
   | 'missed' | 'keyword' | 'dm' | 'waitlist' | 'email' | 'offer' | 'stamps' | 'review' | 'pin'
-  | 'print' | 'brand' | 'hours'
+  | 'print' | 'brand' | 'hours' | 'boost'
 export type GoogleFocus = 'photos' | 'menu' | 'buttons' | 'qa' | 'products' | 'gpost' | 'reviews' | 'all' | 'none'
 
 export interface DrawSpec { scene: Scene; focus?: GoogleFocus }
@@ -71,6 +71,7 @@ export interface DrawProps {
 
 /* the objects, one per scene, as static markup on a 100×100 grid (trusted, hand-drawn) */
 const OBJECTS: Record<Scene, string> = {
+  boost: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f2" x="36" y="21" width="28" height="30" rx="5"/><circle class="f3 ln" cx="50" cy="36" r="8"/><circle class="f1" cx="50" cy="36" r="3"/><rect class="f2" x="36" y="57" width="18" height="4" rx="2"/><rect class="f2" x="36" y="65" width="12" height="4" rx="2"/><circle class="f3 ln" cx="72" cy="20" r="9"/><path class="f1w2" d="M72 25v-9M68 20l4-4 4 4"/>`,
   post: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f2" x="36" y="21" width="28" height="30" rx="5"/><circle class="f3 ln" cx="50" cy="36" r="8"/><circle class="f1" cx="50" cy="36" r="3"/><rect class="f2" x="36" y="57" width="18" height="4" rx="2"/><rect class="f2" x="36" y="65" width="12" height="4" rx="2"/><circle class="f3 ln" cx="72" cy="20" r="8"/><path class="f1w" d="M72 24.5l-4.2-4.1a2.3 2.3 0 0 1 3.3-3.3l.9.9.9-.9a2.3 2.3 0 0 1 3.3 3.3z"/>`,
   reel: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f3" x="35" y="19" width="30" height="52" rx="5"/><path class="f1" d="M46 37l12 8-12 8z"/><circle class="f1" cx="60" cy="59" r="2.2"/><circle class="f1" cx="60" cy="51" r="2.2"/><circle class="f1" cx="60" cy="43" r="2.2"/>`,
   story: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f2" x="35" y="19" width="30" height="52" rx="5"/><rect class="f3" x="37" y="22" width="12" height="2.5" rx="1.25"/><rect class="f1" x="51" y="22" width="12" height="2.5" rx="1.25"/><rect class="f3 ln" x="38" y="46" width="24" height="12" rx="4" transform="rotate(-6 50 52)"/>`,

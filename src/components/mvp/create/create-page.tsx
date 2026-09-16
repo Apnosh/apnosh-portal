@@ -682,23 +682,25 @@ export default function CreatePage() {
      describe box with the first words typed. A tile whose card is not on the shelf is dropped,
      so nothing here opens onto "that one is not on the shelf". */
   type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
+  /* THE ROW IS VERBS FIRST (owner 2026-09-16): the seven things an owner does in a week, then the
+     things they ask the team for, each named in two words at most. */
   const QUICK_ALL: Quick[] = [
-    { hue: 'announce', t: T('Announce'), I: Megaphone, to: { ask: true }, scene: { scene: 'post' } },
+    { hue: 'announce', t: T('Announce'), I: Megaphone, to: { ask: true }, scene: { scene: 'ad' } },
+    { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' }, scene: { scene: 'post' } },
+    { hue: 'reviews', t: T('Reply'), I: Star, to: { href: '/dashboard/inbox' }, scene: { scene: 'dm' } },
     { hue: 'newfaces', t: T('Update'), I: Clock, to: { href: '/dashboard/business-info' }, scene: { scene: 'hours' } },
-    { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' }, scene: { scene: 'story' } },
-    { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' }, scene: { scene: 'ad' } },
-    { t: T('Event'), I: Ticket, to: { card: 'promoevent' }, scene: { scene: 'event' } },
+    { t: T('Slow night'), I: Tag, to: { card: cards.slowoffer ? 'slowoffer' : 'nights' }, scene: { scene: 'offer' } },
+    { hue: 'reviews', t: T('Get reviews'), I: Star, to: { card: 'reviewsplan' }, scene: { scene: 'review' } },
+    { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' }, scene: { scene: 'boost' } },
     { t: T('Graphic'), I: ImageIcon, to: { card: 'creative-graphic' }, scene: { scene: 'graphic' } },
     { t: T('Video'), I: Video, to: { card: 'creative-video' }, scene: { scene: 'reel' } },
     { t: T('Photos'), I: Camera, to: { card: 'creative-photos' }, scene: { scene: 'photos' } },
     { t: T('Print'), I: Tag, to: { card: 'creative-print' }, scene: { scene: 'print' } },
     { t: T('Branding'), I: Tag, to: { card: 'creative-logo' }, scene: { scene: 'brand' } },
     { t: T('Website'), I: Store, to: { card: 'creative-website' }, scene: { scene: 'site' } },
-    { t: T('Influencers'), I: Users, to: { card: 'creator' }, scene: { scene: 'creator' } },
-    { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' }, scene: { scene: 'ad' } },
-    { hue: 'reviews', t: T('Reviews'), I: Star, to: { href: '/dashboard/review-replies' }, scene: { scene: 'review' } },
-    { t: T('Deal'), I: Tag, to: { card: 'slowoffer' }, scene: { scene: 'offer' } },
     { t: T('Email'), I: Mail, to: { card: 'creative-email' }, scene: { scene: 'email' } },
+    { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' }, scene: { scene: 'ad' } },
+    { t: T('Influencers'), I: Users, to: { card: 'creator' }, scene: { scene: 'creator' } },
   ]
   const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
   function quickGo(x: Quick) {
