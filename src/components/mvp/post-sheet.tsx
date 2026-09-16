@@ -109,7 +109,8 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
   /* A platform that does not report these sends ZEROES, not nulls (TikTok sends every Meta-only
      field as 0). A row of four zeroes is "not reported", and prints as nothing; one real zero
      among real numbers still prints. Same rule for the watch figures below. */
-  const ledToShown = ledTo.some((x) => (x.n ?? 0) > 0) ? ledTo : []
+  const metaHere = rows.some((x) => x.platform === 'instagram' || x.platform === 'facebook')
+  const ledToShown = ledTo.some((x) => (x.n ?? 0) > 0) || metaHere ? ledTo : []
   /* how they watched: the first platform that reported it (a reel is one platform's reel) */
   const watched = rows.map((x) => x.stats).find((s) => s && (s.completionRate != null || s.skipRate != null || s.avgWatchSec != null)) ?? null
   const completion = pct(watched?.completionRate)
@@ -217,15 +218,15 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
         <div style={{ display: 'flex', gap: 14, padding: '0 16px', alignItems: 'stretch' }}>
           <div style={{ width: '46%', flexShrink: 0, position: 'relative', aspectRatio: '4 / 5', borderRadius: 18, overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4', boxShadow: '0 8px 24px rgba(0,0,0,.12)' }}>
             {!best.thumbnailUrl && <><span style={{ position: 'absolute', inset: 0, background: hero, opacity: .18 }} /><span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><ImageIcon size={24} color={C.faint} /></span></>}
-            {/* the kit's frosted pill, on the picture: where it went */}
-            <span style={{ position: 'absolute', left: 8, bottom: 8, display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 6px', borderRadius: 99, background: 'rgba(255,255,255,.82)', backdropFilter: 'saturate(180%) blur(12px)', WebkitBackdropFilter: 'saturate(180%) blur(12px)' }}>
-              {platforms.slice(0, 4).map((pl, i) => <span key={pl} style={{ marginLeft: i ? -6 : 0, width: 18, height: 18, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={pl} size={10} /></span>)}
+            {/* where it went: the network marks, the way the tiles wear them */}
+            <span style={{ position: 'absolute', left: 8, bottom: 8, display: 'inline-flex' }}>
+              {platforms.slice(0, 4).map((pl, i) => <span key={pl} style={{ marginLeft: i ? -7 : 0, width: 24, height: 24, borderRadius: 99, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={pl} size={13} /></span>)}
             </span>
           </div>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingTop: 6 }}>{kind}{date ? ` · ${date}` : ''}</span>
-              <button type="button" onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 99, border: 'none', background: C.bg, color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={15} /></button>
+              <button type="button" onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={15} /></button>
             </div>
             <div style={{ marginTop: 6 }}>
               {/* the number, the word and the comparison on one line (owner 2026-09-15) */}
@@ -241,7 +242,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
             </div>
             {/* the caption, under the comparison (owner 2026-09-15), as its own card so it reads as the post's words */}
             {/* the caption card carries the four counts at its foot (owner 2026-09-15) */}
-            <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 12, background: C.bg, minHeight: 0 }}>
+            <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 12, background: '#fff', border: `0.5px solid ${C.line}`, minHeight: 0 }}>
               {best.caption && <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: best.caption ? 8 : 0, paddingTop: best.caption ? 8 : 0, borderTop: best.caption ? `1px solid ${C.line}` : 'none' }}>
                 {stats.map((s) => (
@@ -261,7 +262,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
             <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: C.ink }}>
               <TrendingUp size={15} /> Boost
             </Link>
-            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: C.bg }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
+            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: '#fff', border: `0.5px solid ${C.line}` }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
           </div>
         </div>
 
@@ -283,7 +284,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           <div style={{ margin: '18px 16px 0' }}>
             <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>What it led to</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-              {ledToShown.map((x) => <span key={x.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 11px', borderRadius: 99, background: C.bg, fontSize: 12.5, color: C.ink }}><x.Icon size={13} color={C.mute} /><b style={{ fontWeight: 700 }}>{compact(x.n ?? 0)}</b> {x.label.toLowerCase()}</span>)}
+              {ledToShown.map((x) => <span key={x.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 11px', borderRadius: 99, background: '#fff', border: `0.5px solid ${C.line}`, fontSize: 12.5, color: C.ink }}><x.Icon size={13} color={C.mute} /><b style={{ fontWeight: 700 }}>{compact(x.n ?? 0)}</b> {x.label.toLowerCase()}</span>)}
             </div>
           </div>
         )}
@@ -335,7 +336,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           )}
           {read?.summary && <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.45, marginTop: 10, padding: '10px 12px', borderRadius: 12, background: C.greenSoft }}>{read.summary}</div>}
           {cErr && !mine && <div style={{ fontSize: 13, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>{cErr}</div>}
-          {!cErr && !mine && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>{[0, 1].map((i) => <div key={i} style={{ height: 52, borderRadius: 14, background: C.bg }} />)}</div>}
+          {!cErr && !mine && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>{[0, 1].map((i) => <div key={i} style={{ height: 52, borderRadius: 14, background: '#fff', border: `0.5px solid ${C.line}` }} />)}</div>}
           {mine && mine.length === 0 && <div style={{ fontSize: 13, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>No comments on this one yet.</div>}
           {sendErr && <div style={{ fontSize: 12.5, color: C.coral, marginTop: 10 }}>{sendErr}</div>}
           <div style={{ marginTop: 6 }}>
@@ -362,7 +363,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
                     </span>
                   </div>
                   {wants && (
-                    <div style={{ margin: '10px 0 0 40px', padding: '10px 10px 10px 12px', borderRadius: 14, background: C.bg }}>
+                    <div style={{ margin: '10px 0 0 40px', padding: '10px 10px 10px 12px', borderRadius: 14, background: '#fff', border: `0.5px solid ${C.line}` }}>
                       <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.greenDk }}>{!answered && it?.reply ? 'Suggested reply' : 'Your reply'}</div>
                       <textarea value={drafts[c.id] ?? ''} onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))} rows={2} placeholder={`Reply to ${(c.authorName || 'them').replace(/^@/, '')}…`} autoFocus={open.has(c.id)}
                         style={{ display: 'block', width: '100%', marginTop: 4, border: 0, outline: 0, resize: 'none', background: 'none', font: 'inherit', fontSize: 13.5, lineHeight: 1.45, color: C.ink, padding: 0, boxSizing: 'border-box' }} />
