@@ -325,8 +325,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
         {(!rows.every((x) => x.platform === 'tiktok') || (mine && mine.length > 0)) && (
         <div style={{ margin: '20px 16px 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>What people said</div>
-            {mine && mine.length > 0 && <span style={{ fontSize: 12, color: C.mute }}>{mine.length} {mine.length === 1 ? 'comment' : 'comments'}</span>}
+            <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>Comments</div>
             {reading && <Loader2 size={13} color={C.faint} className="mvp-spin" style={{ marginLeft: 'auto' }} />}
           </div>
           {mine && mine.length > 0 && read && (
@@ -334,7 +333,6 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
               {(['love', 'question', 'complaint'] as CommentTone[]).filter((t) => counts[t] > 0).map((t) => <span key={t} style={{ fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 99, background: TONE[t].bg, color: TONE[t].ink }}>{counts[t]} {t === 'love' ? 'love it' : t === 'question' ? (counts[t] === 1 ? 'question' : 'questions') : (counts[t] === 1 ? 'complaint' : 'complaints')}</span>)}
             </div>
           )}
-          {read?.summary && <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.45, marginTop: 10, padding: '10px 12px', borderRadius: 12, background: C.greenSoft }}>{read.summary}</div>}
           {cErr && !mine && <div style={{ fontSize: 13, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>{cErr}</div>}
           {!cErr && !mine && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>{[0, 1].map((i) => <div key={i} style={{ height: 52, borderRadius: 14, background: '#fff', border: `0.5px solid ${C.line}` }} />)}</div>}
           {mine && mine.length === 0 && <div style={{ fontSize: 13, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>No comments on this one yet.</div>}
