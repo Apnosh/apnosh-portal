@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { idsKey, readCache, writeCache } from '@/lib/client-cache'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -44,6 +45,14 @@ export async function POST(req: NextRequest) {
     .slice(0, MAX_COMMENTS)
     .map((c) => ({ id: String(c.id), text: String(c.text).slice(0, MAX_TEXT), author: String(c.author ?? '').slice(0, 60) }))
   if (comments.length === 0) return NextResponse.json({ summary: '', items: [] })
+
+  /* THE READ IS KEPT FOR A DAY (owner 2026-09-15: the section should load at once). The same
+     set of comments under the same caption reads the same; the answer lives in client_cache
+     under a key made from the comment ids, so the second open of a post, or of the Reputation
+     section, never waits on the model. A new comment changes the key and reads afresh. */
+  const cacheKey = `comment-read:v1:${idsKey(comments.map((c) => c.id))}:${String(body.caption ?? '').length}`
+  const hit = await readCache<{ summary: string; items: CommentReadItem[] }>(clientId, cacheKey)
+  if (hit && hit.ageMs < 24 * 60 * 60_000 && Array.isArray(hit.payload.items)) return NextResponse.json(hit.payload)
 
   const admin = createAdminClient()
   const { data: clientRow } = await admin.from('clients').select('name').eq('id', clientId).maybeSingle()
@@ -81,7 +90,9 @@ Answer with JSON only, exactly: {"summary": string, "items": [{"id": string, "to
         why: typeof x.why === 'string' ? x.why.slice(0, 80) : '',
         reply: typeof x.reply === 'string' && x.reply.trim() ? x.reply.trim().slice(0, 400) : null,
       }))
-    return NextResponse.json({ summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 200) : '', items })
+    const out = { summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 200) : '', items }
+    await writeCache(clientId, cacheKey, out)
+    return NextResponse.json(out)
   } catch (e) {
     /* The owner-facing text is fixed. The vendor's own message goes to the log, where it is
        useful, and never to a restaurant, where it is not. */

@@ -19,7 +19,10 @@
  * look, rather than leaving a guessed shape to fail quietly in a list.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
+import { readCache, writeCache, dropCache } from '@/lib/client-cache'
+
+const COMMENTS_KEY = 'social-comments:v1'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { listComments, replyToComment, diagnoseComments, describeEndpoint } from '@/lib/channels/adapters/zernio'
 
@@ -77,18 +80,35 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  try {
+  /* SERVED FROM THE CACHE FIRST (owner 2026-09-15: "it still takes a while to load the
+     comments"). The vendor list costs a round trip per post. The last answer is kept per
+     client (client_cache, migration 266): a copy under ten minutes old is served as it is, and
+     one older than two minutes is refreshed in the background after answering. A reply sent
+     from here or a comment.received webhook drops the copy, so a change shows on the next open.
+     Without the table every open is live, exactly as before. */
+  const FRESH_MS = 10 * 60_000, SOFT_MS = 2 * 60_000
+  const build = async () => {
     const all = await listComments(clientId, 100)
     /* Unanswered first, newest within each group. The queue exists to be worked,
        and a comment already handled is history, not a task. */
     const rank = (c: (typeof all)[number]) => (c.replied ? 1 : 0)
     const comments = all.sort((a, b) =>
       rank(a) - rank(b) || String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
-    return NextResponse.json(
-      { comments, unanswered: comments.filter((c) => !c.replied).length },
-      { headers: { 'Cache-Control': 'no-store' } },
-    )
+    const body = { comments, unanswered: comments.filter((c) => !c.replied).length }
+    await writeCache(clientId, COMMENTS_KEY, body)
+    return body
+  }
+  const hit = await readCache<{ comments: unknown[]; unanswered: number }>(clientId, COMMENTS_KEY)
+  if (hit && hit.ageMs < FRESH_MS) {
+    if (hit.ageMs > SOFT_MS) after(async () => { try { await build() } catch { /* the next open tries again */ } })
+    return NextResponse.json({ ...hit.payload, cachedAt: hit.computedAt }, { headers: { 'Cache-Control': 'no-store' } })
+  }
+  try {
+    const body = await build()
+    return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
+    /* a stale copy beats an error while the vendor is slow */
+    if (hit) return NextResponse.json({ ...hit.payload, cachedAt: hit.computedAt, stale: true }, { headers: { 'Cache-Control': 'no-store' } })
     /* Fail loud with the vendor's own words. A silent empty list here would read
        as "nobody has commented", which is a different and much worse claim. */
     const msg = e instanceof Error ? e.message : 'Could not load comments'
@@ -116,6 +136,8 @@ export async function POST(req: NextRequest) {
   }
   try {
     await replyToComment(clientId, { postId, accountId, commentId, text: text.trim() })
+    /* the cached list now says the wrong thing about this comment; the next open rebuilds it */
+    await dropCache(clientId, COMMENTS_KEY)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not post the reply' }, { status: 502 })

@@ -191,8 +191,21 @@ async function handle(event: string, body: Payload, admin: Admin): Promise<strin
     case 'review.new':
     case 'review.updated':
     case 'lead.received':
-    case 'comment.received':
       return 'recorded, no handler yet'
+
+    /* A new comment: the client's cached comment list is now behind, so drop it and the next
+       open of the Reputation section or a post sheet rebuilds it live. The profile id in the
+       event names the client through their zernio connection row. */
+    case 'comment.received': {
+      const ev = body as unknown as { profileId?: unknown; profile_id?: unknown; data?: { profileId?: unknown } }
+      const profileId = String(ev.profileId ?? ev.profile_id ?? ev.data?.profileId ?? '')
+      if (!profileId) return 'recorded, no profile id on the event'
+      const { data: conn } = await admin.from('channel_connections').select('client_id').eq('channel', 'zernio').eq('platform_account_id', profileId).maybeSingle()
+      if (!conn?.client_id) return 'recorded, no client for that profile'
+      const { dropCache } = await import('@/lib/client-cache')
+      await dropCache(String(conn.client_id), 'social-comments:v1')
+      return 'comment cache dropped'
+    }
 
     case 'webhook.test':
       return 'test received'
