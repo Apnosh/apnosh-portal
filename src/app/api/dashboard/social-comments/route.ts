@@ -86,7 +86,11 @@ export async function GET(req: NextRequest) {
      one older than two minutes is refreshed in the background after answering. A reply sent
      from here or a comment.received webhook drops the copy, so a change shows on the next open.
      Without the table every open is live, exactly as before. */
-  const FRESH_MS = 10 * 60_000, SOFT_MS = 2 * 60_000
+  /* ANY copy is served at once (owner 2026-09-15: "still about 15 seconds"): the ten-minute
+     rule meant an owner who opens the page a few times a day paid the vendor's wait every
+     time. Now a copy up to a week old paints immediately and the vendor is asked again in the
+     background once it is over two minutes old; a reply or a new comment drops it outright. */
+  const FRESH_MS = 7 * 24 * 60 * 60_000, SOFT_MS = 2 * 60_000
   const build = async () => {
     const all = await listComments(clientId, 100)
     /* Unanswered first, newest within each group. The queue exists to be worked,

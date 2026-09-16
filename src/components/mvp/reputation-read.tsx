@@ -22,7 +22,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Check, ChevronRight, Loader2, MessageCircle, Send, Sparkles, Star } from 'lucide-react'
 import { C, DISPLAY } from './tokens'
-import { loadComments, type CommentRow } from './mvp-inbox'
+import { cachedComments, loadComments, type CommentRow } from './mvp-inbox'
 import { useSharedRange } from './mvp-home'
 import type { CommentReadItem, CommentTone } from '@/app/api/dashboard/comment-read/route'
 
@@ -123,7 +123,8 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
   const [summary, setSummary] = useState<Summary | null>(() => (demo ? DEMO.summary : null))
   const [topics, setTopics] = useState<Topics | null>(() => (demo ? DEMO.topics : null))
   const [topicsLoading, setTopicsLoading] = useState(!demo)
-  const [comments, setComments] = useState<CommentRow[] | null>(() => (demo ? DEMO.comments : null))
+  /* the last comment list this browser saw paints at once; the fetch below replaces it */
+  const [comments, setComments] = useState<CommentRow[] | null>(() => (demo ? DEMO.comments : (typeof window !== 'undefined' && clientId ? cachedComments(clientId) : null)))
   const [commentsErr, setCommentsErr] = useState(false)
   const [read, setRead] = useState<CommentRead | null>(() => (demo ? DEMO.read : null))
   const [queue, setQueue] = useState<Queue | null>(() => (demo ? DEMO.queue : null))
