@@ -211,50 +211,53 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
         style={{ width: '100%', maxWidth: 480, maxHeight: '90dvh', overflowY: 'auto', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 0 calc(24px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.2)', position: 'relative', isolation: 'isolate' }}>
         <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
 
-        {/* ── THE POSTER (owner 2026-09-15: "A, with more detail as you scroll"). The post itself,
-            big, with the networks and date on it. Then one number, one sentence on how it
-            compares, four small counts, the caption, two buttons. The detail sections follow
-            below, unchanged, for whoever keeps scrolling. ── */}
-        <div style={{ margin: '0 12px', position: 'relative', aspectRatio: '4 / 5', maxHeight: 440, borderRadius: 22, overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4', boxShadow: '0 10px 30px rgba(0,0,0,.14)' }}>
-          {!best.thumbnailUrl && <><span style={{ position: 'absolute', inset: 0, background: hero, opacity: .18 }} /><span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><ImageIcon size={28} color={C.faint} /></span></>}
-
-          <button type="button" onClick={onClose} aria-label="Close" style={{ position: 'absolute', right: 10, top: 10, width: 32, height: 32, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.88)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
-          {/* the kit's frosted pill, on the picture: where it went and when */}
-          <span style={{ position: 'absolute', left: 10, bottom: 10, display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px 0 6px', borderRadius: 99, background: 'rgba(255,255,255,.82)', backdropFilter: 'saturate(180%) blur(12px)', WebkitBackdropFilter: 'saturate(180%) blur(12px)', color: C.ink, fontSize: 12, fontWeight: 600, maxWidth: 'calc(100% - 20px)' }}>
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}>{platforms.slice(0, 4).map((pl, i) => <span key={pl} style={{ marginLeft: i ? -6 : 0, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={pl} size={11} /></span>)}</span>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kind}{date ? ` · ${date}` : ''}{multi ? ` · ${platforms.map(name).join(', ')}` : ''}</span>
-          </span>
+        {/* ── THE POSTER, TWO UP (owner 2026-09-15: "make use of the space better"). The post on
+            the left, the numbers beside it on the right, so the first screen holds the picture,
+            the number, the sentence and the four counts without a scroll. Caption and buttons
+            under the pair; the detail sections follow for whoever keeps going. ── */}
+        <div style={{ display: 'flex', gap: 14, padding: '0 16px', alignItems: 'stretch' }}>
+          <div style={{ width: '46%', flexShrink: 0, position: 'relative', aspectRatio: '4 / 5', borderRadius: 18, overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4', boxShadow: '0 8px 24px rgba(0,0,0,.12)' }}>
+            {!best.thumbnailUrl && <><span style={{ position: 'absolute', inset: 0, background: hero, opacity: .18 }} /><span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><ImageIcon size={24} color={C.faint} /></span></>}
+            {/* the kit's frosted pill, on the picture: where it went */}
+            <span style={{ position: 'absolute', left: 8, bottom: 8, display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 6px', borderRadius: 99, background: 'rgba(255,255,255,.82)', backdropFilter: 'saturate(180%) blur(12px)', WebkitBackdropFilter: 'saturate(180%) blur(12px)' }}>
+              {platforms.slice(0, 4).map((pl, i) => <span key={pl} style={{ marginLeft: i ? -6 : 0, width: 18, height: 18, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={pl} size={10} /></span>)}
+            </span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingTop: 6 }}>{kind}{date ? ` · ${date}` : ''}</span>
+              <button type="button" onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 99, border: 'none', background: C.bg, color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={15} /></button>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontFamily: DISPLAY, fontSize: 36, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: C.ink }}>{counted ? views.toLocaleString() : DASH}</div>
+              <div style={{ fontSize: 13, color: C.mute, marginTop: 4 }}>{counted ? 'people saw it' : (rows.every((x) => x.unreported) ? 'no view count for this kind' : 'still counting')}</div>
+              {counted && ratio != null && (
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 6, lineHeight: 1.4 }}>
+                  <span style={{ color: ratio >= 1.2 ? '#1fc47a' : ratio <= 0.6 ? '#ec1528' : C.ink, fontWeight: 700 }}>{ratio >= 1.2 ? '▲ ' : ratio <= 0.6 ? '▼ ' : ''}{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}×</span> your usual{isBest ? ' · your best here' : ''}
+                </div>
+              )}
+            </div>
+            {/* the four, two by two, pushed to the bottom of the column */}
+            <div style={{ marginTop: 'auto', paddingTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 10px' }}>
+              {stats.map((s) => (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <s.Icon size={13} color={C.faint} style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 15, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
+                  <span style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label.toLowerCase()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-
-        {/* ── one number, one sentence, in the kit's ink ── */}
-        <div style={{ padding: '18px 20px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: C.ink }}>{counted ? views.toLocaleString() : DASH}</span>
-            <span style={{ fontSize: 14, color: C.mute }}>{counted ? 'people saw it' : ''}</span>
-            {isBest && <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, padding: '4px 9px', borderRadius: 99, alignSelf: 'center' }}>Your best here</span>}
-          </div>
-          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>
-            {!counted ? (rows.every((x) => x.unreported) ? 'This kind of post does not report views.' : 'Still counting. Numbers land within a day.')
-              : ratio != null ? <><span style={{ color: ratio >= 1.2 ? '#1fc47a' : ratio <= 0.6 ? '#ec1528' : C.ink, fontWeight: 700 }}>{ratio >= 1.2 ? '▲ ' : ratio <= 0.6 ? '▼ ' : ''}{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}×</span> what your posts usually do</>
-              : 'A few more posts and this will say how it compares.'}
-          </div>
-          {/* the four, small, one line, with the kit's icons */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
-            {stats.map((s) => (
-              <div key={s.label}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><s.Icon size={13} color={C.faint} /><span style={{ fontSize: 17, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span></div>
-                <div style={{ fontSize: 11, color: C.faint, marginTop: 1 }}>{s.label.toLowerCase()}</div>
-              </div>
-            ))}
-          </div>
-          {best.caption && <div style={{ marginTop: 14, fontSize: 13, color: C.mute, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
+        <div style={{ padding: '12px 16px 0' }}>
+          {best.caption && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
           {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
               this post already picked, by the vendor's own post id. */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: C.ink }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: best.caption ? 12 : 0 }}>
+            <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: C.ink }}>
               <TrendingUp size={15} /> Boost
             </Link>
-            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: C.bg }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
+            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: C.bg }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
           </div>
         </div>
 
