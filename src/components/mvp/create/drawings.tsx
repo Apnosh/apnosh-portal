@@ -1,12 +1,12 @@
 /**
- * THE DRAWINGS (owner 2026-09-14): every card on Create carries a small picture of what the
- * owner will HAVE when it is done, and the picture is specific to the card. "Menu on Google" is
- * their Google card with the menu section lit. "Find us" is the map with the pin on the door.
- * "Missed-call text back" is the missed call and the text that answers it. Each scene is drawn
- * in HTML from the owner's own name, rating and newest photo; the part the card changes wears
- * a ring in the stage colour (`.fx`). Nothing is invented: a line we do not know is a grey bar.
+ * THE DRAWINGS (owner 2026-09-15, "use those"): one object per thing, not a tiny screen.
+ * ==========================================================================================
+ * Every card, tile and sheet draws ONE object in one hand: a white body with an ink line, one
+ * light panel tone and one accent in the stage colour, standing on the same floor shadow, on a
+ * 100×100 grid. No words on any of them. The duotone set the owner picked ("A, redrawn").
  *
- * Client-safe, no data fetching: the page passes what it has.
+ * Colour comes from the stage the object sits on: --c2 (the stage's dark) is the accent,
+ * the panel tone mixes it with white. A greyed "now" state is the same drawing desaturated.
  */
 import type { ReactNode } from 'react'
 
@@ -22,7 +22,7 @@ export interface DrawSpec { scene: Scene; focus?: GoogleFocus }
 
 /** card id → what to draw. Anything not here falls back by channel (see sceneFor). */
 export const DRAW_BY_ID: Record<string, DrawSpec> = {
-  gbp: { scene: 'google', focus: 'photos' }, gmenu: { scene: 'google', focus: 'menu' }, friction: { scene: 'google', focus: 'buttons' },
+  gbp: { scene: 'google', focus: 'photos' }, gmenu: { scene: 'sitemenu' }, friction: { scene: 'google', focus: 'buttons' },
   gattrs: { scene: 'google', focus: 'qa' }, gfindus: { scene: 'pin' }, gproducts: { scene: 'google', focus: 'products' },
   gpostbtn: { scene: 'google', focus: 'gpost' }, gpost: { scene: 'google', focus: 'gpost' }, gbpmgmt: { scene: 'google', focus: 'gpost' },
   localseo: { scene: 'search' }, reviewsplan: { scene: 'review' }, reviewsreply: { scene: 'review' }, measure: { scene: 'chart' },
@@ -32,7 +32,7 @@ export const DRAW_BY_ID: Record<string, DrawSpec> = {
   catering: { scene: 'catering' }, cateringengine: { scene: 'catering' },
   story: { scene: 'story' }, linksticker: { scene: 'story' }, reel: { scene: 'reel' }, edit: { scene: 'reel' }, 'creative-video': { scene: 'reel' },
   dish: { scene: 'post' }, tapposts: { scene: 'post' }, 'b-weekly': { scene: 'post' },
-  graphic: { scene: 'graphic' }, design: { scene: 'graphic' }, 'creative-graphic': { scene: 'graphic' }, 'creative-print': { scene: 'print' }, 'creative-menu': { scene: 'graphic' }, 'creative-logo': { scene: 'brand' }, 'creative-copy': { scene: 'graphic' },
+  graphic: { scene: 'graphic' }, design: { scene: 'graphic' }, 'creative-graphic': { scene: 'graphic' }, 'creative-print': { scene: 'print' }, 'creative-menu': { scene: 'sitemenu' }, 'creative-logo': { scene: 'brand' }, 'creative-copy': { scene: 'graphic' },
   'creative-photos': { scene: 'photos' }, shoot: { scene: 'photos' },
   'creative-social': { scene: 'batch' }, socialmgmt: { scene: 'batch' }, launch: { scene: 'batch' },
   socialprofiles: { scene: 'profile' }, igbuttons: { scene: 'profile' }, 'b-social': { scene: 'profile' }, onelink: { scene: 'linkpage' }, pinned: { scene: 'grid' },
@@ -61,375 +61,68 @@ export function sceneFor(id: string, channels: string[]): DrawSpec {
 
 export interface DrawProps {
   spec: DrawSpec
-  /** the owner's business name */
+  /** kept for callers; the drawings carry no words */
   name: string
-  /** "4.7 · 312 reviews" when known, else a plain word */
   rating: string
-  /** the "now" state for a before/after: greyed, the thing missing */
+  /** the "now" state for a before/after: the same object, greyed */
   now?: boolean
   t: (s: string) => string
 }
 
-const Bar = ({ w = '70%' }: { w?: string }) => <b className="bar" style={{ width: w }} />
-
-/** THE LINE DRAWINGS (owner 2026-09-15: "each should have some time taken into it"). Every photo
- *  slot used to be a warm colour blob. Now each slot is a quiet two-tone wash with one thin line
- *  drawing on it, chosen for the scene: a plate on a post, a bowl behind a reel, a storefront on
- *  the listing, six different dishes on the photo shoot. Stroke only, in the ink at low alpha. */
-export type Motif = 'plate' | 'bowl' | 'cup' | 'sando' | 'slice' | 'drink' | 'store' | 'taco'
-const MOTIF_PATHS: Record<Motif, ReactNode> = {
-  plate: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /></>,
-  bowl: <><path d="M3 10.5h18a9 9 0 0 1-18 0z" /><path d="M8 20h8" /><path d="M10 4c0 1.5-1 1.5-1 3M14 4c0 1.5-1 1.5-1 3" /></>,
-  cup: <><rect x="4" y="7" width="11" height="10" rx="2.5" /><path d="M15 10h1.5a2.5 2.5 0 0 1 0 5H15" /><path d="M3 20h14" /></>,
-  sando: <><path d="M4 10a8 5 0 0 1 16 0H4z" /><rect x="4" y="11.5" width="16" height="3" rx="1.5" /><rect x="4" y="16" width="16" height="3" rx="1.5" /></>,
-  slice: <><path d="M12 3 4 19.5h16z" /><circle cx="10" cy="14" r="1" /><circle cx="14" cy="15.5" r="1" /><circle cx="12" cy="10" r="1" /></>,
-  drink: <><path d="M7 4h10l-1.4 15H8.4z" /><path d="M8 10h8" /><path d="M13.5 2.5 17 8" /></>,
-  store: <><path d="M4 9.5 5.5 5h13L20 9.5" /><path d="M3.5 9.5a1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0" /><path d="M5 11v9h14v-9" /><path d="M10 20v-6h4v6" /></>,
-  taco: <><path d="M3 14.5a9 9 0 0 1 18 0V17H3z" /><path d="M7 14.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0" /></>,
-}
-const MotifMark = ({ k }: { k: Motif }) => (
-  <span className="mf" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{MOTIF_PATHS[k]}</svg></span>
-)
-
-export function Drawing({ spec, name, rating, now = false, t }: DrawProps): ReactNode {
-  /* the photo slots are drawn, not fetched (owner 2026-09-14): a plate, a bowl, a drink, a table, in
-     warm tones, so no one else's post and no words end up on a card */
-  const v = `p${((spec.scene.length + (spec.focus?.length ?? 0)) % 4) + 1}`
-  const slot = (k: Motif, extra = '') => <div className={`ph ${v}${extra ? ` ${extra}` : ''}`}><MotifMark k={k} /></div>
-  const ph = slot('plate')
-  const fx = (k: GoogleFocus) => (!now && (spec.focus === k || spec.focus === 'all') ? ' fx' : '')
-  const cls = `dw ${spec.scene}${now ? ' now' : ''}`
-  switch (spec.scene) {
-    case 'google': {
-      const f = spec.focus ?? 'none'
-      /* a card about one section of the listing shows a shorter photo strip, so the section it lights is in view */
-      const compact = f === 'menu' || f === 'qa' || f === 'products' || f === 'gpost'
-      return (
-        <div className={`${cls}${compact ? ' compact' : ''}`}>
-          <div className={`strip${fx('photos')}`}>{slot('store')}<div className="ph2 food p2"><MotifMark k="plate" /></div><div className="ph3 food p3"><MotifMark k="bowl" /></div></div>
-          <div className="nm">{name}</div><div className="mt">{rating}</div>
-          {now && f === 'buttons' ? <div className="btns dim"><i>{t('Directions')}</i><i>{t('Website')}</i></div>
-            : <div className={`btns${fx('buttons')}`}><i>{t('Menu')}</i><i className="on">{t('Order')}</i><i className="on">{t('Reserve')}</i><i>{t('Call')}</i></div>}
-          {f === 'menu' || f === 'all' ? (now ? <div className="nomenu">{t('No menu added')}</div> : <div className={`menu${fx('menu')}`}><div><Bar w="62%" /><b className="pr">$13</b></div><div><Bar w="48%" /><b className="pr">$11</b></div></div>) : null}
-          {f === 'qa' ? (now ? <div className="nomenu">{t('4 questions, no answer')}</div> : <div className={`qa${fx('qa')}`}><div><span>{t('Do you have parking?')}</span><em>{t('Yes, behind the building.')}</em></div><div><span>{t('Kids welcome?')}</span><em>{t('Always.')}</em></div></div>) : null}
-          {f === 'products' ? <div className={`prods${fx('products')}`}><div className="pd"><i><MotifMark k="sando" /></i><span>{t('Catering')}</span></div><div className="pd"><i><MotifMark k="cup" /></i><span>{t('Gift cards')}</span></div><div className="pd"><i><MotifMark k="store" /></i><span>{t('Private room')}</span></div></div> : null}
-          {f === 'gpost' ? <div className={`gpost${fx('gpost')}`}><i><MotifMark k="plate" /></i><div><Bar w="80%" /><Bar w="55%" /><em>{t('Order online')}</em></div></div> : null}
-        </div>
-      )
-    }
-    case 'search':
-      return <div className={cls}><div className="sbar"><i /><span>{t('food near me')}</span></div><div className="res fx"><div className="nm">{name}</div><div className="mt">{rating}</div></div><div className="res"><Bar w="50%" /><Bar w="35%" /></div><div className="res"><Bar w="55%" /><Bar w="30%" /></div></div>
-    case 'directories':
-      return <div className={cls}>{[['Yelp', '#d32323'], ['Apple Maps', '#1d1d1f'], ['Bing', '#008373'], ['TripAdvisor', '#34e0a1']].map(([n, c]) => <div key={n} className="dir fx"><i style={{ background: c }} /><div><b>{name}</b><span>{t('Same hours · phone · menu')}</span></div><em>{t('Order')}</em></div>)}</div>
-    case 'apps':
-      return <div className={cls}><div className="apph"><i /><b>{name}</b><span>{t('4.8 · 25 min · $0 fee')}</span></div>{slot('bowl')}<div className="row2"><Bar w="60%" /><b className="pr">$13</b></div><div className="row2"><Bar w="45%" /><b className="pr">$11</b></div><div className="tip fx">{t('Order direct and save 15%')}</div></div>
-    case 'chart':
-      return <div className={cls}><div className="nm">{t('Where people come from')}</div><div className="bars">{[30, 45, 38, 60, 52, 74, 88].map((h, i) => <i key={i} style={{ height: `${h}%` }} className={i === 6 ? 'fx' : ''} />)}</div><div className="mt">{t('Google · Instagram · your site')}</div></div>
-    case 'site': case 'sitemenu': case 'order': case 'reserve': case 'sticky': case 'gift': case 'fix': case 'catering': {
-      const nav = <div className="nav"><b>{name}</b><span>{t('Menu')}</span><span className={spec.scene === 'site' ? 'fx' : ''}>{t('Order')}</span><span className={spec.scene === 'site' ? 'fx' : ''}>{t('Reserve')}</span></div>
-      const body = spec.scene === 'sitemenu' ? <div className="mlist fx"><div><Bar w="55%" /><b className="pr">$13</b></div><div><Bar w="70%" /><b className="pr">$11</b></div><div><Bar w="40%" /><b className="pr">$9</b></div></div>
-        : spec.scene === 'order' ? <div className="ordr">{slot('sando')}<em className="fx">{t('Order direct')}</em><span>{t('No app fees')}</span></div>
-        : spec.scene === 'reserve' ? <div className="slots fx"><span>6:30</span><span className="on">7:00</span><span>7:30</span><span>8:00</span></div>
-        : spec.scene === 'sticky' ? <>{slot('plate')}<div className="stk fx"><span>{t('Call')}</span><span>{t('Directions')}</span><span>{t('Order')}</span></div></>
-        : spec.scene === 'gift' ? <div className="gc fx"><b>{name}</b><span>{t('Gift card')}</span><em>$50</em></div>
-        : spec.scene === 'fix' ? <div className="chk">{[t('Order button works'), t('Hours match Google'), t('Loads in 1.2s'), t('No dead links')].map((x, i) => <div key={i} className={i < 3 ? 'ok' : 'fx'}><i />{x}</div>)}</div>
-        : spec.scene === 'catering' ? <div className="form fx"><b>{t('Catering for your office')}</b><Bar w="80%" /><Bar w="60%" /><em>{t('Get a quote')}</em></div>
-        : slot('store')
-      return <div className={`dw web${now ? ' now' : ''}`}><div className="bar3"><i /><i /><i /></div>{nav}{body}</div>
-    }
-    case 'post':
-      return <div className={cls}><div className="hd"><i />{name}</div>{ph}<div className="cap"><Bar w="60%" /><em className="fx">{t('Reserve')}</em></div></div>
-    case 'story':
-      return <div className={cls}><MotifMark k="drink" /><div className="prog"><i /><i /><i /></div><div className="stick fx">{t('Book Friday')}</div></div>
-    case 'reel':
-      return <div className={cls}><MotifMark k="bowl" /><i className="play" /><div className="cap">{t('Popcorn chicken, 4 ways')}</div><div className="side"><i /><i /><i /></div></div>
-    case 'profile':
-      return <div className={cls}><div className="top"><i><MotifMark k="store" /></i><div><b>{name}</b><span>{t('312 posts · 2,140 followers')}</span></div></div><div className="pb fx"><span>{t('Order food')}</span><span>{t('Reserve')}</span><span>{t('Call')}</span></div><div className="g3"><i><MotifMark k="plate" /></i><i><MotifMark k="cup" /></i><i><MotifMark k="sando" /></i></div></div>
-    case 'linkpage':
-      return <div className={cls}><i className="av"><MotifMark k="store" /></i><b>{name}</b>{[t('Order'), t('Reserve'), t('Menu'), t('Directions')].map((x, i) => <span key={i} className={i === 0 ? 'fx' : ''}>{x}</span>)}</div>
-    case 'grid':
-      return <div className={cls}>{(['plate', 'cup', 'sando', 'bowl', 'slice', 'drink'] as Motif[]).map((k, i) => <i key={i} className={i < 3 ? 'pin fx' : ''}><MotifMark k={k} />{i < 3 && <em>{[t('Menu'), t('Hours'), t('How to order')][i]}</em>}</i>)}</div>
-    case 'batch':
-      return <div className={cls}>{(['plate', 'cup', 'sando'] as Motif[]).map((k, i) => <div key={i} className={`pc${i}`}><div className="hd"><i />{name}</div><div className="ph"><MotifMark k={k} /></div><Bar w="50%" /></div>)}</div>
-    case 'graphic':
-      return <div className={cls}><div className="poster fx"><span>{t('Taco Tuesday')}</span><b>{t('Half price, all night')}</b><em>{name}</em></div></div>
-    case 'photos':
-      /* the shoot: six different dishes, so the card says food, space and table in one look */
-      return <div className={cls}>{(['plate', 'bowl', 'cup', 'sando', 'slice', 'drink'] as Motif[]).map((k, i) => <i key={i}><MotifMark k={k} /></i>)}</div>
-    case 'print':
-      /* a flyer on the counter with a table tent behind it */
-      return <div className={cls}><div className="tent"><b>{t('Taco Tuesday')}</b></div><div className="sheet fx"><span>{t('Taco Tuesday')}</span><b>{t('$2 tacos, 5 to 7')}</b><em>{name}</em></div></div>
-    case 'brand':
-      /* a mark, the name set in it, and the three colours it comes in */
-      return <div className={cls}><div className="mark fx">{(name || 'A').trim().charAt(0).toUpperCase()}</div><div className="nm">{name}</div><div className="sw"><i /><i /><i /><i /></div></div>
-    case 'hours':
-      /* the listing's hours, one day changed */
-      return <div className={cls}><div className="nm">{name}</div><div className="hrs">{[[t('Mon'), '11–9'], [t('Tue'), '11–9'], [t('Wed'), t('Closed')], [t('Thu'), '11–10']].map(([d, h], i) => <div key={i} className={i === 2 ? 'fx' : ''}><span>{d}</span><em>{h}</em></div>)}</div></div>
-    case 'creator':
-      return <div className={cls}><div className="hd"><i className="cr" />@seattle.eats<span>{t('40k nearby')}</span></div>{slot('bowl')}<div className="cap"><Bar w="70%" /><em>{t('at {name}').replace('{name}', name)}</em></div></div>
-    case 'ad':
-      return <div className={cls}><div className="hd"><i />{name}<span>{t('Sponsored')}</span></div>{slot('sando')}<div className="cap"><Bar w="55%" /><em className="fx">{t('Call')}</em><em className="fx">{t('Directions')}</em></div></div>
-    case 'ticket':
-      return <div className={cls}><div className="stub"><b>{t('Sat')}</b><span>21</span></div><div className="bd"><b>{t('Dumpling night at {name}').replace('{name}', name)}</b><span>{t('7 pm · 24 seats')}</span><em className="fx">{t('Get a seat · $45')}</em></div></div>
-    case 'event':
-      return <div className={cls}><div className="poster fx"><div className="wash" /><span>{t('Friday')}</span><b>{t('Live music, late menu')}</b><em>{name}</em></div></div>
-    case 'calendar':
-      return <div className={cls}><div className="mo">{t('October')}</div><div className="days">{Array.from({ length: 21 }, (_, i) => <i key={i} className={[3, 9, 17].includes(i) ? 'fx' : ''} />)}</div><div className="mt">{t('3 pushes planned')}</div></div>
-    case 'missed':
-      return <div className={cls}><div className="call"><i /><div><b>{t('Missed call')}</b><span>{t('2 min ago')}</span></div></div><div className="bub fx">{t('Sorry we missed you. Menu and ordering here, and we will call you back.')}</div></div>
-    case 'keyword':
-      return <div className={cls}><div className="bub me">{t('MENU')}</div><div className="bub fx">{t('Here is our menu, and a table is one tap away.')}</div></div>
-    case 'dm':
-      return <div className={cls}><div className="bub">{t('Do you have a table for 6 tonight?')}</div><div className="bub me fx">{t('We do. 7:30 works. Want it?')}</div><div className="stamp">{t('Answered in 4 min')}</div></div>
-    case 'waitlist':
-      return <div className={cls}><div className="nm">{t('Waitlist')}</div>{[['Priya', '2', t('Ready')], ['Marcus', '4', '8 min'], ['Lee', '3', '15 min']].map(([n, p, w], i) => <div key={n} className={`wl${i === 0 ? ' fx' : ''}`}><b>{n}</b><span>{t('party of {n}').replace('{n}', p)}</span><em>{w}</em></div>)}</div>
-    case 'email':
-      return <div className={cls}><div className="inbox"><i /><span>{t('Inbox')}</span></div><div className="mail fx"><b>{name}</b><span>{t('This week: a new dish, and Friday is live music')}</span></div><div className="mail"><Bar w="40%" /><Bar w="70%" /></div></div>
-    case 'offer':
-      return <div className={cls}><div className="coupon fx"><span>{t('Tuesdays only')}</span><b>{t('Free dessert with any two mains')}</b><em>{name}</em></div></div>
-    case 'stamps':
-      return <div className={cls}><b className="nm">{t('{name} regulars').replace('{name}', name)}</b><div className="st9">{Array.from({ length: 8 }, (_, i) => <i key={i} className={i < 5 ? 'on' : ''} />)}</div><div className="mt fx">{t('3 more for a free meal')}</div></div>
-    case 'review':
-      return <div className={cls}><div className="who">{t('A guest')} · {t('5 stars')}</div><div className="tx"><Bar w="90%" /><Bar w="60%" /></div>{now ? <div className="rep dim">{t('No reply · 9 days')}</div> : <div className="rep fx"><b>{name}</b> {t('Thank you. Come say hi next time.')}</div>}</div>
-    case 'pin':
-      return <div className={cls}><div className="map"><i className="rd h" /><i className="rd v" /><span className="pin fx" /></div><div className="cap"><b>{name}</b><span>{t('Entrance on the corner · parking behind')}</span></div></div>
-  }
+/* the objects, one per scene, as static markup on a 100×100 grid (trusted, hand-drawn) */
+const OBJECTS: Record<Scene, string> = {
+  post: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f2" x="36" y="21" width="28" height="30" rx="5"/><circle class="f3 ln" cx="50" cy="36" r="8"/><circle class="f1" cx="50" cy="36" r="3"/><rect class="f2" x="36" y="57" width="18" height="4" rx="2"/><rect class="f2" x="36" y="65" width="12" height="4" rx="2"/><circle class="f3 ln" cx="72" cy="20" r="8"/><path class="f1w" d="M72 24.5l-4.2-4.1a2.3 2.3 0 0 1 3.3-3.3l.9.9.9-.9a2.3 2.3 0 0 1 3.3 3.3z"/>`,
+  reel: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f3" x="35" y="19" width="30" height="52" rx="5"/><path class="f1" d="M46 37l12 8-12 8z"/><circle class="f1" cx="60" cy="59" r="2.2"/><circle class="f1" cx="60" cy="51" r="2.2"/><circle class="f1" cx="60" cy="43" r="2.2"/>`,
+  story: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f2" x="35" y="19" width="30" height="52" rx="5"/><rect class="f3" x="37" y="22" width="12" height="2.5" rx="1.25"/><rect class="f1" x="51" y="22" width="12" height="2.5" rx="1.25"/><rect class="f3 ln" x="38" y="46" width="24" height="12" rx="4" transform="rotate(-6 50 52)"/>`,
+  sticky: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><rect class="f2" x="36" y="21" width="28" height="34" rx="5"/><rect class="f3 ln" x="34" y="60" width="32" height="11" rx="5.5"/><circle class="f1" cx="42" cy="65.5" r="2.4"/><circle class="f1" cx="50" cy="65.5" r="2.4"/><circle class="f1" cx="58" cy="65.5" r="2.4"/>`,
+  linkpage: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="30" y="12" width="40" height="66" rx="9"/><circle class="f3 ln" cx="50" cy="26" r="7"/><rect class="f2 ln" x="37" y="39" width="26" height="7" rx="3.5"/><rect class="f2 ln" x="37" y="50" width="26" height="7" rx="3.5"/><rect class="f2 ln" x="37" y="61" width="26" height="7" rx="3.5"/>`,
+  photos: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f2 ln" x="38" y="24" width="24" height="10" rx="3"/><rect class="f1 ln" x="18" y="32" width="64" height="42" rx="9"/><circle class="f3 ln" cx="50" cy="53" r="13"/><circle class="f1 ln" cx="50" cy="53" r="6"/><circle class="f3" cx="74" cy="42" r="2.8"/>`,
+  google: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="18" y="46" width="64" height="34" rx="4"/><rect class="f2 ln" x="42" y="60" width="16" height="20" rx="3"/><rect class="f2 ln" x="25" y="54" width="11" height="9" rx="2"/><rect class="f2 ln" x="64" y="54" width="11" height="9" rx="2"/><path class="f3 ln" d="M14 46l6-10h60l6 10z"/><path class="f1 ln" d="M14 46a5 5 0 0 0 10 0 5 5 0 0 0 10 0 5 5 0 0 0 10 0 5 5 0 0 0 10 0 5 5 0 0 0 10 0 5 5 0 0 0 10 0 5 5 0 0 0 10 0 5 5 0 0 0 4.5 0v-2H14z"/><path class="f3 ln" d="M50 8c-7 0-12 5-12 12 0 9 12 20 12 20s12-11 12-20c0-7-5-12-12-12z"/><circle class="f1" cx="50" cy="20" r="4.5"/>`,
+  review: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M18 22h64a8 8 0 0 1 8 8v30a8 8 0 0 1-8 8H40l-12 10V68H18a8 8 0 0 1-8-8V30a8 8 0 0 1 8-8z"/><g class="f3 ln"><polygon points="24.0,38.0 25.9,42.5 30.7,42.8 27.0,46.0 28.1,50.7 24.0,48.1 19.9,50.7 21.0,46.0 17.3,42.8 22.1,42.5"/><polygon points="37.0,38.0 38.9,42.5 43.7,42.8 40.0,46.0 41.1,50.7 37.0,48.1 32.9,50.7 34.0,46.0 30.3,42.8 35.1,42.5"/><polygon points="50.0,38.0 51.9,42.5 56.7,42.8 53.0,46.0 54.1,50.7 50.0,48.1 45.9,50.7 47.0,46.0 43.3,42.8 48.1,42.5"/><polygon points="63.0,38.0 64.9,42.5 69.7,42.8 66.0,46.0 67.1,50.7 63.0,48.1 58.9,50.7 60.0,46.0 56.3,42.8 61.1,42.5"/><polygon points="76.0,38.0 77.9,42.5 82.7,42.8 79.0,46.0 80.1,50.7 76.0,48.1 71.9,50.7 73.0,46.0 69.3,42.8 74.1,42.5"/></g>`,
+  event: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M12 34a6 6 0 0 1 6-6h64a6 6 0 0 1 6 6v9a7 7 0 0 0 0 14v9a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6v-9a7 7 0 0 0 0-14z"/><path class="ln dash" d="M62 30v40"/><polygon class="f3 ln" points="36.0,39.0 38.9,46.0 46.5,46.6 40.7,51.5 42.5,58.9 36.0,55.0 29.5,58.9 31.3,51.5 25.5,46.6 33.1,46.0"/><rect class="f2 ln" x="69" y="43" width="12" height="5" rx="2.5"/><rect class="f2 ln" x="69" y="53" width="12" height="5" rx="2.5"/>`,
+  ticket: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M12 34a6 6 0 0 1 6-6h64a6 6 0 0 1 6 6v9a7 7 0 0 0 0 14v9a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6v-9a7 7 0 0 0 0-14z"/><path class="ln dash" d="M62 30v40"/><polygon class="f3 ln" points="36.0,39.0 38.9,46.0 46.5,46.6 40.7,51.5 42.5,58.9 36.0,55.0 29.5,58.9 31.3,51.5 25.5,46.6 33.1,46.0"/><rect class="f2 ln" x="69" y="43" width="12" height="5" rx="2.5"/><rect class="f2 ln" x="69" y="53" width="12" height="5" rx="2.5"/>`,
+  offer: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M32 22h42a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6H32L14 50z"/><circle class="f3 ln" cx="28" cy="50" r="5"/><circle class="f1" cx="28" cy="50" r="1.8"/><rect class="f3 ln" x="46" y="42" width="24" height="16" rx="8"/><circle class="f1" cx="53" cy="50" r="2.5"/><circle class="f1" cx="63" cy="50" r="2.5"/><path class="f1w" d="M59 45l-6 10"/>`,
+  email: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="12" y="24" width="76" height="52" rx="8"/><path class="ln nf" d="M14 32l36 26 36-26"/><path class="ln nf" d="M14 70l26-20M86 70L60 50"/><circle class="f3 ln" cx="50" cy="56" r="7"/><circle class="f1" cx="50" cy="56" r="2.5"/>`,
+  print: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f2 ln" d="M62 20l22-6v56l-22 6z"/><rect class="f1 ln" x="20" y="14" width="42" height="62" rx="4"/><rect class="f3 ln" x="28" y="22" width="16" height="9" rx="2.5"/><rect class="f2" x="28" y="38" width="26" height="4" rx="2"/><rect class="f2" x="28" y="46" width="20" height="4" rx="2"/><rect class="f2" x="28" y="54" width="24" height="4" rx="2"/>`,
+  brand: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><circle class="f1 ln" cx="50" cy="44" r="30"/><circle class="f3 ln" cx="50" cy="44" r="18"/><polygon class="f1" points="50.0,34.0 52.6,40.4 59.5,40.9 54.3,45.4 55.9,52.1 50.0,48.5 44.1,52.1 45.7,45.4 40.5,40.9 47.4,40.4"/><rect class="f2 ln" x="22" y="80" width="14" height="10" rx="3"/><rect class="f3 ln" x="43" y="80" width="14" height="10" rx="3"/><rect class="f1 ln" x="64" y="80" width="14" height="10" rx="3"/>`,
+  site: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="10" y="16" width="80" height="62" rx="8"/><path class="f2 ln" d="M10 24a8 8 0 0 1 8-8h64a8 8 0 0 1 8 8v6H10z"/><circle class="f3" cx="20" cy="23" r="2.5"/><circle class="f3" cx="29" cy="23" r="2.5"/><circle class="f3" cx="38" cy="23" r="2.5"/><circle class="f3 ln" cx="33" cy="54" r="12"/><circle class="f1 ln" cx="33" cy="54" r="5"/><rect class="f2" x="54" y="44" width="26" height="5" rx="2.5"/><rect class="f2" x="54" y="54" width="20" height="5" rx="2.5"/><rect class="f3" x="54" y="64" width="16" height="5" rx="2.5"/>`,
+  ad: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M18 42h12l32-18v52L30 58H18a6 6 0 0 1-6-6v-4a6 6 0 0 1 6-6z"/><path class="f2 ln" d="M30 58l4 18h10l-2-18"/><path class="ln nf thick" d="M72 38c6 4 6 20 0 24"/><path class="ln nf thick f3s" d="M80 30c10 6 10 34 0 40"/>`,
+  search: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><circle class="f1 ln" cx="44" cy="42" r="22"/><circle class="f2" cx="44" cy="42" r="13"/><path class="f3 ln" d="M44 26c-5 0-9 4-9 9 0 7 9 15 9 15s9-8 9-15c0-5-4-9-9-9z"/><circle class="f1" cx="44" cy="35" r="3"/><path class="f3 ln" d="M62 56l4-4 18 18-4 4z"/>`,
+  directories: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f2 ln" x="22" y="26" width="52" height="40" rx="6" transform="rotate(-8 48 46)"/><rect class="f1 ln" x="26" y="34" width="52" height="40" rx="6"/><circle class="f3 ln" cx="38" cy="48" r="6"/><rect class="f2" x="48" y="43" width="22" height="4" rx="2"/><rect class="f2" x="48" y="51" width="16" height="4" rx="2"/><rect class="f3" x="34" y="62" width="14" height="4" rx="2"/>`,
+  apps: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M22 38h56l-4 40H26z"/><path class="ln nf" d="M36 38v-6a14 14 0 0 1 28 0v6"/><rect class="f3 ln" x="38" y="50" width="24" height="12" rx="4"/><circle class="f1" cx="46" cy="56" r="2.2"/><circle class="f1" cx="54" cy="56" r="2.2"/>`,
+  chart: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="ln nf" d="M16 76h68"/><rect class="f2 ln" x="22" y="52" width="14" height="24" rx="3"/><rect class="f2 ln" x="43" y="40" width="14" height="36" rx="3"/><rect class="f3 ln" x="64" y="24" width="14" height="52" rx="3"/>`,
+  sitemenu: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="24" y="16" width="52" height="62" rx="6"/><rect class="f3 ln" x="24" y="16" width="52" height="12" rx="6"/><rect class="f2" x="32" y="36" width="22" height="4" rx="2"/><circle class="f3" cx="66" cy="38" r="3"/><rect class="f2" x="32" y="48" width="26" height="4" rx="2"/><circle class="f3" cx="66" cy="50" r="3"/><rect class="f2" x="32" y="60" width="18" height="4" rx="2"/><circle class="f3" cx="66" cy="62" r="3"/>`,
+  order: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M22 38h56l-4 40H26z"/><path class="ln nf" d="M36 38v-6a14 14 0 0 1 28 0v6"/><circle class="f3 ln" cx="50" cy="58" r="10"/><path class="f1w2" d="M45 58l4 4 7-8"/>`,
+  reserve: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="18" y="24" width="64" height="54" rx="8"/><path class="f3 ln" d="M18 32a8 8 0 0 1 8-8h48a8 8 0 0 1 8 8v8H18z"/><rect class="f1 ln" x="30" y="18" width="5" height="12" rx="2.5"/><rect class="f1 ln" x="65" y="18" width="5" height="12" rx="2.5"/><g class="f2"><circle cx="30" cy="52" r="3.5"/><circle cx="43" cy="52" r="3.5"/><circle cx="57" cy="52" r="3.5"/><circle cx="70" cy="52" r="3.5"/><circle cx="30" cy="65" r="3.5"/><circle cx="43" cy="65" r="3.5"/><circle cx="70" cy="65" r="3.5"/></g><circle class="f3 ln" cx="57" cy="65" r="5"/>`,
+  calendar: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="18" y="24" width="64" height="54" rx="8"/><path class="f3 ln" d="M18 32a8 8 0 0 1 8-8h48a8 8 0 0 1 8 8v8H18z"/><rect class="f1 ln" x="30" y="18" width="5" height="12" rx="2.5"/><rect class="f1 ln" x="65" y="18" width="5" height="12" rx="2.5"/><g class="f2"><circle cx="30" cy="52" r="3.5"/><circle cx="57" cy="52" r="3.5"/><circle cx="70" cy="52" r="3.5"/><circle cx="30" cy="65" r="3.5"/><circle cx="43" cy="65" r="3.5"/><circle cx="57" cy="65" r="3.5"/></g><circle class="f3" cx="43" cy="52" r="4"/><circle class="f3" cx="70" cy="65" r="4"/>`,
+  gift: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="16" y="30" width="68" height="46" rx="8"/><rect class="f3" x="46" y="30" width="8" height="46"/><rect class="f3" x="16" y="49" width="68" height="8"/><path class="f1 ln" d="M50 30c-6-8-14-8-14-2s8 4 14 2zM50 30c6-8 14-8 14-2s-8 4-14 2z"/>`,
+  fix: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M62 18a14 14 0 0 0-16 18L20 62a6 6 0 0 0 8 8l26-26a14 14 0 0 0 18-16l-8 8-8-2-2-8z"/><circle class="f3" cx="27" cy="63" r="3"/>`,
+  catering: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><ellipse class="f2 ln" cx="50" cy="68" rx="36" ry="6"/><path class="f1 ln" d="M22 64a28 28 0 0 1 56 0z"/><circle class="f3 ln" cx="50" cy="34" r="4"/>`,
+  profile: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="16" y="18" width="68" height="60" rx="8"/><circle class="f3 ln" cx="34" cy="38" r="9"/><rect class="f2" x="50" y="32" width="24" height="4" rx="2"/><rect class="f2" x="50" y="40" width="16" height="4" rx="2"/><rect class="f2 ln" x="24" y="56" width="16" height="8" rx="4"/><rect class="f2 ln" x="43" y="56" width="16" height="8" rx="4"/><rect class="f3 ln" x="62" y="56" width="14" height="8" rx="4"/>`,
+  grid: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><g class="f2 ln"><rect x="18" y="16" width="18" height="18" rx="3"/><rect x="41" y="16" width="18" height="18" rx="3"/><rect x="18" y="39" width="18" height="18" rx="3"/><rect x="41" y="39" width="18" height="18" rx="3"/><rect x="64" y="39" width="18" height="18" rx="3"/><rect x="18" y="62" width="18" height="18" rx="3"/><rect x="41" y="62" width="18" height="18" rx="3"/><rect x="64" y="62" width="18" height="18" rx="3"/></g><rect class="f3 ln" x="64" y="16" width="18" height="18" rx="3"/>`,
+  batch: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f2 ln" x="30" y="14" width="40" height="50" rx="6"/><rect class="f2 ln" x="25" y="20" width="40" height="50" rx="6"/><rect class="f1 ln" x="20" y="26" width="40" height="50" rx="6"/><rect class="f2" x="26" y="32" width="28" height="22" rx="4"/><circle class="f3 ln" cx="40" cy="43" r="6"/><rect class="f2" x="26" y="60" width="18" height="4" rx="2"/>`,
+  graphic: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="14" y="18" width="72" height="56" rx="8"/><circle class="f3 ln" cx="36" cy="42" r="10"/><path class="f2 ln" d="M50 56l12-20 12 20z"/><rect class="f2" x="22" y="60" width="30" height="4" rx="2"/><rect class="f3" x="70" y="60" width="8" height="4" rx="2"/>`,
+  creator: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><circle class="f1 ln" cx="50" cy="36" r="14"/><path class="f1 ln" d="M24 78a26 26 0 0 1 52 0z"/><circle class="f3 ln" cx="68" cy="26" r="9"/><polygon class="f1" points="68.0,21.0 69.3,24.2 72.8,24.5 70.1,26.7 70.9,30.0 68.0,28.2 65.1,30.0 65.9,26.7 63.2,24.5 66.7,24.2"/>`,
+  missed: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M28 20c-6 0-8 4-8 8 0 26 26 52 52 52 4 0 8-2 8-8v-6l-14-6-6 8c-8-3-16-11-19-19l8-6-6-14z"/><path class="ln nf thick f3s" d="M60 22h16v16M76 22L58 40"/>`,
+  keyword: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f1 ln" d="M18 22h64a8 8 0 0 1 8 8v30a8 8 0 0 1-8 8H40l-12 10V68H18a8 8 0 0 1-8-8V30a8 8 0 0 1 8-8z"/><g class="f3"><rect x="40" y="34" width="4" height="24" rx="2"/><rect x="54" y="34" width="4" height="24" rx="2"/><rect x="35" y="40" width="28" height="4" rx="2"/><rect x="35" y="49" width="28" height="4" rx="2"/></g>`,
+  dm: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><path class="f2 ln" d="M14 18h40a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8H30l-10 8v-8h-6a8 8 0 0 1-8-8V26a8 8 0 0 1 8-8z"/><path class="f3 ln" d="M46 44h40a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8h-6v8l-10-8H46a8 8 0 0 1-8-8V52a8 8 0 0 1 8-8z"/><circle class="f1" cx="58" cy="60" r="2.5"/><circle class="f1" cx="66" cy="60" r="2.5"/><circle class="f1" cx="74" cy="60" r="2.5"/>`,
+  waitlist: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="22" y="18" width="56" height="62" rx="6"/><rect class="f2 ln" x="38" y="12" width="24" height="10" rx="4"/><circle class="f3 ln" cx="34" cy="40" r="4"/><rect class="f2" x="44" y="38" width="24" height="4" rx="2"/><circle class="f2 ln" cx="34" cy="54" r="4"/><rect class="f2" x="44" y="52" width="20" height="4" rx="2"/><circle class="f2 ln" cx="34" cy="68" r="4"/><rect class="f2" x="44" y="66" width="22" height="4" rx="2"/>`,
+  stamps: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><rect class="f1 ln" x="14" y="26" width="72" height="48" rx="8"/><g class="f3 ln"><circle cx="27" cy="42" r="5"/><circle cx="42" cy="42" r="5"/><circle cx="57" cy="42" r="5"/><circle cx="72" cy="42" r="5"/><circle cx="27" cy="59" r="5"/></g><g class="f2 ln"><circle cx="42" cy="59" r="5"/><circle cx="57" cy="59" r="5"/><circle cx="72" cy="59" r="5"/></g>`,
+  pin: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><ellipse class="f2 ln" cx="50" cy="74" rx="28" ry="8"/><path class="f3 ln" d="M50 12c-12 0-20 8-20 20 0 15 20 36 20 36s20-21 20-36c0-12-8-20-20-20z"/><circle class="f1 ln" cx="50" cy="32" r="8"/>`,
+  hours: `<ellipse class="sh" cx="50" cy="87" rx="30" ry="4"/><circle class="f1 ln" cx="50" cy="46" r="32"/><g class="f2"><circle cx="50" cy="20" r="2.5"/><circle cx="76" cy="46" r="2.5"/><circle cx="50" cy="72" r="2.5"/><circle cx="24" cy="46" r="2.5"/></g><path class="ln nf thick" d="M50 46V28"/><path class="ln nf thick f3s" d="M50 46l14 10"/><circle class="f3 ln" cx="50" cy="46" r="3.5"/>`,
 }
 
-/* Drawn at base size 12px; card and sheet scale the whole thing with `font-size` on `.dw`. */
+export function Drawing({ spec, now = false }: DrawProps): ReactNode {
+  const body = OBJECTS[spec.scene] ?? OBJECTS.post
+  return <svg className={`dw ob ${spec.scene}${now ? ' now' : ''}`} viewBox="0 0 100 100" role="img" aria-hidden dangerouslySetInnerHTML={{ __html: body }} />
+}
+
 export const DRAW_CSS = `
-
-/* NO WORDS ON THE DRAWINGS (owner 2026-09-15): every label, name, price and caption is set in
-   transparent ink, so pills, rows and posters keep their shape and read as shapes. The only
-   "ink" left is the line drawing. */
-.cr .dw,.cr .dw *{color:transparent!important;text-shadow:none!important;-webkit-text-fill-color:transparent;user-select:none}
-.cr .dw .mf,.cr .dw .mf *{color:rgba(29,29,31,.34)!important}
-.cr .dw.story .mf,.cr .dw.story .mf *,.cr .dw.reel .mf,.cr .dw.reel .mf *{color:rgba(255,255,255,.5)!important}
-
-/* print */
-.cr .dw.print{padding:1em .9em .9em;background:#f5f5f7;min-height:9em}
-.cr .dw.print .tent{position:absolute;right:.8em;top:.8em;width:5.2em;height:3.6em;background:#fff;border-radius:.4em .4em 0 0;box-shadow:0 .4em 1em rgba(0,0,0,.12);transform:skewY(-6deg);display:flex;align-items:flex-end;padding:.4em;font-size:.7em;font-weight:700;color:#6e6e73}
-.cr .dw.print .sheet{position:relative;width:6.4em;background:#fff;border-radius:.4em;box-shadow:0 .5em 1.2em rgba(0,0,0,.14);padding:.7em .7em .6em;display:flex;flex-direction:column;gap:.25em}
-.cr .dw.print .sheet span{font-size:.7em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--c2)}
-.cr .dw.print .sheet b{font-size:1em;font-weight:800;line-height:1.1}
-.cr .dw.print .sheet em{font-style:normal;font-size:.7em;color:#6e6e73;margin-top:.3em}
-/* brand */
-.cr .dw.brand{padding:1em .9em .9em;display:flex;flex-direction:column;align-items:center;gap:.4em;min-height:9em}
-.cr .dw.brand .mark{width:3.6em;height:3.6em;border-radius:1em;background:var(--c2);color:#fff;display:grid;place-items:center;font-weight:800;font-size:1.6em}
-.cr .dw.brand .nm{padding:0;font-size:1em}
-.cr .dw.brand .sw{display:flex;gap:.35em}.cr .dw.brand .sw i{width:1.2em;height:1.2em;border-radius:99px;background:var(--c2)}.cr .dw.brand .sw i:nth-child(2){background:var(--c1)}.cr .dw.brand .sw i:nth-child(3){background:#1d1d1f}.cr .dw.brand .sw i:nth-child(4){background:#e6e6ea}
-/* hours */
-.cr .dw.hours{padding:.4em 0 .6em;min-height:9em}
-.cr .dw.hours .hrs{display:flex;flex-direction:column;gap:.25em;padding:.3em .9em 0}
-.cr .dw.hours .hrs div{display:flex;justify-content:space-between;font-size:.85em;padding:.2em .4em;border-radius:.4em}
-.cr .dw.hours .hrs span{color:#6e6e73}.cr .dw.hours .hrs em{font-style:normal;font-weight:600}
-.cr .dw{background:#fff;color:#1d1d1f;border-radius:1em;overflow:hidden;font-size:12px;width:100%;position:relative;box-shadow:0 .7em 2em rgba(0,0,0,.12);font-family:'Inter',system-ui,sans-serif;line-height:1.3}
-.cr .dw.now{filter:grayscale(1);opacity:.7}
-.cr .dw .bar{display:block;height:.5em;border-radius:.3em;background:#e6e6ea}
-.cr .dw .ph{height:5.5em}
-.cr .dw .ph,.cr .dw .food,.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3,.cr .dw.google .pd i,.cr .dw.google .gpost i,.cr .dw.profile .top i,.cr .dw.profile .g3 i,.cr .dw.grid i,.cr .dw.photos i,.cr .dw.linkpage .av,.cr .dw.event .poster{position:relative;overflow:hidden;background-color:#ece4d8;background-image:linear-gradient(135deg,#f3ede4,#e3d9cc)}
-.cr .dw .ph.p2,.cr .dw .food.p2,.cr .dw.grid i:nth-child(2),.cr .dw.photos i:nth-child(2),.cr .dw.photos i:nth-child(5),.cr .dw.profile .g3 i:nth-child(2){background-image:linear-gradient(135deg,#ddd3c6,#c9bcaa)}
-.cr .dw .ph.p3,.cr .dw .food.p3,.cr .dw.grid i:nth-child(3),.cr .dw.photos i:nth-child(3),.cr .dw.photos i:nth-child(6),.cr .dw.profile .g3 i:nth-child(3){background-image:linear-gradient(135deg,#e4e8dc,#cfd6c4)}
-.cr .dw .ph.p4,.cr .dw .food.p4,.cr .dw.grid i:nth-child(4),.cr .dw.photos i:nth-child(4){background-image:linear-gradient(135deg,#eedfd8,#dcc6bd)}
-/* the vertical video frames are charcoal, the drawing on them in white */
-.cr .dw.story,.cr .dw.reel{position:relative;background:#2b2b2e}
-.cr .dw .mf{position:absolute;left:50%;top:50%;width:52%;max-width:3.4em;aspect-ratio:1;transform:translate(-50%,-50%);color:rgba(29,29,31,.34);pointer-events:none}
-.cr .dw .mf svg{width:100%;height:100%;display:block}
-.cr .dw.story .mf,.cr .dw.reel .mf{width:38%;color:rgba(255,255,255,.5)}
-.cr .dw.reel .mf{top:44%}
-.cr .dw.google .pd i .mf,.cr .dw.google .gpost i .mf,.cr .dw.profile .top i .mf,.cr .dw.linkpage .av .mf{width:62%}
-.cr .dw.event .poster .mf{display:none}
-.cr .dw .fx{box-shadow:0 0 0 2px var(--c2),0 0 0 6px var(--t1)!important;border-radius:.5em}
-.cr .dw .pr{font-weight:600;font-size:.85em;flex:none;margin-left:.6em}
-.cr .dw .nm{font-weight:700;font-size:1.1em;padding:.6em .9em 0}
-.cr .dw .mt{font-size:.8em;color:#6e6e73;padding:.15em .9em .5em}
-/* google */
-.cr .dw.google .strip{display:flex;gap:.2em;height:5em;margin:0 0 0}
-.cr .dw.google .strip .ph{flex:2;height:100%}
-.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3{flex:1}
-.cr .dw.google .strip.fx{border-radius:0;margin:3px 3px 0}
-.cr .dw.google.compact .strip{height:3.2em}
-.cr .dw.google.compact .btns{display:none}
-.cr .dw.google .btns{display:flex;gap:.4em;padding:0 .9em .6em;flex-wrap:wrap}
-.cr .dw.google .btns.fx{margin:0 .5em .6em;padding:.3em .4em;flex-wrap:nowrap}
-.cr .dw.google .btns i{font-style:normal;border:1px solid #d0d0d4;border-radius:99px;padding:.25em .7em;font-size:.85em;font-weight:600;color:#1a73e8;white-space:nowrap}
-.cr .dw.google .btns.fx i.on{background:#1a73e8;color:#fff;border-color:#1a73e8}
-.cr .dw.google .btns.dim i{color:#9a9aa0}
-.cr .dw.google .menu{display:flex;flex-direction:column;gap:.45em;margin:0 .6em .7em;padding:.4em .4em}
-.cr .dw.google .menu>div{display:flex;align-items:center}
-.cr .dw.google .nomenu{padding:.1em .9em .8em;font-size:.85em;color:#b0b0b5;font-style:italic}
-.cr .dw.google .qa{margin:0 .6em .7em;padding:.4em .5em;display:flex;flex-direction:column;gap:.35em}
-.cr .dw.google .qa span{display:block;font-size:.8em;font-weight:600}
-.cr .dw.google .qa em{display:block;font-size:.78em;color:#6e6e73;font-style:normal}
-.cr .dw.google .prods{display:flex;gap:.4em;margin:0 .6em .7em;padding:.4em}
-.cr .dw.google .pd{flex:1;min-width:0}
-.cr .dw.google .pd i{display:block;height:2.6em;border-radius:.4em}
-.cr .dw.google .pd span{display:block;font-size:.72em;font-weight:600;margin-top:.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cr .dw.google .gpost{display:flex;gap:.6em;margin:0 .6em .7em;padding:.4em;align-items:center}
-.cr .dw.google .gpost i{width:3.2em;height:3.2em;border-radius:.4em;flex:none}
-.cr .dw.google .gpost>div{flex:1;display:flex;flex-direction:column;gap:.35em}
-.cr .dw.google .gpost em{font-style:normal;align-self:flex-start;font-size:.75em;font-weight:700;color:#1a73e8}
-/* search */
-.cr .dw.search{padding:.7em}
-.cr .dw.search .sbar{display:flex;align-items:center;gap:.5em;border:1px solid #d0d0d4;border-radius:99px;padding:.4em .8em;font-size:.85em;color:#1d1d1f}
-.cr .dw.search .sbar i{width:.9em;height:.9em;border-radius:99px;border:2px solid #6e6e73}
-.cr .dw.search .res{margin-top:.6em;padding:.2em .4em;display:flex;flex-direction:column;gap:.35em}
-.cr .dw.search .res .nm,.cr .dw.search .res .mt{padding:0}
-/* directories */
-.cr .dw.directories{padding:.5em .6em;display:flex;flex-direction:column;gap:.35em}
-.cr .dw.directories .dir{display:flex;align-items:center;gap:.5em;padding:.3em .4em}
-.cr .dw.directories .dir i{width:1.4em;height:1.4em;border-radius:.35em;flex:none}
-.cr .dw.directories .dir div{flex:1;min-width:0}
-.cr .dw.directories .dir b{display:block;font-size:.8em}
-.cr .dw.directories .dir span{display:block;font-size:.68em;color:#6e6e73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cr .dw.directories .dir em{font-style:normal;font-size:.7em;font-weight:700;color:var(--c2)}
-/* apps */
-.cr .dw.apps .apph{display:flex;align-items:center;gap:.5em;padding:.6em .8em .4em}
-.cr .dw.apps .apph i{width:1.6em;height:1.6em;border-radius:.4em;background:#ff3008}
-.cr .dw.apps .apph b{font-size:.95em}.cr .dw.apps .apph span{font-size:.72em;color:#6e6e73;margin-left:auto}
-.cr .dw.apps .ph{height:4em}
-.cr .dw.apps .row2{display:flex;align-items:center;padding:.35em .8em 0}
-.cr .dw.apps .tip{margin:.5em .6em .6em;padding:.35em .5em;font-size:.75em;font-weight:700;color:var(--c2);background:var(--t1)}
-/* chart */
-.cr .dw.chart .bars{display:flex;align-items:flex-end;gap:.35em;height:5em;padding:.4em .9em 0}
-.cr .dw.chart .bars i{flex:1;border-radius:.3em .3em 0 0;background:var(--t1)}
-.cr .dw.chart .bars i.fx{background:var(--c2)}
-/* web */
-.cr .dw.web .bar3{display:flex;gap:.3em;padding:.5em .7em;background:#f0f0f2}
-.cr .dw.web .bar3 i{width:.55em;height:.55em;border-radius:99px;background:#cfcfd4}
-.cr .dw.web .nav{display:flex;gap:.7em;align-items:center;padding:.6em .8em;font-size:.85em}
-.cr .dw.web .nav b{font-size:1.05em;margin-right:auto}
-.cr .dw.web .nav span{color:#6e6e73;padding:.1em .3em}
-.cr .dw.web .nav span.fx{color:var(--c2);font-weight:700}
-.cr .dw.web .ph{height:4.4em}
-.cr .dw.web .mlist{margin:0 .8em .8em;padding:.4em .5em;display:flex;flex-direction:column;gap:.5em}
-.cr .dw.web .mlist>div{display:flex;align-items:center}
-.cr .dw.web .ordr{position:relative}
-.cr .dw.web .ordr .ph{height:5em}
-.cr .dw.web .ordr em{position:absolute;left:.8em;bottom:1.7em;font-style:normal;background:var(--c2);color:#fff;font-weight:700;font-size:.8em;padding:.4em .9em;border-radius:99px}
-.cr .dw.web .ordr span{position:absolute;left:.9em;bottom:.5em;font-size:.68em;color:#fff;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.5)}
-.cr .dw.web .slots{display:flex;gap:.4em;margin:0 .8em .9em;padding:.4em}
-.cr .dw.web .slots span{flex:1;text-align:center;font-size:.8em;font-weight:600;border:1px solid #d0d0d4;border-radius:.5em;padding:.4em 0}
-.cr .dw.web .slots span.on{background:var(--c2);color:#fff;border-color:var(--c2)}
-.cr .dw.web .stk{display:flex;gap:.4em;margin:.5em .6em .6em;padding:.35em}
-.cr .dw.web .stk span{flex:1;text-align:center;font-size:.75em;font-weight:700;background:#1d1d1f;color:#fff;border-radius:99px;padding:.4em 0}
-.cr .dw.web .gc{margin:.6em .8em .9em;padding:.8em;border-radius:.7em;background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;display:flex;flex-direction:column}
-.cr .dw.web .gc b{font-size:.95em}.cr .dw.web .gc span{font-size:.7em;opacity:.85}.cr .dw.web .gc em{font-style:normal;font-size:1.4em;font-weight:700;margin-top:.5em;align-self:flex-end}
-.cr .dw.web .chk{display:flex;flex-direction:column;gap:.35em;padding:.3em .8em .8em}
-.cr .dw.web .chk div{display:flex;align-items:center;gap:.5em;font-size:.78em;padding:.15em .3em}
-.cr .dw.web .chk i{width:1em;height:1em;border-radius:99px;border:1.5px solid #d0d0d4;flex:none}
-.cr .dw.web .chk .ok i{background:#2e9a78;border-color:#2e9a78}
-.cr .dw.web .form{margin:.5em .8em .9em;padding:.6em;display:flex;flex-direction:column;gap:.45em}
-.cr .dw.web .form b{font-size:.85em}.cr .dw.web .form em{font-style:normal;align-self:flex-start;font-size:.75em;font-weight:700;background:var(--c2);color:#fff;padding:.35em .8em;border-radius:99px}
-/* post / ad / creator */
-.cr .dw.post .hd,.cr .dw.ad .hd,.cr .dw.creator .hd,.cr .dw.batch .hd{display:flex;align-items:center;gap:.5em;padding:.55em .7em;font-weight:600;font-size:.85em}
-.cr .dw.post .hd i,.cr .dw.ad .hd i,.cr .dw.creator .hd i,.cr .dw.batch .hd i{width:1.3em;height:1.3em;border-radius:99px;background:linear-gradient(45deg,#f9a,#c5f)}
-.cr .dw.creator .hd i.cr{background:linear-gradient(45deg,#ffd27a,#ff7a59)}
-.cr .dw.ad .hd span,.cr .dw.creator .hd span{margin-left:auto;font-size:.75em;color:#6e6e73;font-weight:500}
-.cr .dw.post .ph,.cr .dw.ad .ph,.cr .dw.creator .ph{height:6.5em}
-.cr .dw.post .cap,.cr .dw.ad .cap,.cr .dw.creator .cap{display:flex;align-items:center;gap:.5em;padding:.6em .7em .7em}
-.cr .dw.post .cap .bar,.cr .dw.ad .cap .bar,.cr .dw.creator .cap .bar{flex:1}
-.cr .dw.post .cap em,.cr .dw.ad .cap em{font-style:normal;background:#1d1d1f;color:#fff;padding:.3em .7em;border-radius:99px;font-weight:700;font-size:.78em;flex:none}
-.cr .dw.creator .cap em{font-style:normal;font-size:.75em;font-weight:700;color:var(--c2);flex:none}
-/* story / reel */
-.cr .dw.story,.cr .dw.reel{width:8.5em;height:14em;margin:0 auto}
-.cr .dw.story .prog{display:flex;gap:.25em;padding:.5em .5em 0}
-.cr .dw.story .prog i{flex:1;height:.22em;border-radius:99px;background:rgba(255,255,255,.55)}
-.cr .dw.story .prog i:first-child{background:#fff}
-.cr .dw.story .stick{position:absolute;left:50%;bottom:2.2em;transform:translateX(-50%) rotate(-4deg);background:#fff;color:#1d1d1f;font-weight:700;font-size:.8em;padding:.45em .9em;border-radius:.6em;white-space:nowrap}
-.cr .dw.reel .play{position:absolute;left:50%;top:44%;width:0;height:0;border-left:1.2em solid rgba(255,255,255,.92);border-top:.8em solid transparent;border-bottom:.8em solid transparent;transform:translate(-40%,-50%)}
-.cr .dw.reel .cap{position:absolute;left:.6em;right:2.4em;bottom:.6em;color:#fff;font-size:.75em;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.6)}
-.cr .dw.reel .side{position:absolute;right:.5em;bottom:.6em;display:flex;flex-direction:column;gap:.5em}
-.cr .dw.reel .side i{width:1em;height:1em;border-radius:99px;background:rgba(255,255,255,.85)}
-/* profile */
-.cr .dw.profile .top{display:flex;align-items:center;gap:.6em;padding:.7em .8em .4em}
-.cr .dw.profile .top i{width:2.6em;height:2.6em;border-radius:99px;flex:none}
-.cr .dw.profile .top b{display:block;font-size:.9em}.cr .dw.profile .top span{font-size:.7em;color:#6e6e73}
-.cr .dw.profile .pb{display:flex;gap:.35em;margin:.3em .6em .5em;padding:.3em}
-.cr .dw.profile .pb span{flex:1;text-align:center;font-size:.7em;font-weight:700;background:#efefef;border-radius:.4em;padding:.4em 0}
-.cr .dw.profile .g3{display:flex;gap:.15em}
-.cr .dw.profile .g3 i{flex:1;height:2.6em}
-/* linkpage */
-.cr .dw.linkpage{padding:.8em .8em .7em;display:flex;flex-direction:column;align-items:center;gap:.4em;background:var(--t1)}
-.cr .dw.linkpage .av{width:2.4em;height:2.4em;border-radius:99px}
-.cr .dw.linkpage b{font-size:.85em;margin-bottom:.2em}
-.cr .dw.linkpage span{width:100%;text-align:center;font-size:.75em;font-weight:700;background:#fff;border-radius:99px;padding:.4em 0}
-/* grid */
-.cr .dw.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.15em;padding:.15em}
-.cr .dw.grid i{display:block;aspect-ratio:1;position:relative;border-radius:.2em}
-.cr .dw.grid i.pin em{position:absolute;left:.3em;bottom:.3em;font-style:normal;font-size:.6em;font-weight:700;background:#fff;padding:.2em .5em;border-radius:99px}
-/* batch */
-.cr .dw.batch{background:none;box-shadow:none;overflow:visible;height:11em}
-.cr .dw.batch>div{position:absolute;width:62%;background:#fff;border-radius:.8em;box-shadow:0 .5em 1.5em rgba(0,0,0,.14);overflow:hidden;padding-bottom:.6em}
-.cr .dw.batch .pc0{left:0;top:.6em;transform:rotate(-5deg);z-index:2}.cr .dw.batch .pc1{left:22%;top:0;z-index:3}.cr .dw.batch .pc2{right:0;top:.8em;transform:rotate(5deg);z-index:1}
-.cr .dw.batch .ph{height:4.4em}.cr .dw.batch .bar{margin:.5em .6em 0}
-/* graphic / event */
-.cr .dw.graphic,.cr .dw.event{background:none;box-shadow:none;overflow:visible;display:flex;justify-content:center}
-.cr .dw .poster{width:8.5em;height:11em;border-radius:.6em;background:linear-gradient(160deg,var(--c1),var(--c2));color:#fff;padding:.9em;display:flex;flex-direction:column;box-shadow:0 .7em 2em rgba(0,0,0,.18);position:relative;overflow:hidden}
-.cr .dw .poster .wash{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.65))}
-.cr .dw .poster>*{position:relative}
-.cr .dw .poster span{font-size:.7em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.9}
-.cr .dw .poster b{font-size:1.15em;line-height:1.1;margin-top:auto}
-.cr .dw .poster em{font-style:normal;font-size:.7em;margin-top:.4em;opacity:.9}
-/* photos */
-.cr .dw.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:.25em;padding:.25em;background:#1d1d1f}
-.cr .dw.photos i{display:block;aspect-ratio:1;border-radius:.25em}
-/* ticket */
-.cr .dw.ticket{display:flex}
-.cr .dw.ticket .stub{width:4em;background:var(--c2);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:2px dashed rgba(255,255,255,.6)}
-.cr .dw.ticket .stub b{font-size:.7em;text-transform:uppercase;letter-spacing:.08em}.cr .dw.ticket .stub span{font-size:1.8em;font-weight:700;line-height:1}
-.cr .dw.ticket .bd{flex:1;padding:.7em .8em;display:flex;flex-direction:column;gap:.3em}
-.cr .dw.ticket .bd b{font-size:.85em}.cr .dw.ticket .bd span{font-size:.72em;color:#6e6e73}.cr .dw.ticket .bd em{font-style:normal;align-self:flex-start;font-size:.72em;font-weight:700;background:#1d1d1f;color:#fff;padding:.35em .7em;border-radius:99px;margin-top:.2em}
-/* calendar */
-.cr .dw.calendar{padding:.7em .8em}
-.cr .dw.calendar .mo{font-weight:700;font-size:.9em;margin-bottom:.4em}
-.cr .dw.calendar .days{display:grid;grid-template-columns:repeat(7,1fr);gap:.25em}
-.cr .dw.calendar .days i{display:block;aspect-ratio:1;border-radius:.3em;background:#f0f0f2}
-.cr .dw.calendar .days i.fx{background:var(--c2)}
-.cr .dw.calendar .mt{padding:.5em 0 0}
-/* messages */
-.cr .dw.missed,.cr .dw.keyword,.cr .dw.dm{background:none;box-shadow:none;overflow:visible;display:flex;flex-direction:column;gap:.5em;padding:.2em}
-.cr .dw .bub{background:#e9e9eb;color:#1d1d1f;padding:.6em .9em;border-radius:1.2em;border-bottom-left-radius:.35em;font-size:.85em;line-height:1.35;max-width:90%;align-self:flex-start}
-.cr .dw .bub.me{background:var(--c2);color:#fff;align-self:flex-end;border-radius:1.2em;border-bottom-right-radius:.35em}
-.cr .dw.missed .call{display:flex;align-items:center;gap:.6em;background:#fff;border-radius:.8em;padding:.5em .8em;box-shadow:0 .4em 1.2em rgba(0,0,0,.1);align-self:stretch}
-.cr .dw.missed .call i{width:1.6em;height:1.6em;border-radius:99px;background:#ec1528}
-.cr .dw.missed .call b{display:block;font-size:.85em}.cr .dw.missed .call span{font-size:.7em;color:#6e6e73}
-.cr .dw.dm .stamp{align-self:flex-end;font-size:.68em;color:#6e6e73;font-weight:600}
-/* waitlist */
-.cr .dw.waitlist{padding:0 0 .4em}
-.cr .dw.waitlist .wl{display:flex;align-items:center;gap:.5em;padding:.4em .9em;font-size:.8em}
-.cr .dw.waitlist .wl b{width:4em}.cr .dw.waitlist .wl span{color:#6e6e73;flex:1}.cr .dw.waitlist .wl em{font-style:normal;font-weight:700}
-.cr .dw.waitlist .wl.fx{margin:0 .5em;padding:.4em .4em;color:var(--c2)}
-/* email */
-.cr .dw.email{padding:.6em .7em}
-.cr .dw.email .inbox{display:flex;align-items:center;gap:.4em;font-size:.72em;font-weight:700;color:#6e6e73;margin-bottom:.4em}
-.cr .dw.email .inbox i{width:.8em;height:.8em;border-radius:99px;background:#2e9a78}
-.cr .dw.email .mail{padding:.45em .5em;display:flex;flex-direction:column;gap:.3em}
-.cr .dw.email .mail b{font-size:.85em}.cr .dw.email .mail span{font-size:.75em;color:#6e6e73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* offer */
-.cr .dw.offer{background:none;box-shadow:none;overflow:visible;display:flex;justify-content:center}
-.cr .dw.offer .coupon{width:100%;max-width:14em;border-radius:.8em;background:#fff;border:2px dashed var(--c2);padding:.8em .9em;display:flex;flex-direction:column;gap:.3em}
-.cr .dw.offer .coupon span{font-size:.68em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c2)}
-.cr .dw.offer .coupon b{font-size:.95em;line-height:1.15}.cr .dw.offer .coupon em{font-style:normal;font-size:.7em;color:#6e6e73}
-/* stamps */
-.cr .dw.stamps{padding:.7em .8em}
-.cr .dw.stamps .nm{padding:0;font-size:.9em}
-.cr .dw.stamps .st9{display:grid;grid-template-columns:repeat(4,1fr);gap:.35em;margin:.5em 0}
-.cr .dw.stamps .st9 i{display:block;aspect-ratio:1;border-radius:99px;border:1.5px dashed #d0d0d4}
-.cr .dw.stamps .st9 i.on{background:var(--c2);border-color:var(--c2)}
-.cr .dw.stamps .mt{padding:.2em .3em;font-weight:700;color:var(--c2)}
-/* review */
-.cr .dw.review{padding:.8em .9em}
-.cr .dw.review .who{font-weight:700;font-size:.9em}
-.cr .dw.review .tx{display:flex;flex-direction:column;gap:.4em;padding:.5em 0 .6em}
-.cr .dw.review .rep{font-size:.82em;background:#f5f5f7;border-radius:.6em;padding:.5em .6em;line-height:1.35}
-.cr .dw.review .rep.dim{color:#c0392b;background:#fdecea}
-/* pin */
-.cr .dw.pin .map{height:6.5em;background:#eef3ee;position:relative;overflow:hidden}
-.cr .dw.pin .map .rd{position:absolute;background:#fff}
-.cr .dw.pin .map .rd.h{left:0;right:0;top:55%;height:1.2em}
-.cr .dw.pin .map .rd.v{top:0;bottom:0;left:38%;width:1em}
-.cr .dw.pin .map .pin{position:absolute;left:46%;top:32%;width:1.4em;height:1.4em;border-radius:50% 50% 50% 0;background:var(--c2);transform:rotate(-45deg)}
-.cr .dw.pin .cap{padding:.6em .9em .7em}
-.cr .dw.pin .cap b{display:block;font-size:.9em}.cr .dw.pin .cap span{font-size:.72em;color:#6e6e73}
+.cr .dw.ob{display:block;width:100%;height:auto;overflow:visible;--ob-l:color-mix(in srgb, var(--c2, #2e9a78) 28%, #fff)}
+.cr .dw.ob .f1{fill:#fff}.cr .dw.ob .f2{fill:var(--ob-l)}.cr .dw.ob .f3{fill:var(--c2, #2e9a78)}
+.cr .dw.ob .f1w{fill:#fff;stroke:none}.cr .dw.ob .f1w2{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.cr .dw.ob .sh{fill:rgba(29,29,31,.10)}
+.cr .dw.ob .ln{stroke:#1d1d1f;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.cr .dw.ob .nf{fill:none}.cr .dw.ob .dash{stroke-dasharray:4 4;fill:none}.cr .dw.ob .thick{stroke-width:3}.cr .dw.ob .f3s{stroke:var(--c2, #2e9a78)}
+.cr .dw.ob.now{filter:grayscale(1);opacity:.55}
 `

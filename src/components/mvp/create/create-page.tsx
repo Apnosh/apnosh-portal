@@ -204,7 +204,7 @@ const CREATE_CSS = DRAW_CSS + `
 /* product */
 .cr .pp2-hero{margin:0;height:300px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:26px 40px 18px;background:linear-gradient(180deg,var(--t1),#fff 96%)}
 .cr .pp2-hero .art .dw{font-size:12.5px;box-shadow:none}
-.cr .pp2-hero .art{width:100%;max-width:250px;filter:drop-shadow(0 24px 40px rgba(20,60,45,.18)) drop-shadow(0 2px 4px rgba(0,0,0,.06))}
+.cr .pp2-hero .art{width:100%;max-width:230px;filter:drop-shadow(0 24px 40px rgba(20,60,45,.16))}
 .cr .pp2-head{padding:18px 20px 0}
 .cr .pp2-head .eb{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c2)}
 .cr .pp2-head .eb i{width:7px;height:7px;border-radius:99px;background:var(--c2)}
@@ -220,7 +220,7 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .pp2-na .half.after{background:var(--t1)}
 .cr .pp2-na u{text-decoration:none;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6e6e73}
 .cr .pp2-na .after u{color:var(--c2)}
-.cr .pp2-na .dw{font-size:7.5px}
+.cr .pp2-na .dw{width:70%;margin:0 auto}
 .cr .pp2-na span{font-size:11px;color:#6e6e73;line-height:1.35}
 .cr .pp2-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .cr .pp2-sec span{font-size:12px;color:#aeaeb2;white-space:nowrap}
@@ -245,7 +245,7 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .pp2-tl li i.you{background:#d99a1e;box-shadow:none}
 .cr .pp2-mini{flex:none;width:132px;border:0;background:none;padding:0;text-align:left;font-family:inherit;color:#1d1d1f;cursor:pointer;display:flex;flex-direction:column}
 .cr .pp2-mini .mk{height:100px;border-radius:14px;background:#f5f5f7;display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden}
-.cr .pp2-mini .mk .dw{font-size:7px}
+.cr .pp2-mini .mk .dw{width:70%}
 .cr .pp2-mini b{font-size:13px;font-weight:600;margin-top:8px;line-height:1.2}
 .cr .pp2-mini span{font-size:12px;color:#6e6e73}
 .cr .pp-hero{margin:4px 16px 0;height:170px;border-radius:22px;position:relative;overflow:hidden;color:#fff;display:flex;align-items:flex-end;padding:16px;background:linear-gradient(135deg,var(--c1),var(--c2))}
@@ -317,9 +317,9 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .qgrid{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:86px;gap:12px 10px;overflow-x:auto;padding:2px 16px 6px;scrollbar-width:none}
 .cr .qt{width:86px;display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
 /* the tile draws the thing itself, small, on its stage tint (owner 2026-09-15: "not icons, visuals of what they actually do") */
-.cr .qt .ic{width:86px;height:80px;border-radius:20px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;background:var(--t1);padding:8px 8px 0}
+.cr .qt .ic{width:86px;height:86px;border-radius:20px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--t1);padding:4px}
 .cr .qt .ic .dwm{width:100%;pointer-events:none}
-.cr .qt .ic .dwm .dw{font-size:5.6px;border-radius:.9em .9em 0 0;box-shadow:0 .4em 1.2em rgba(0,0,0,.14)}
+.cr .qt .ic .dwm .dw{width:100%}
 .cr .qt span:last-child{font-size:10.5px;font-weight:600;text-align:center;line-height:1.2;color:#1d1d1f}
 .cr .browse{margin:22px 16px 0}
 .cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:10px}
@@ -345,7 +345,7 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .pc2.dim{opacity:.55}
 .cr .st{position:relative;height:128px;border-radius:16px;background:var(--t1);display:flex;align-items:center;justify-content:center;padding:10px 14px;overflow:hidden;margin-bottom:6px}
 .cr .pc2.wide .st{height:160px}
-.cr .st .dwm{width:100%;max-width:156px}
+.cr .st .dwm{width:100%;max-width:118px}
 .cr .st .dwm .dw{font-size:8.5px}
 .cr .st .dwm .dw.google .menu,.cr .st .dwm .dw.google .qa,.cr .st .dwm .dw.google .prods,.cr .st .dwm .dw.google .gpost,.cr .st .dwm .dw.google .nomenu{margin-bottom:.3em}
 .cr .st .tag{position:absolute;left:8px;top:8px;z-index:2;font-style:normal;font-weight:700;font-size:10px;padding:3px 8px;border-radius:99px;background:rgba(255,255,255,.95);color:var(--c2);display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
@@ -358,7 +358,7 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .pcb{flex:none;width:262px;border:0;background:none;padding:0 0 2px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:2px;position:relative}
 .cr .pcb.dim{opacity:.55}
 .cr .pcb .st{height:138px;padding:12px 20px}
-.cr .pcb .st .dwm{max-width:200px}
+.cr .pcb .st .dwm{max-width:128px}
 .cr .pcb .st .dwm .dw{font-size:10px}
 .cr .pcb .parts{font-size:12px;color:#6e6e73;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .pc .pl{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:4px;font-size:12.5px}
