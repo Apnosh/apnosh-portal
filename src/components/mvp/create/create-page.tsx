@@ -687,7 +687,7 @@ export default function CreatePage() {
     { hue: 'newfaces', t: T('Update'), I: Clock, to: { href: '/dashboard/business-info' }, scene: { scene: 'hours' } },
     { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' }, scene: { scene: 'story' } },
     { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' }, scene: { scene: 'ad' } },
-    { hue: 'reviews', t: T('Reviews'), I: Star, to: { href: '/dashboard/review-replies' }, scene: { scene: 'review' } },
+    { t: T('Event'), I: Ticket, to: { card: 'promoevent' }, scene: { scene: 'event' } },
     { t: T('Graphic'), I: ImageIcon, to: { card: 'creative-graphic' }, scene: { scene: 'graphic' } },
     { t: T('Video'), I: Video, to: { card: 'creative-video' }, scene: { scene: 'reel' } },
     { t: T('Photos'), I: Camera, to: { card: 'creative-photos' }, scene: { scene: 'photos' } },
@@ -696,7 +696,7 @@ export default function CreatePage() {
     { t: T('Website'), I: Store, to: { card: 'creative-website' }, scene: { scene: 'site' } },
     { t: T('Influencers'), I: Users, to: { card: 'creator' }, scene: { scene: 'creator' } },
     { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' }, scene: { scene: 'ad' } },
-    { t: T('Event'), I: Ticket, to: { card: 'promoevent' }, scene: { scene: 'event' } },
+    { hue: 'reviews', t: T('Reviews'), I: Star, to: { href: '/dashboard/review-replies' }, scene: { scene: 'review' } },
     { t: T('Deal'), I: Tag, to: { card: 'slowoffer' }, scene: { scene: 'offer' } },
     { t: T('Email'), I: Mail, to: { card: 'creative-email' }, scene: { scene: 'email' } },
   ]
