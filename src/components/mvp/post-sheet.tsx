@@ -239,23 +239,27 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
                 </div>
               )}
             </div>
-            {/* the four, as symbols with their numbers, pushed to the bottom of the column */}
-            <div style={{ marginTop: 'auto', paddingTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 8px' }}>
-              {stats.map((s) => (
-                <div key={s.label} aria-label={`${s.n} ${s.label.toLowerCase()}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                  <span style={{ width: 30, height: 30, borderRadius: 99, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><s.Icon size={15} color={C.ink} strokeWidth={2.2} /></span>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
-                </div>
-              ))}
-            </div>
+            {/* the caption, under the comparison (owner 2026-09-15), as its own card so it reads as the post's words */}
+            {best.caption && (
+              <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 12, background: C.bg, minHeight: 0 }}>
+                <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>
+              </div>
+            )}
           </div>
         </div>
-        <div style={{ padding: '12px 16px 0' }}>
-          {/* the caption, set apart as its own card so it reads as the post's words, not the page's */}
-          {best.caption && <div style={{ padding: '10px 12px', borderRadius: 14, background: C.bg }}><div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div></div>}
+        {/* the four, as symbols with their numbers, in one row under the pair */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '14px 16px 0' }}>
+          {stats.map((s) => (
+            <div key={s.label} aria-label={`${s.n} ${s.label.toLowerCase()}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+              <span style={{ width: 32, height: 32, borderRadius: 99, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><s.Icon size={16} color={C.ink} strokeWidth={2.2} /></span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '14px 16px 0' }}>
           {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
               this post already picked, by the vendor's own post id. */}
-          <div style={{ display: 'flex', gap: 10, marginTop: best.caption ? 12 : 0 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
             <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: C.ink }}>
               <TrendingUp size={15} /> Boost
             </Link>
