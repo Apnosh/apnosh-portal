@@ -5,8 +5,12 @@ to build the Yellowbee staff-scheduling product end to end. It carries everythin
 needs that is not in the prototype itself: who the client is, what the product must do, the
 stack, the data model, the file layout, the acceptance tests, and the questions still open.
 
-**Pairs with:** `TRAINING-BUILD-PROMPT.md` (same repo, same auth, same `staff` table). Build
-scheduling first; training hangs off the staff roster this module creates.
+**Sibling:** `TRAINING-BUILD-PROMPT.md`. The scheduling prototype and the training prototype were
+built by two different people, independently, as tests. This file assumes nothing from the
+training prototype. Build scheduling as its own product; section 12 covers how the two could
+link later if the owner wants that.
+
+**Builder:** Apnosh (Mark). The prototypers hand off; they do not keep building.
 
 **Status:** Draft v1, 2026-09-16. Sections marked `[FILL]` need the ChatGPT prototype pasted in
 before the build starts.
@@ -15,13 +19,13 @@ before the build starts.
 
 ## 0. How to use this file
 
-1. Fill every `[FILL]` block from the ChatGPT prototype (screens, data samples, rules the owner
-   already agreed to). Do not build until section 2 is filled or explicitly marked "none yet".
+1. Get the handoff from the person who prototyped scheduling (section 2.0) and fill every
+   `[FILL]` block. Do not build until section 2 is filled or explicitly marked "none yet".
 2. Start the session with: *"You are building the Yellowbee scheduling app. Read this file top to
    bottom, then produce a plan that follows section 9 milestone by milestone. Do not skip the
    acceptance tests in section 10."*
-3. Everything below the line is the prompt. Keep it in the repo at `docs/BUILD-PROMPT.md` in the
-   new project so later sessions start from the same place.
+3. Everything below the line is the prompt. Keep it in the new repo at `docs/BUILD-PROMPT.md` so
+   later sessions start from the same place.
 
 ---
 
@@ -53,13 +57,24 @@ prefer Vietnamese; every staff-facing string must be translatable (English first
 
 **Relationship to Apnosh:** Apnosh is Yellowbee's marketing agency and is building this as a
 separate custom product. It is **not** part of the Apnosh client portal (the portal's product spec
-explicitly excludes staffing and scheduling). Build it as its own repo and its own Supabase project.
-Reuse the Apnosh stack and conventions so the team can maintain it.
+explicitly excludes staffing and scheduling). Build it as its own repo (`yellowbee-scheduling`)
+and its own Supabase project. Reuse the Apnosh stack and conventions so the team can maintain it.
+
+**Relationship to the training prototype:** none yet. A different person prototyped training
+separately, with their own idea of staff, roles, and stations. Do not import their assumptions.
+Where the two prototypes name the same thing differently (a "station" vs a "role"), this build
+uses the terms in this file and the reconciliation happens in section 12, later, if at all.
 
 ## 2. What already exists (the ChatGPT prototype) `[FILL]`
 
-The owner and Apnosh prototyped and tested this with ChatGPT before this build. Paste the
-following so we are not starting from scratch. If an item does not exist, write "none yet".
+One person prototyped and tested scheduling with ChatGPT before this build. They are not the
+builder. Collect the following from them in one sitting so we are not starting from scratch. If
+an item does not exist, write "none yet".
+
+### 2.0 Handoff from the prototyper
+`[FILL: name, role (owner / manager / staff / outside helper), dates they tested, which location
+they tested at, who else saw it. Ask them the four questions: What did you try to solve? What
+worked? What did the owner push back on? What did you never get to?]`
 
 ### 2.1 Screens the prototype had
 `[FILL: list every screen, one line each: name, who sees it, what it shows. Paste screenshots into
@@ -76,6 +91,11 @@ must have a trained person every shift", "schedule publishes Thursday for the fo
 ### 2.4 Things the owner rejected or disliked in the prototype
 `[FILL: this is as valuable as what they liked. Every rejection here becomes a "do not build" line.]`
 
+### 2.4b Things the prototyper assumed that the owner never confirmed
+`[FILL: a prototype built by one person carries that person's guesses. List every rule, role
+name, or workflow that came from the prototyper rather than the owner, so the build can confirm
+each one in section 11 instead of inheriting it.]`
+
 ### 2.5 The prompts / conversation transcript
 `[FILL: export the ChatGPT conversation to /docs/prototype/transcript.md. The build session reads
 it once for intent, then treats THIS file as the source of truth where they disagree.]`
@@ -89,7 +109,8 @@ explicit ask.
 - Staff records: name, preferred name, phone, email, preferred language, home location, roles they
   can work, hourly rate (owner/manager only), hire date, active flag.
 - Roles are per location and owner-defined (e.g. Cashier, Banh mi line, Boba, Coffee, Market
-  floor, Opener, Closer). A role can require a certification (links to the training module).
+  floor, Opener, Closer). Roles carry an optional free-text `requirement_note` ("must be
+  boba-trained") that shows on the shift card. No hard gate in v1; see section 12.
 - Invite flow: manager adds a phone number, staff gets an SMS link, signs in with a magic link or
   one-time code. No passwords for staff.
 
@@ -181,8 +202,7 @@ profiles             id (auth.users), company_id, full_name, preferred_name, pho
                      home_location_id, hourly_rate_cents (RLS: owner/manager read only),
                      hire_date, is_active, created_at, updated_at
 manager_locations    profile_id, location_id            -- which locations a manager runs
-roles                id, location_id, name, color, requires_certification_id (nullable, FK to
-                     training module), sort_order
+roles                id, location_id, name, color, requirement_note text (nullable), sort_order
 staff_roles          profile_id, role_id                 -- who can work what
 availability_rules   id, profile_id, location_id (nullable = any), weekday (0-6),
                      start_time, end_time, effective_from, effective_to
@@ -196,7 +216,7 @@ shifts               id, schedule_id, location_id, role_id, profile_id (nullable
                      starts_at, ends_at, break_minutes, notes, source ('template'|'manual'|'swap')
 coverage_rules       id, location_id, name, role_id (nullable), weekday int[] (nullable),
                      window_start, window_end, min_headcount, rule_type
-                     ('min_headcount'|'requires_cert'|'no_minor_close'|'custom'), params jsonb
+                     ('min_headcount'|'no_minor_close'|'custom'), params jsonb
 rule_overrides       id, schedule_id, coverage_rule_id, overridden_by, reason, created_at
 swap_requests        id, shift_id, from_profile_id, to_profile_id (nullable = open offer),
                      status ('open'|'accepted'|'approved'|'declined'|'cancelled'),
@@ -227,7 +247,7 @@ audit_log            id, actor_id, entity, entity_id, action, before jsonb, afte
 ## 7. Repo layout
 
 ```
-yellowbee-ops/
+yellowbee-scheduling/
 ├── docs/
 │   ├── BUILD-PROMPT.md              # this file
 │   ├── prototype/                   # ChatGPT screens, data, transcript (section 2)
@@ -354,9 +374,17 @@ Security:
 5. Is the geofence acceptable to staff, or should clock-in be from a shared tablet at the counter.
 6. Who is a manager at each location today.
 7. Which items from the ChatGPT prototype (section 2.4) are hard "no"s.
+8. Each guess in section 2.4b: confirm, change, or drop.
 
-## 12. v2 parking lot
+## 12. v2 parking lot, and linking to training later
 
 Sales-aware forecasting from POS, AI draft schedule from history, tip pooling, native push,
-shift bidding, integration with the training module's completion gates on scheduling
-(`requires_certification_id` is already in the schema so this is a rules-engine addition).
+shift bidding.
+
+**Linking to the training product.** If both products ship and the owner wants "nobody gets
+scheduled on boba until they are boba-certified", the link is small and one-directional:
+scheduling adds a `requires_cert` rule type that reads a `certifications` view exposed by the
+training product (per person, per certification, granted and expiry), and the rules engine
+blocks or warns. Nothing in this build should be designed around that link. Keep the two
+products on separate repos and Supabase projects until the owner asks for the gate; a shared
+login can come from Supabase auth on both sides using the same phone number as the identity.

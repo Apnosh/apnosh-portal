@@ -5,9 +5,12 @@ to build the Yellowbee training videos / modules product end to end. It carries 
 session needs that is not in the prototype itself: who the client is, what the product must do,
 the stack, the data model, the file layout, the acceptance tests, and the questions still open.
 
-**Pairs with:** `SCHEDULING-BUILD-PROMPT.md`. Training lives in the same repo and Supabase project
-as scheduling and reads the same `profiles`, `locations`, and `roles` tables. Build scheduling's
-milestone 1 (auth + roster) first; training starts from there.
+**Sibling:** `SCHEDULING-BUILD-PROMPT.md`. The training prototype and the scheduling prototype were
+built by two different people, independently, as tests. This file assumes nothing from the
+scheduling prototype. Training is its own product with its own repo, auth, and roster; section 12
+covers how the two could link later if the owner wants that.
+
+**Builder:** Apnosh (Mark). The prototypers hand off; they do not keep building.
 
 **Status:** Draft v1, 2026-09-16. Sections marked `[FILL]` need the ChatGPT prototype pasted in
 before the build starts.
@@ -16,13 +19,14 @@ before the build starts.
 
 ## 0. How to use this file
 
-1. Fill every `[FILL]` block from the ChatGPT prototype (module outlines, video list, quiz
-   questions, the owner's "what a new hire must know before touching the boba station" list).
-2. Start the session with: *"You are building the Yellowbee training module inside the
-   yellowbee-ops repo. Read this file top to bottom, then produce a plan that follows section 9
-   milestone by milestone. Do not skip the acceptance tests in section 10."*
-3. Keep this file at `docs/TRAINING-BUILD-PROMPT.md` in the project so later sessions start from
-   the same place.
+1. Get the handoff from the person who prototyped training (section 2.0) and fill every `[FILL]`
+   block (module outlines, video list, quiz questions, the owner's "what a new hire must know
+   before touching the boba station" list).
+2. Start the session with: *"You are building the Yellowbee training app. Read this file top to
+   bottom, then produce a plan that follows section 9 milestone by milestone. Do not skip the
+   acceptance tests in section 10."*
+3. Keep this file at `docs/BUILD-PROMPT.md` in the new repo so later sessions start from the
+   same place.
 
 ---
 
@@ -48,7 +52,7 @@ station alone" in a known number of days, and wants proof of who has completed w
 
 | Role | What they do | Device |
 |------|--------------|--------|
-| Owner | Authors modules (or approves AI drafts), sets which roles require which modules, sees completion across both locations | Laptop |
+| Owner | Authors modules (or approves AI drafts), sets which stations require which modules, sees completion across both locations | Laptop |
 | Manager | Assigns modules, signs off hands-on checks, sees who is blocked from a station | Laptop + phone |
 | Trainee / staff | Watches videos, reads steps, passes quizzes, gets checked off, sees their own progress | Phone only |
 
@@ -56,11 +60,26 @@ Staff-facing content must exist in English and Vietnamese. Videos are recorded o
 carry the second language.
 
 **Relationship to Apnosh:** Apnosh is Yellowbee's marketing agency, building this as a separate
-custom product. It is **not** part of the Apnosh client portal. Apnosh's content team will
-likely shoot the videos, so the video brief format in section 3.6 should match how Apnosh already
-briefs a shoot (location, shot list, talent, duration).
+custom product. It is **not** part of the Apnosh client portal. Build it as its own repo
+(`yellowbee-training`) and its own Supabase project. Apnosh's content team will likely shoot the
+videos, so the video brief format in section 3.6 should match how Apnosh already briefs a shoot
+(location, shot list, talent, duration).
+
+**Relationship to the scheduling prototype:** none yet. A different person prototyped scheduling
+separately, with their own idea of staff and roles. Do not import their assumptions. This build
+keeps its own roster (section 3.0). If the owner later wants training completion to gate
+scheduling, section 12 describes the link; nothing here should be designed around it.
 
 ## 2. What already exists (the ChatGPT prototype) `[FILL]`
+
+One person prototyped and tested training with ChatGPT before this build. They are not the
+builder. Collect the following from them in one sitting. If an item does not exist, write
+"none yet".
+
+### 2.0 Handoff from the prototyper
+`[FILL: name, role (owner / manager / staff / outside helper), dates they tested, which station
+or module they tested with, who watched or took it. Ask them: What did you try to solve? What
+worked? What did the owner push back on? What did you never get to?]`
 
 ### 2.1 Module outlines the prototype produced
 `[FILL: paste every module outline: title, station/role, steps, estimated minutes. Put the raw
@@ -80,11 +99,23 @@ uploaded before first shift", "re-certify closing every 6 months".]`
 ### 2.5 What the owner rejected or disliked
 `[FILL: each item becomes a do-not-build line.]`
 
+### 2.5b Things the prototyper assumed that the owner never confirmed
+`[FILL: station names, pass marks, "must re-certify every 6 months", who signs check-offs. List
+every rule that came from the prototyper rather than the owner so section 11 can confirm each.]`
+
 ### 2.6 The ChatGPT transcript
 `[FILL: export to /docs/prototype/training/transcript.md. Read once for intent; this file wins
 where they disagree.]`
 
 ## 3. What the product must do (v1 scope)
+
+### 3.0 Roster (this product's own)
+- Staff records: name, preferred name, phone, email, preferred language, home location, hire
+  date, active flag, `role_level` (owner / manager / staff). Managers are tied to locations.
+- Stations are owner-defined per location (Cashier, Banh mi line, Boba, Coffee, Market floor,
+  Opener, Closer). A station is what tracks target and what certifications unlock.
+- Invite by phone number, SMS magic link or one-time code. No passwords for staff.
+- The roster is a CSV import on day one (the owner's current list), editable in-app after.
 
 ### 3.1 Content model
 - **Track** — an ordered set of modules for a role or a milestone (e.g. "New hire week 1",
@@ -101,12 +132,12 @@ where they disagree.]`
   can flag a version as "requires re-completion" and it does.
 
 ### 3.2 Assignment and gating
-- Assignments come from three places: a role (everyone with role X gets track Y), a manager
+- Assignments come from three places: a station (everyone on station X gets track Y), a manager
   manually, or a due date rule (e.g. "within 7 days of hire date").
 - A **certification** is what a completed track grants. It has an optional expiry
-  (re-certify every N months). The scheduling module's `roles.requires_certification_id`
-  points here, so an uncertified person cannot be scheduled on that role once the owner turns
-  the gate on.
+  (re-certify every N months). A station can require a certification; the manager grid shows who
+  is cleared for which station. Enforcement inside a scheduling tool is out of scope here
+  (section 12).
 - Trainee sees: what is assigned, what is due when, what is blocking which station.
 
 ### 3.3 Progress and proof
@@ -148,9 +179,11 @@ answers. Content lives in this app, not YouTube.
 
 ## 5. Stack and conventions
 
-Identical to scheduling (Next.js 16 App Router, React 19, TypeScript strict, Supabase, Tailwind
-v4, lucide-react, zod, date-fns, Vitest, Playwright, Vercel, Node 24). Additions for this
-module:
+Same as the Apnosh portal so the team can maintain it: **Next.js 16** App Router (read
+`node_modules/next/dist/docs/` first; this version differs from training data), React 19,
+TypeScript strict, **Supabase** (own project), Tailwind v4, lucide-react, clsx + tailwind-merge,
+**zod** on every server-action input, date-fns, **Twilio** for SMS, Vitest, Playwright, Vercel,
+npm, Node 24. Specific to this product:
 
 - **Video:** Mux (upload, transcode, thumbnails, signed playback, `mux-player-react`). Mux
   gives watched-percentage events, which is how 90% completion is measured. Fallback if the
@@ -175,11 +208,23 @@ Conventions carried over from the Apnosh portal:
 
 ## 6. Data model
 
-Same Supabase project as scheduling. Reuses `companies`, `locations`, `profiles`, `roles`,
-`notifications`, `audit_log`.
+Own Supabase project. Column lists are the minimum, add what the prototype needs.
 
 ```
-tracks               id, company_id, title, description, target_role_ids uuid[], prerequisite_track_id,
+companies            id, name, created_at
+locations            id, company_id, name, address, timezone, is_active
+profiles             id (auth.users), company_id, full_name, preferred_name, phone, email,
+                     preferred_language ('en'|'vi'), role_level ('owner'|'manager'|'staff'),
+                     home_location_id, hire_date, is_active, can_author bool, created_at, updated_at
+manager_locations    profile_id, location_id
+stations             id, location_id, name, color, requires_certification_id (nullable), sort_order
+staff_stations       profile_id, station_id
+notifications        id, profile_id, kind, payload jsonb, channel ('sms'|'in_app'), sent_at,
+                     read_at, delivery_status
+audit_log            id, actor_id, entity, entity_id, action, before jsonb, after jsonb, reason,
+                     created_at
+
+tracks               id, company_id, title, description, target_station_ids uuid[], prerequisite_track_id,
                      grants_certification_id, due_days_after_hire int, status ('draft'|'published'|
                      'archived'), sort_order, created_by, created_at, updated_at
 track_modules        track_id, module_id, sort_order
@@ -237,23 +282,29 @@ question_stats       question_id, attempts int, correct int      -- materialized
 - A `staff_certifications` row is inserted only by the completion function
   `grant_certification_if_track_complete(profile_id, track_id)`; the app never inserts directly.
 
-## 7. Repo layout (additions to `yellowbee-ops`)
+## 7. Repo layout
 
 ```
-yellowbee-ops/
+yellowbee-training/
 ├── docs/
-│   ├── TRAINING-BUILD-PROMPT.md     # this file
-│   ├── prototype/training/          # modules, scripts, quizzes, transcript (section 2)
+│   ├── BUILD-PROMPT.md              # this file
+│   ├── prototype/                   # modules, scripts, quizzes, transcript (section 2)
+│   ├── DECISIONS.md                 # short ADR list, newest first
 │   └── VIDEO-BRIEF-FORMAT.md        # the shoot brief fields, shared with Apnosh's shoot team
-├── supabase/migrations/
-│   ├── 020_training_content.sql     # tracks, modules, versions, lessons, translations, videos
-│   ├── 021_training_quizzes_checklists.sql
-│   ├── 022_training_assignments_progress.sql
-│   ├── 023_training_certifications.sql   # + grant function + link to roles.requires_certification_id
-│   ├── 024_ai_generations.sql
-│   └── 025_training_rls.sql
+├── supabase/
+│   ├── migrations/
+│   │   ├── 001_companies_locations_profiles.sql
+│   │   ├── 002_stations_notifications_audit.sql
+│   │   ├── 003_training_content.sql     # tracks, modules, versions, lessons, translations, videos
+│   │   ├── 004_quizzes_checklists.sql
+│   │   ├── 005_assignments_progress.sql
+│   │   ├── 006_certifications.sql       # + grant function
+│   │   ├── 007_ai_generations.sql
+│   │   └── 008_rls.sql
+│   └── seed.sql                     # both locations, stations, 12 fake staff, one real track
 ├── src/
 │   ├── app/
+│   │   ├── (auth)/login/                   # magic link + OTP
 │   │   ├── me/training/                    # STAFF
 │   │   │   ├── page.tsx                    # my tracks, due dates, what's blocking me
 │   │   │   ├── [trackId]/page.tsx
@@ -267,6 +318,7 @@ yellowbee-ops/
 │   │   │   └── checkoffs/                  # pending check-off requests
 │   │   ├── owner/training/                 # OWNER
 │   │   │   ├── page.tsx                    # both locations, completion, expiring
+│   │   │   ├── locations/ stations/ staff/ # roster admin
 │   │   │   ├── tracks/
 │   │   │   ├── modules/[moduleId]/edit/    # module editor
 │   │   │   ├── videos/                     # library + briefs + shoot plan export
@@ -284,6 +336,8 @@ yellowbee-ops/
 │   │   │                                   # ChecklistEditor, AiSuggestion, TranslationEditor
 │   │   └── dashboards/                     # ProgressGrid, ExpiringList, TrackStats
 │   ├── lib/
+│   │   ├── supabase/                       # client.ts, server.ts, admin.ts, middleware.ts (copy Apnosh)
+│   │   ├── notify/ + i18n/                 # sms.ts, inapp.ts, templates/{en,vi}.ts, en.json, vi.json
 │   │   ├── actions/training/               # content.ts, assign.ts, progress.ts, quiz.ts,
 │   │   │                                   # checkoff.ts, certify.ts, video.ts, translate.ts
 │   │   ├── training/
@@ -293,15 +347,26 @@ yellowbee-ops/
 │   │   ├── video/mux.ts
 │   │   ├── ai/assist.ts + prompts/         # steps_from_transcript, quiz_from_lesson, rewrite, translate
 │   │   └── export/training-record-pdf.tsx
-│   └── types/database.ts                   # regenerated
+│   ├── types/database.ts                   # generated: supabase gen types
+│   └── middleware.ts
+├── .env.example
 └── tests/
     ├── unit/training/*.test.ts
     └── e2e/training-*.spec.ts
 ```
 
-## 8. Environment variables (additions)
+## 8. Environment variables
 
 ```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_FROM_NUMBER=
+TWILIO_WEBHOOK_SECRET=
+CRON_SECRET=
+NEXT_PUBLIC_APP_URL=
 MUX_TOKEN_ID=
 MUX_TOKEN_SECRET=
 MUX_WEBHOOK_SECRET=
@@ -314,7 +379,10 @@ ANTHROPIC_API_KEY=
 
 Each milestone ends with a pushed branch, a Vercel preview link, and the listed tests green.
 
-1. **Content schema + seed** — migrations 020–021 + 025, seed one real track from the prototype
+1. **Foundation** — repo, Supabase project, migrations 001–002 + 008, auth (magic link + OTP),
+   `profiles` sync trigger, roster CSV import, stations admin, layout shells for `/me`, `/manage`,
+   `/owner`. Test: a seeded staff member logs in and sees an empty "my training".
+1b. **Content schema + seed** — migrations 003–004, seed one real track from the prototype
    ("Boba station": 3 modules, 1 video placeholder, 1 quiz, 1 checklist). Test: RLS suite for
    staff cannot read `correct_index`.
 2. **Trainee player** — `/me/training`, steps and reference lessons, quiz runner with server-side
@@ -322,10 +390,10 @@ Each milestone ends with a pushed branch, a Vercel preview link, and the listed 
 3. **Video** — Mux upload from the owner library, webhook → `videos.status`, signed playback,
    90% completion tracking, English captions. Test: webhook handler unit test; completion rule
    unit test (seek-to-end does not complete).
-4. **Assignments, check-offs, certifications** — role-based and manual assignment, hire-date
-   rule, manager check-off signing, `grant_certification_if_track_complete`, expiry. Wire
-   `roles.requires_certification_id` into the scheduling rules engine as a `requires_cert`
-   rule. Test: e2e "manager signs a check-off and the trainee becomes schedulable on Boba".
+4. **Assignments, check-offs, certifications** — station-based and manual assignment, hire-date
+   rule, manager check-off signing, `grant_certification_if_track_complete`, expiry, "cleared
+   for station" view on the manager grid. Test: e2e "manager signs a check-off and the trainee
+   shows as cleared for Boba".
 5. **Authoring** — module editor, lesson/quiz/checklist editors, versioning with
    `requires_recompletion`, video briefs and shoot-plan export. Test: e2e "publish v2 of a
    module and see who must redo it".
@@ -349,8 +417,8 @@ Golden e2e flows (Playwright):
   requests a check-off; manager signs it; certification granted; owner dashboard turns green.
 - **Re-certification:** owner publishes module v2 with `requires_recompletion`; everyone
   certified via that module shows as "redo required"; a trainee redoes it and is re-certified.
-- **Gate holds:** manager tries to schedule an uncertified person on the Boba role; scheduling
-  blocks with the reason "needs Boba station certification".
+- **Cleared-for-station is right:** the manager grid shows a person as not cleared for Boba until
+  the track completes, and drops them back to not cleared the day the certification expires.
 
 Unit (Vitest):
 - `completion.ts`: module complete requires every lesson complete, quiz passed if present,
@@ -374,10 +442,20 @@ Security:
 5. Food-handler card: upload and expiry tracking in this app (adds a `documents` table), or
    handled elsewhere.
 6. Which prototype items (section 2.5) are hard "no"s.
+7. Each guess in section 2.5b: confirm, change, or drop.
+8. Whether the roster should be shared with the scheduling product from day one (only if both
+   ship together; otherwise keep them separate and revisit).
 
-## 12. v2 parking lot
+## 12. v2 parking lot, and linking to scheduling later
 
 Free-text quiz answers with AI grading and manager review, per-station skill levels
 (trainee / solo / trainer), trainer assignment and trainer scoring, cohort onboarding sessions,
 POS-driven prompts ("boba attach rate dropped, refresh the upsell lesson"), a client-facing
 summary of training completion inside the Apnosh portal proof cards.
+
+**Linking to the scheduling product.** If both ship and the owner wants an uncertified person
+blocked from a station on the schedule, this product exposes one read-only view,
+`certification_status(profile_phone, certification_name, granted_at, expires_at)`, behind a
+service key, and the scheduling product's rules engine reads it. Identity joins on phone number.
+No shared tables, no shared repo, until the owner asks for the gate and both rosters have been
+reconciled by hand once.
