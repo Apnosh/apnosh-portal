@@ -72,11 +72,31 @@ export interface DrawProps {
 
 const Bar = ({ w = '70%' }: { w?: string }) => <b className="bar" style={{ width: w }} />
 
+/** THE LINE DRAWINGS (owner 2026-09-15: "each should have some time taken into it"). Every photo
+ *  slot used to be a warm colour blob. Now each slot is a quiet two-tone wash with one thin line
+ *  drawing on it, chosen for the scene: a plate on a post, a bowl behind a reel, a storefront on
+ *  the listing, six different dishes on the photo shoot. Stroke only, in the ink at low alpha. */
+export type Motif = 'plate' | 'bowl' | 'cup' | 'sando' | 'slice' | 'drink' | 'store' | 'taco'
+const MOTIF_PATHS: Record<Motif, ReactNode> = {
+  plate: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /></>,
+  bowl: <><path d="M3 10.5h18a9 9 0 0 1-18 0z" /><path d="M8 20h8" /><path d="M10 4c0 1.5-1 1.5-1 3M14 4c0 1.5-1 1.5-1 3" /></>,
+  cup: <><rect x="4" y="7" width="11" height="10" rx="2.5" /><path d="M15 10h1.5a2.5 2.5 0 0 1 0 5H15" /><path d="M3 20h14" /></>,
+  sando: <><path d="M4 10a8 5 0 0 1 16 0H4z" /><rect x="4" y="11.5" width="16" height="3" rx="1.5" /><rect x="4" y="16" width="16" height="3" rx="1.5" /></>,
+  slice: <><path d="M12 3 4 19.5h16z" /><circle cx="10" cy="14" r="1" /><circle cx="14" cy="15.5" r="1" /><circle cx="12" cy="10" r="1" /></>,
+  drink: <><path d="M7 4h10l-1.4 15H8.4z" /><path d="M8 10h8" /><path d="M13.5 2.5 17 8" /></>,
+  store: <><path d="M4 9.5 5.5 5h13L20 9.5" /><path d="M3.5 9.5a1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0 1.75 1.75 0 0 0 3.5 0" /><path d="M5 11v9h14v-9" /><path d="M10 20v-6h4v6" /></>,
+  taco: <><path d="M3 14.5a9 9 0 0 1 18 0V17H3z" /><path d="M7 14.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0" /></>,
+}
+const MotifMark = ({ k }: { k: Motif }) => (
+  <span className="mf" aria-hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{MOTIF_PATHS[k]}</svg></span>
+)
+
 export function Drawing({ spec, name, rating, now = false, t }: DrawProps): ReactNode {
   /* the photo slots are drawn, not fetched (owner 2026-09-14): a plate, a bowl, a drink, a table, in
      warm tones, so no one else's post and no words end up on a card */
   const v = `p${((spec.scene.length + (spec.focus?.length ?? 0)) % 4) + 1}`
-  const ph = <div className={`ph ${v}`} />
+  const slot = (k: Motif, extra = '') => <div className={`ph ${v}${extra ? ` ${extra}` : ''}`}><MotifMark k={k} /></div>
+  const ph = slot('plate')
   const fx = (k: GoogleFocus) => (!now && (spec.focus === k || spec.focus === 'all') ? ' fx' : '')
   const cls = `dw ${spec.scene}${now ? ' now' : ''}`
   switch (spec.scene) {
@@ -86,14 +106,14 @@ export function Drawing({ spec, name, rating, now = false, t }: DrawProps): Reac
       const compact = f === 'menu' || f === 'qa' || f === 'products' || f === 'gpost'
       return (
         <div className={`${cls}${compact ? ' compact' : ''}`}>
-          <div className={`strip${fx('photos')}`}>{ph}<div className="ph2 food p2" /><div className="ph3 food p3" /></div>
+          <div className={`strip${fx('photos')}`}>{slot('store')}<div className="ph2 food p2"><MotifMark k="plate" /></div><div className="ph3 food p3"><MotifMark k="bowl" /></div></div>
           <div className="nm">{name}</div><div className="mt">{rating}</div>
           {now && f === 'buttons' ? <div className="btns dim"><i>{t('Directions')}</i><i>{t('Website')}</i></div>
             : <div className={`btns${fx('buttons')}`}><i>{t('Menu')}</i><i className="on">{t('Order')}</i><i className="on">{t('Reserve')}</i><i>{t('Call')}</i></div>}
           {f === 'menu' || f === 'all' ? (now ? <div className="nomenu">{t('No menu added')}</div> : <div className={`menu${fx('menu')}`}><div><Bar w="62%" /><b className="pr">$13</b></div><div><Bar w="48%" /><b className="pr">$11</b></div></div>) : null}
           {f === 'qa' ? (now ? <div className="nomenu">{t('4 questions, no answer')}</div> : <div className={`qa${fx('qa')}`}><div><span>{t('Do you have parking?')}</span><em>{t('Yes, behind the building.')}</em></div><div><span>{t('Kids welcome?')}</span><em>{t('Always.')}</em></div></div>) : null}
-          {f === 'products' ? <div className={`prods${fx('products')}`}><div className="pd"><i /><span>{t('Catering')}</span></div><div className="pd"><i /><span>{t('Gift cards')}</span></div><div className="pd"><i /><span>{t('Private room')}</span></div></div> : null}
-          {f === 'gpost' ? <div className={`gpost${fx('gpost')}`}><i /><div><Bar w="80%" /><Bar w="55%" /><em>{t('Order online')}</em></div></div> : null}
+          {f === 'products' ? <div className={`prods${fx('products')}`}><div className="pd"><i><MotifMark k="sando" /></i><span>{t('Catering')}</span></div><div className="pd"><i><MotifMark k="cup" /></i><span>{t('Gift cards')}</span></div><div className="pd"><i><MotifMark k="store" /></i><span>{t('Private room')}</span></div></div> : null}
+          {f === 'gpost' ? <div className={`gpost${fx('gpost')}`}><i><MotifMark k="plate" /></i><div><Bar w="80%" /><Bar w="55%" /><em>{t('Order online')}</em></div></div> : null}
         </div>
       )
     }
@@ -102,39 +122,40 @@ export function Drawing({ spec, name, rating, now = false, t }: DrawProps): Reac
     case 'directories':
       return <div className={cls}>{[['Yelp', '#d32323'], ['Apple Maps', '#1d1d1f'], ['Bing', '#008373'], ['TripAdvisor', '#34e0a1']].map(([n, c]) => <div key={n} className="dir fx"><i style={{ background: c }} /><div><b>{name}</b><span>{t('Same hours · phone · menu')}</span></div><em>{t('Order')}</em></div>)}</div>
     case 'apps':
-      return <div className={cls}><div className="apph"><i /><b>{name}</b><span>{t('4.8 · 25 min · $0 fee')}</span></div>{ph}<div className="row2"><Bar w="60%" /><b className="pr">$13</b></div><div className="row2"><Bar w="45%" /><b className="pr">$11</b></div><div className="tip fx">{t('Order direct and save 15%')}</div></div>
+      return <div className={cls}><div className="apph"><i /><b>{name}</b><span>{t('4.8 · 25 min · $0 fee')}</span></div>{slot('bowl')}<div className="row2"><Bar w="60%" /><b className="pr">$13</b></div><div className="row2"><Bar w="45%" /><b className="pr">$11</b></div><div className="tip fx">{t('Order direct and save 15%')}</div></div>
     case 'chart':
       return <div className={cls}><div className="nm">{t('Where people come from')}</div><div className="bars">{[30, 45, 38, 60, 52, 74, 88].map((h, i) => <i key={i} style={{ height: `${h}%` }} className={i === 6 ? 'fx' : ''} />)}</div><div className="mt">{t('Google · Instagram · your site')}</div></div>
     case 'site': case 'sitemenu': case 'order': case 'reserve': case 'sticky': case 'gift': case 'fix': case 'catering': {
       const nav = <div className="nav"><b>{name}</b><span>{t('Menu')}</span><span className={spec.scene === 'site' ? 'fx' : ''}>{t('Order')}</span><span className={spec.scene === 'site' ? 'fx' : ''}>{t('Reserve')}</span></div>
       const body = spec.scene === 'sitemenu' ? <div className="mlist fx"><div><Bar w="55%" /><b className="pr">$13</b></div><div><Bar w="70%" /><b className="pr">$11</b></div><div><Bar w="40%" /><b className="pr">$9</b></div></div>
-        : spec.scene === 'order' ? <div className="ordr">{ph}<em className="fx">{t('Order direct')}</em><span>{t('No app fees')}</span></div>
+        : spec.scene === 'order' ? <div className="ordr">{slot('sando')}<em className="fx">{t('Order direct')}</em><span>{t('No app fees')}</span></div>
         : spec.scene === 'reserve' ? <div className="slots fx"><span>6:30</span><span className="on">7:00</span><span>7:30</span><span>8:00</span></div>
-        : spec.scene === 'sticky' ? <>{ph}<div className="stk fx"><span>{t('Call')}</span><span>{t('Directions')}</span><span>{t('Order')}</span></div></>
+        : spec.scene === 'sticky' ? <>{slot('plate')}<div className="stk fx"><span>{t('Call')}</span><span>{t('Directions')}</span><span>{t('Order')}</span></div></>
         : spec.scene === 'gift' ? <div className="gc fx"><b>{name}</b><span>{t('Gift card')}</span><em>$50</em></div>
         : spec.scene === 'fix' ? <div className="chk">{[t('Order button works'), t('Hours match Google'), t('Loads in 1.2s'), t('No dead links')].map((x, i) => <div key={i} className={i < 3 ? 'ok' : 'fx'}><i />{x}</div>)}</div>
         : spec.scene === 'catering' ? <div className="form fx"><b>{t('Catering for your office')}</b><Bar w="80%" /><Bar w="60%" /><em>{t('Get a quote')}</em></div>
-        : ph
+        : slot('store')
       return <div className={`dw web${now ? ' now' : ''}`}><div className="bar3"><i /><i /><i /></div>{nav}{body}</div>
     }
     case 'post':
       return <div className={cls}><div className="hd"><i />{name}</div>{ph}<div className="cap"><Bar w="60%" /><em className="fx">{t('Reserve')}</em></div></div>
     case 'story':
-      return <div className={cls}><div className="prog"><i /><i /><i /></div><div className="stick fx">{t('Book Friday')}</div></div>
+      return <div className={cls}><MotifMark k="drink" /><div className="prog"><i /><i /><i /></div><div className="stick fx">{t('Book Friday')}</div></div>
     case 'reel':
-      return <div className={cls}><i className="play" /><div className="cap">{t('Popcorn chicken, 4 ways')}</div><div className="side"><i /><i /><i /></div></div>
+      return <div className={cls}><MotifMark k="bowl" /><i className="play" /><div className="cap">{t('Popcorn chicken, 4 ways')}</div><div className="side"><i /><i /><i /></div></div>
     case 'profile':
-      return <div className={cls}><div className="top"><i /><div><b>{name}</b><span>{t('312 posts · 2,140 followers')}</span></div></div><div className="pb fx"><span>{t('Order food')}</span><span>{t('Reserve')}</span><span>{t('Call')}</span></div><div className="g3"><i /><i /><i /></div></div>
+      return <div className={cls}><div className="top"><i><MotifMark k="store" /></i><div><b>{name}</b><span>{t('312 posts · 2,140 followers')}</span></div></div><div className="pb fx"><span>{t('Order food')}</span><span>{t('Reserve')}</span><span>{t('Call')}</span></div><div className="g3"><i><MotifMark k="plate" /></i><i><MotifMark k="cup" /></i><i><MotifMark k="sando" /></i></div></div>
     case 'linkpage':
-      return <div className={cls}><i className="av" /><b>{name}</b>{[t('Order'), t('Reserve'), t('Menu'), t('Directions')].map((x, i) => <span key={i} className={i === 0 ? 'fx' : ''}>{x}</span>)}</div>
+      return <div className={cls}><i className="av"><MotifMark k="store" /></i><b>{name}</b>{[t('Order'), t('Reserve'), t('Menu'), t('Directions')].map((x, i) => <span key={i} className={i === 0 ? 'fx' : ''}>{x}</span>)}</div>
     case 'grid':
-      return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} className={i < 3 ? 'pin fx' : ''}>{i < 3 && <em>{[t('Menu'), t('Hours'), t('How to order')][i]}</em>}</i>)}</div>
+      return <div className={cls}>{(['plate', 'cup', 'sando', 'bowl', 'slice', 'drink'] as Motif[]).map((k, i) => <i key={i} className={i < 3 ? 'pin fx' : ''}><MotifMark k={k} />{i < 3 && <em>{[t('Menu'), t('Hours'), t('How to order')][i]}</em>}</i>)}</div>
     case 'batch':
-      return <div className={cls}>{[0, 1, 2].map((i) => <div key={i} className={`pc${i}`}><div className="hd"><i />{name}</div><div className="ph" /><Bar w="50%" /></div>)}</div>
+      return <div className={cls}>{(['plate', 'cup', 'sando'] as Motif[]).map((k, i) => <div key={i} className={`pc${i}`}><div className="hd"><i />{name}</div><div className="ph"><MotifMark k={k} /></div><Bar w="50%" /></div>)}</div>
     case 'graphic':
       return <div className={cls}><div className="poster fx"><span>{t('Taco Tuesday')}</span><b>{t('Half price, all night')}</b><em>{name}</em></div></div>
     case 'photos':
-      return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} />)}</div>
+      /* the shoot: six different dishes, so the card says food, space and table in one look */
+      return <div className={cls}>{(['plate', 'bowl', 'cup', 'sando', 'slice', 'drink'] as Motif[]).map((k, i) => <i key={i}><MotifMark k={k} /></i>)}</div>
     case 'print':
       /* a flyer on the counter with a table tent behind it */
       return <div className={cls}><div className="tent"><b>{t('Taco Tuesday')}</b></div><div className="sheet fx"><span>{t('Taco Tuesday')}</span><b>{t('$2 tacos, 5 to 7')}</b><em>{name}</em></div></div>
@@ -145,9 +166,9 @@ export function Drawing({ spec, name, rating, now = false, t }: DrawProps): Reac
       /* the listing's hours, one day changed */
       return <div className={cls}><div className="nm">{name}</div><div className="hrs">{[[t('Mon'), '11–9'], [t('Tue'), '11–9'], [t('Wed'), t('Closed')], [t('Thu'), '11–10']].map(([d, h], i) => <div key={i} className={i === 2 ? 'fx' : ''}><span>{d}</span><em>{h}</em></div>)}</div></div>
     case 'creator':
-      return <div className={cls}><div className="hd"><i className="cr" />@seattle.eats<span>{t('40k nearby')}</span></div>{ph}<div className="cap"><Bar w="70%" /><em>{t('at {name}').replace('{name}', name)}</em></div></div>
+      return <div className={cls}><div className="hd"><i className="cr" />@seattle.eats<span>{t('40k nearby')}</span></div>{slot('bowl')}<div className="cap"><Bar w="70%" /><em>{t('at {name}').replace('{name}', name)}</em></div></div>
     case 'ad':
-      return <div className={cls}><div className="hd"><i />{name}<span>{t('Sponsored')}</span></div>{ph}<div className="cap"><Bar w="55%" /><em className="fx">{t('Call')}</em><em className="fx">{t('Directions')}</em></div></div>
+      return <div className={cls}><div className="hd"><i />{name}<span>{t('Sponsored')}</span></div>{slot('sando')}<div className="cap"><Bar w="55%" /><em className="fx">{t('Call')}</em><em className="fx">{t('Directions')}</em></div></div>
     case 'ticket':
       return <div className={cls}><div className="stub"><b>{t('Sat')}</b><span>21</span></div><div className="bd"><b>{t('Dumpling night at {name}').replace('{name}', name)}</b><span>{t('7 pm · 24 seats')}</span><em className="fx">{t('Get a seat · $45')}</em></div></div>
     case 'event':
@@ -199,10 +220,18 @@ export const DRAW_CSS = `
 .cr .dw.now{filter:grayscale(1);opacity:.7}
 .cr .dw .bar{display:block;height:.5em;border-radius:.3em;background:#e6e6ea}
 .cr .dw .ph{height:5.5em}
-.cr .dw .ph,.cr .dw .food,.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3,.cr .dw.google .pd i,.cr .dw.google .gpost i,.cr .dw.profile .top i,.cr .dw.profile .g3 i,.cr .dw.grid i,.cr .dw.photos i,.cr .dw.linkpage .av,.cr .dw.story,.cr .dw.reel,.cr .dw.event .poster{background-color:#e9c9a6;background-image:radial-gradient(circle at 28% 38%,rgba(214,86,52,.95) 0%,rgba(214,86,52,0) 48%),radial-gradient(circle at 72% 30%,rgba(243,182,72,.9) 0%,rgba(243,182,72,0) 45%),radial-gradient(circle at 60% 78%,rgba(126,168,84,.85) 0%,rgba(126,168,84,0) 42%),radial-gradient(circle at 18% 85%,rgba(255,240,214,.9) 0%,rgba(255,240,214,0) 40%),linear-gradient(160deg,#f4dcc2,#d9a97f);background-size:cover;background-position:center}
-.cr .dw .ph.p2,.cr .dw .food.p2,.cr .dw.grid i:nth-child(2),.cr .dw.photos i:nth-child(2),.cr .dw.photos i:nth-child(5){background-color:#6b4a35;background-image:radial-gradient(circle at 40% 45%,rgba(240,196,106,.95) 0%,rgba(240,196,106,0) 46%),radial-gradient(circle at 75% 70%,rgba(201,71,58,.8) 0%,rgba(201,71,58,0) 40%),radial-gradient(circle at 15% 80%,rgba(127,176,94,.7) 0%,rgba(127,176,94,0) 38%),linear-gradient(160deg,#8a5d42,#3d2a20)}
-.cr .dw .ph.p3,.cr .dw .food.p3,.cr .dw.grid i:nth-child(3),.cr .dw.photos i:nth-child(3),.cr .dw.photos i:nth-child(6){background-color:#d9e3c3;background-image:radial-gradient(circle at 35% 40%,rgba(109,160,74,.9) 0%,rgba(109,160,74,0) 46%),radial-gradient(circle at 70% 35%,rgba(255,245,220,.95) 0%,rgba(255,245,220,0) 40%),radial-gradient(circle at 62% 80%,rgba(230,120,70,.8) 0%,rgba(230,120,70,0) 42%),linear-gradient(160deg,#eef2df,#bcd2a4)}
-.cr .dw .ph.p4,.cr .dw .food.p4,.cr .dw.grid i:nth-child(4),.cr .dw.photos i:nth-child(4){background-color:#c9a27f;background-image:radial-gradient(circle at 50% 50%,rgba(255,236,210,.95) 0%,rgba(255,236,210,0) 42%),radial-gradient(circle at 20% 30%,rgba(120,72,45,.85) 0%,rgba(120,72,45,0) 45%),radial-gradient(circle at 82% 75%,rgba(120,72,45,.85) 0%,rgba(120,72,45,0) 45%),linear-gradient(160deg,#e3c8a8,#a97c58)}
+.cr .dw .ph,.cr .dw .food,.cr .dw.google .strip .ph2,.cr .dw.google .strip .ph3,.cr .dw.google .pd i,.cr .dw.google .gpost i,.cr .dw.profile .top i,.cr .dw.profile .g3 i,.cr .dw.grid i,.cr .dw.photos i,.cr .dw.linkpage .av,.cr .dw.event .poster{position:relative;overflow:hidden;background-color:#ece4d8;background-image:linear-gradient(135deg,#f3ede4,#e3d9cc)}
+.cr .dw .ph.p2,.cr .dw .food.p2,.cr .dw.grid i:nth-child(2),.cr .dw.photos i:nth-child(2),.cr .dw.photos i:nth-child(5),.cr .dw.profile .g3 i:nth-child(2){background-image:linear-gradient(135deg,#ddd3c6,#c9bcaa)}
+.cr .dw .ph.p3,.cr .dw .food.p3,.cr .dw.grid i:nth-child(3),.cr .dw.photos i:nth-child(3),.cr .dw.photos i:nth-child(6),.cr .dw.profile .g3 i:nth-child(3){background-image:linear-gradient(135deg,#e4e8dc,#cfd6c4)}
+.cr .dw .ph.p4,.cr .dw .food.p4,.cr .dw.grid i:nth-child(4),.cr .dw.photos i:nth-child(4){background-image:linear-gradient(135deg,#eedfd8,#dcc6bd)}
+/* the vertical video frames are charcoal, the drawing on them in white */
+.cr .dw.story,.cr .dw.reel{position:relative;background:#2b2b2e}
+.cr .dw .mf{position:absolute;left:50%;top:50%;width:52%;max-width:3.4em;aspect-ratio:1;transform:translate(-50%,-50%);color:rgba(29,29,31,.34);pointer-events:none}
+.cr .dw .mf svg{width:100%;height:100%;display:block}
+.cr .dw.story .mf,.cr .dw.reel .mf{width:38%;color:rgba(255,255,255,.5)}
+.cr .dw.reel .mf{top:44%}
+.cr .dw.google .pd i .mf,.cr .dw.google .gpost i .mf,.cr .dw.profile .top i .mf,.cr .dw.linkpage .av .mf{width:62%}
+.cr .dw.event .poster .mf{display:none}
 .cr .dw .fx{box-shadow:0 0 0 2px var(--c2),0 0 0 6px var(--t1)!important;border-radius:.5em}
 .cr .dw .pr{font-weight:600;font-size:.85em;flex:none;margin-left:.6em}
 .cr .dw .nm{font-weight:700;font-size:1.1em;padding:.6em .9em 0}
