@@ -15,6 +15,7 @@ export type Scene =
   | 'site' | 'sitemenu' | 'order' | 'reserve' | 'sticky' | 'gift' | 'fix' | 'catering'
   | 'post' | 'story' | 'reel' | 'profile' | 'linkpage' | 'grid' | 'batch' | 'graphic' | 'photos' | 'creator' | 'ad' | 'ticket' | 'event' | 'calendar'
   | 'missed' | 'keyword' | 'dm' | 'waitlist' | 'email' | 'offer' | 'stamps' | 'review' | 'pin'
+  | 'print' | 'brand' | 'hours'
 export type GoogleFocus = 'photos' | 'menu' | 'buttons' | 'qa' | 'products' | 'gpost' | 'reviews' | 'all' | 'none'
 
 export interface DrawSpec { scene: Scene; focus?: GoogleFocus }
@@ -31,7 +32,7 @@ export const DRAW_BY_ID: Record<string, DrawSpec> = {
   catering: { scene: 'catering' }, cateringengine: { scene: 'catering' },
   story: { scene: 'story' }, linksticker: { scene: 'story' }, reel: { scene: 'reel' }, edit: { scene: 'reel' }, 'creative-video': { scene: 'reel' },
   dish: { scene: 'post' }, tapposts: { scene: 'post' }, 'b-weekly': { scene: 'post' },
-  graphic: { scene: 'graphic' }, design: { scene: 'graphic' }, 'creative-graphic': { scene: 'graphic' }, 'creative-print': { scene: 'graphic' }, 'creative-menu': { scene: 'graphic' }, 'creative-logo': { scene: 'graphic' }, 'creative-copy': { scene: 'graphic' },
+  graphic: { scene: 'graphic' }, design: { scene: 'graphic' }, 'creative-graphic': { scene: 'graphic' }, 'creative-print': { scene: 'print' }, 'creative-menu': { scene: 'graphic' }, 'creative-logo': { scene: 'brand' }, 'creative-copy': { scene: 'graphic' },
   'creative-photos': { scene: 'photos' }, shoot: { scene: 'photos' },
   'creative-social': { scene: 'batch' }, socialmgmt: { scene: 'batch' }, launch: { scene: 'batch' },
   socialprofiles: { scene: 'profile' }, igbuttons: { scene: 'profile' }, 'b-social': { scene: 'profile' }, onelink: { scene: 'linkpage' }, pinned: { scene: 'grid' },
@@ -134,6 +135,15 @@ export function Drawing({ spec, name, rating, now = false, t }: DrawProps): Reac
       return <div className={cls}><div className="poster fx"><span>{t('Taco Tuesday')}</span><b>{t('Half price, all night')}</b><em>{name}</em></div></div>
     case 'photos':
       return <div className={cls}>{[0, 1, 2, 3, 4, 5].map((i) => <i key={i} />)}</div>
+    case 'print':
+      /* a flyer on the counter with a table tent behind it */
+      return <div className={cls}><div className="tent"><b>{t('Taco Tuesday')}</b></div><div className="sheet fx"><span>{t('Taco Tuesday')}</span><b>{t('$2 tacos, 5 to 7')}</b><em>{name}</em></div></div>
+    case 'brand':
+      /* a mark, the name set in it, and the three colours it comes in */
+      return <div className={cls}><div className="mark fx">{(name || 'A').trim().charAt(0).toUpperCase()}</div><div className="nm">{name}</div><div className="sw"><i /><i /><i /><i /></div></div>
+    case 'hours':
+      /* the listing's hours, one day changed */
+      return <div className={cls}><div className="nm">{name}</div><div className="hrs">{[[t('Mon'), '11–9'], [t('Tue'), '11–9'], [t('Wed'), t('Closed')], [t('Thu'), '11–10']].map(([d, h], i) => <div key={i} className={i === 2 ? 'fx' : ''}><span>{d}</span><em>{h}</em></div>)}</div></div>
     case 'creator':
       return <div className={cls}><div className="hd"><i className="cr" />@seattle.eats<span>{t('40k nearby')}</span></div>{ph}<div className="cap"><Bar w="70%" /><em>{t('at {name}').replace('{name}', name)}</em></div></div>
     case 'ad':
@@ -167,6 +177,24 @@ export function Drawing({ spec, name, rating, now = false, t }: DrawProps): Reac
 
 /* Drawn at base size 12px; card and sheet scale the whole thing with `font-size` on `.dw`. */
 export const DRAW_CSS = `
+
+/* print */
+.cr .dw.print{padding:1em .9em .9em;background:#f5f5f7;min-height:9em}
+.cr .dw.print .tent{position:absolute;right:.8em;top:.8em;width:5.2em;height:3.6em;background:#fff;border-radius:.4em .4em 0 0;box-shadow:0 .4em 1em rgba(0,0,0,.12);transform:skewY(-6deg);display:flex;align-items:flex-end;padding:.4em;font-size:.7em;font-weight:700;color:#6e6e73}
+.cr .dw.print .sheet{position:relative;width:6.4em;background:#fff;border-radius:.4em;box-shadow:0 .5em 1.2em rgba(0,0,0,.14);padding:.7em .7em .6em;display:flex;flex-direction:column;gap:.25em}
+.cr .dw.print .sheet span{font-size:.7em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--c2)}
+.cr .dw.print .sheet b{font-size:1em;font-weight:800;line-height:1.1}
+.cr .dw.print .sheet em{font-style:normal;font-size:.7em;color:#6e6e73;margin-top:.3em}
+/* brand */
+.cr .dw.brand{padding:1em .9em .9em;display:flex;flex-direction:column;align-items:center;gap:.4em;min-height:9em}
+.cr .dw.brand .mark{width:3.6em;height:3.6em;border-radius:1em;background:var(--c2);color:#fff;display:grid;place-items:center;font-weight:800;font-size:1.6em}
+.cr .dw.brand .nm{padding:0;font-size:1em}
+.cr .dw.brand .sw{display:flex;gap:.35em}.cr .dw.brand .sw i{width:1.2em;height:1.2em;border-radius:99px;background:var(--c2)}.cr .dw.brand .sw i:nth-child(2){background:var(--c1)}.cr .dw.brand .sw i:nth-child(3){background:#1d1d1f}.cr .dw.brand .sw i:nth-child(4){background:#e6e6ea}
+/* hours */
+.cr .dw.hours{padding:.4em 0 .6em;min-height:9em}
+.cr .dw.hours .hrs{display:flex;flex-direction:column;gap:.25em;padding:.3em .9em 0}
+.cr .dw.hours .hrs div{display:flex;justify-content:space-between;font-size:.85em;padding:.2em .4em;border-radius:.4em}
+.cr .dw.hours .hrs span{color:#6e6e73}.cr .dw.hours .hrs em{font-style:normal;font-weight:600}
 .cr .dw{background:#fff;color:#1d1d1f;border-radius:1em;overflow:hidden;font-size:12px;width:100%;position:relative;box-shadow:0 .7em 2em rgba(0,0,0,.12);font-family:'Inter',system-ui,sans-serif;line-height:1.3}
 .cr .dw.now{filter:grayscale(1);opacity:.7}
 .cr .dw .bar{display:block;height:.5em;border-radius:.3em;background:#e6e6ea}

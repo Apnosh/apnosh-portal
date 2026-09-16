@@ -26,7 +26,7 @@ import { Mark } from '../mark'
 import { GOALS, FILTERS, GUIDE_QS, SITUATION_GOAL, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
 import { CHIP_ORDER, liveForChip, shelfForChip } from '@/lib/campaigns/data/chip-shelf'
 import { ACTION_GROUPS, actionBrief, bundleTotal, partPrice, priceLabel } from '@/lib/campaigns/data/action-shelf'
-import { Drawing, DRAW_CSS, sceneFor } from './drawings'
+import { Drawing, DRAW_CSS, sceneFor, type DrawSpec } from './drawings'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { hrefFor, firstName, type OrderPerson } from '../people-row'
@@ -314,10 +314,12 @@ const CREATE_CSS = DRAW_CSS + `
 .cr .say2 .mic.on{background:#ec1528;color:#fff;animation:crmic 1.2s ease-in-out infinite}
 @keyframes crmic{0%,100%{box-shadow:0 0 0 0 rgba(236,21,40,.35)}50%{box-shadow:0 0 0 8px rgba(236,21,40,0)}}
 .cr .say2 .clr{flex:1;text-align:left;border:0;background:none;font-size:12.5px;font-weight:600;color:#aeaeb2;cursor:pointer;font-family:inherit;padding:0 4px}
-.cr .qgrid{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:64px;gap:10px 8px;overflow-x:auto;padding:2px 16px 6px;scrollbar-width:none}
-.cr .qt{width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
-.cr .qt .ic{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;color:var(--c2);background:var(--t1)}
-.cr .qt .ic svg{width:23px;height:23px;stroke-width:2}
+.cr .qgrid{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:86px;gap:12px 10px;overflow-x:auto;padding:2px 16px 6px;scrollbar-width:none}
+.cr .qt{width:86px;display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
+/* the tile draws the thing itself, small, on its stage tint (owner 2026-09-15: "not icons, visuals of what they actually do") */
+.cr .qt .ic{width:86px;height:80px;border-radius:20px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;background:var(--t1);padding:8px 8px 0}
+.cr .qt .ic .dwm{width:100%;pointer-events:none}
+.cr .qt .ic .dwm .dw{font-size:5.6px;border-radius:.9em .9em 0 0;box-shadow:0 .4em 1.2em rgba(0,0,0,.14)}
 .cr .qt span:last-child{font-size:10.5px;font-weight:600;text-align:center;line-height:1.2;color:#1d1d1f}
 .cr .browse{margin:22px 16px 0}
 .cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:10px}
@@ -679,23 +681,24 @@ export default function CreatePage() {
      sideways. Every tile is a door to something real: a live screen, a card's own page, or the
      describe box with the first words typed. A tile whose card is not on the shelf is dropped,
      so nothing here opens onto "that one is not on the shelf". */
-  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string }; hue?: HueKey }
+  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
   const QUICK_ALL: Quick[] = [
-    { hue: 'announce', t: T('Announce'), I: Megaphone, to: { ask: true } },
-    { hue: 'newfaces', t: T('Hours'), I: Clock, to: { href: '/dashboard/business-info/hours' } },
-    { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' } },
-    { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' } },
-    { hue: 'reviews', t: T('Reviews'), I: Star, to: { href: '/dashboard/review-replies' } },
-    { t: T('Graphic'), I: ImageIcon, to: { card: 'creative-graphic' } },
-    { t: T('Video'), I: Video, to: { card: 'creative-video' } },
-    { t: T('Photos'), I: Camera, to: { card: 'creative-photos' } },
-    { t: T('Menu'), I: Tag, to: { card: 'creative-menu' } },
-    { t: T('Website'), I: Store, to: { card: 'creative-website' } },
-    { t: T('Influencers'), I: Users, to: { card: 'creator' } },
-    { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' } },
-    { t: T('Event'), I: Ticket, to: { card: 'promoevent' } },
-    { t: T('Deal'), I: Tag, to: { card: 'slowoffer' } },
-    { t: T('Email'), I: Mail, to: { card: 'creative-email' } },
+    { hue: 'announce', t: T('Announce'), I: Megaphone, to: { ask: true }, scene: { scene: 'post' } },
+    { hue: 'newfaces', t: T('Update'), I: Clock, to: { href: '/dashboard/business-info' }, scene: { scene: 'hours' } },
+    { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' }, scene: { scene: 'story' } },
+    { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' }, scene: { scene: 'ad' } },
+    { hue: 'reviews', t: T('Reviews'), I: Star, to: { href: '/dashboard/review-replies' }, scene: { scene: 'review' } },
+    { t: T('Graphic'), I: ImageIcon, to: { card: 'creative-graphic' }, scene: { scene: 'graphic' } },
+    { t: T('Video'), I: Video, to: { card: 'creative-video' }, scene: { scene: 'reel' } },
+    { t: T('Photos'), I: Camera, to: { card: 'creative-photos' }, scene: { scene: 'photos' } },
+    { t: T('Print'), I: Tag, to: { card: 'creative-print' }, scene: { scene: 'print' } },
+    { t: T('Branding'), I: Tag, to: { card: 'creative-logo' }, scene: { scene: 'brand' } },
+    { t: T('Website'), I: Store, to: { card: 'creative-website' }, scene: { scene: 'site' } },
+    { t: T('Influencers'), I: Users, to: { card: 'creator' }, scene: { scene: 'creator' } },
+    { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' }, scene: { scene: 'ad' } },
+    { t: T('Event'), I: Ticket, to: { card: 'promoevent' }, scene: { scene: 'event' } },
+    { t: T('Deal'), I: Tag, to: { card: 'slowoffer' }, scene: { scene: 'offer' } },
+    { t: T('Email'), I: Mail, to: { card: 'creative-email' }, scene: { scene: 'email' } },
   ]
   const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
   function quickGo(x: Quick) {
@@ -786,7 +789,7 @@ export default function CreatePage() {
           <div ref={sentinelRef} style={{ height: 1 }} />
           <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>{stuck && openH > wrapH && <div aria-hidden style={{ height: openH - wrapH }} />}
           <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
-          <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
+          <div className="qgrid cc-scroll">{QUICK.map((x) => <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><span className="dwm"><Drawing spec={x.scene} name={T('Your business')} rating={T('Google listing')} t={T} /></span></span><span>{x.t}</span></button>)}</div>
           {rail({ t: T('Recommended for you'), list: rec, hue: STAGE_HUE.Actions })}
           {rail({ t: T('Campaigns'), list: bundles, hue: STAGE_HUE.Actions })}
           <Sec t={T('One thing at a time')} s={T('Pick exactly what you need')} hue={STAGE_HUE.Actions} />
@@ -813,7 +816,7 @@ export default function CreatePage() {
         <div ref={sentinelRef} style={{ height: 1 }} />
         <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>{stuck && openH > wrapH && <div aria-hidden style={{ height: openH - wrapH }} />}
         <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
-        <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
+        <div className="qgrid cc-scroll">{QUICK.map((x) => <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><span className="dwm"><Drawing spec={x.scene} name={T('Your business')} rating={T('Google listing')} t={T} /></span></span><span>{x.t}</span></button>)}</div>
         {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Pick another stage.')}</div>}
         {rail({ t: T('Recommended for you'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
         {rail({ t: T('Creatives'), list: creatives, hue: 'brand', kind: 'quick' })}
