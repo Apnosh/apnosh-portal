@@ -262,10 +262,7 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
     <>
       {/* 1 · your rating */}
       <div style={LIST}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={H3}>Your rating</span>
-          <span style={{ fontSize: 11.5, color: C.faint }}>{win.label}</span>
-        </div>
+        <div style={{ ...H3, marginBottom: 8 }}>Your rating</div>
         <div style={CARD}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
             <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{rating != null ? rating.toFixed(1) : '–'}</span>
@@ -299,10 +296,7 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
 
       {/* 2 · what people say */}
       <div style={LIST}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={H3}>What people say</span>
-          <span style={{ fontSize: 11.5, color: C.faint }}>{win.label}</span>
-        </div>
+        <div style={{ ...H3, marginBottom: 8 }}>What people say</div>
         {/* the summary sentence is gone (owner 2026-09-15): the two cards say it */}
         {topicsLoading && <div style={{ fontSize: 13, color: C.faint, marginBottom: 8 }}>Reading your reviews…</div>}
         {(loved.length > 0 || knocked.length > 0) && (
@@ -311,7 +305,6 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
             <TopicCard tone="complaint" title="Complaints" empty="No complaints that repeat." items={knocked.map((t) => ({ name: t.name, count: t.negative, quote: t.negQuote ?? null }))} />
           </div>
         )}
-        {!topicsLoading && topics && topics.topics.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{topics.source === 'none' && split.total >= 3 ? 'We could not read your reviews right now. Try again a little later.' : 'A few more written reviews and the topics guests mention show here.'}</div>}
         {(comments?.length ?? 0) > 0 && (
           <div style={{ marginTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: TEAL_DK, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 8 }}><MessageCircle size={13} /> In the comments on your posts</div>
@@ -324,7 +317,6 @@ export default function ReputationRead({ clientId, reviews }: { clientId?: strin
             ) : (
               <div style={{ fontSize: 12.5, color: C.faint }}>Nothing that praises or complains, just chatter.</div>
             ))}
-            {read && toneCount.question > 0 && <div style={{ fontSize: 12.5, lineHeight: 1.4, marginTop: 8 }}><b style={{ color: AMBER, fontWeight: 700 }}>{toneCount.question} asking</b>{commentTopics.asked.length > 0 && <span style={{ color: C.mute }}> · {commentTopics.asked.map((a) => a.name).join(' · ')}</span>}</div>}
           </div>
         )}
       </div>
