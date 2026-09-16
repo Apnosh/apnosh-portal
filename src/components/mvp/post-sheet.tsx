@@ -102,7 +102,6 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
   /* what it led to: only the numbers the vendor reported for at least one platform */
   const led = (k: 'impressions' | 'clicks' | 'profileViews' | 'follows') => { const vs = rows.map((x) => x.stats?.[k]).filter((v): v is number => v != null); return vs.length ? vs.reduce((a, b) => a + b, 0) : null }
   const ledTo: Array<{ Icon: typeof Eye; label: string; n: number | null }> = [
-    { Icon: Eye, label: 'Times shown', n: led('impressions') },
     { Icon: MousePointerClick, label: 'Link taps', n: led('clicks') },
     { Icon: UserPlus, label: 'Profile visits', n: led('profileViews') },
     { Icon: UserPlus, label: 'New follows', n: led('follows') },
@@ -229,28 +228,31 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
               <button type="button" onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 99, border: 'none', background: C.bg, color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={15} /></button>
             </div>
             <div style={{ marginTop: 6 }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: 36, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: C.ink }}>{counted ? views.toLocaleString() : DASH}</div>
-              <div style={{ fontSize: 13, color: C.mute, marginTop: 4 }}>{counted ? 'people saw it' : (rows.every((x) => x.unreported) ? 'no view count for this kind' : 'still counting')}</div>
+              {/* the number, the word and the comparison on one line (owner 2026-09-15) */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: DISPLAY, fontSize: 34, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: C.ink }}>{counted ? views.toLocaleString() : DASH}</span>
+                <span style={{ fontSize: 13, color: C.mute }}>{counted ? 'views' : (rows.every((x) => x.unreported) ? 'no view count' : 'still counting')}</span>
+              </div>
               {counted && ratio != null && (
-                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 6, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 5, lineHeight: 1.4 }}>
                   <span style={{ color: ratio >= 1.2 ? '#1fc47a' : ratio <= 0.6 ? '#ec1528' : C.ink, fontWeight: 700 }}>{ratio >= 1.2 ? '▲ ' : ratio <= 0.6 ? '▼ ' : ''}{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}×</span> your usual{isBest ? ' · your best here' : ''}
                 </div>
               )}
             </div>
-            {/* the four, two by two, pushed to the bottom of the column */}
-            <div style={{ marginTop: 'auto', paddingTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 10px' }}>
+            {/* the four, as symbols with their numbers, pushed to the bottom of the column */}
+            <div style={{ marginTop: 'auto', paddingTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 8px' }}>
               {stats.map((s) => (
-                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <s.Icon size={13} color={C.faint} style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: 15, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
-                  <span style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label.toLowerCase()}</span>
+                <div key={s.label} aria-label={`${s.n} ${s.label.toLowerCase()}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 99, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><s.Icon size={15} color={C.ink} strokeWidth={2.2} /></span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
         <div style={{ padding: '12px 16px 0' }}>
-          {best.caption && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
+          {/* the caption, set apart as its own card so it reads as the post's words, not the page's */}
+          {best.caption && <div style={{ padding: '10px 12px', borderRadius: 14, background: C.bg }}><div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div></div>}
           {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
               this post already picked, by the vendor's own post id. */}
           <div style={{ display: 'flex', gap: 10, marginTop: best.caption ? 12 : 0 }}>
