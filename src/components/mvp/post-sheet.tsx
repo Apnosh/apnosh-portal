@@ -31,6 +31,8 @@ import { useClient } from '@/lib/client-context'
 import type { CommentReadItem, CommentTone } from '@/app/api/dashboard/comment-read/route'
 
 const DASH = '–'
+/** how far down the haze reaches before it fades to white (the poster block sits on it) */
+const HAZE_H = 800
 const name = (pl: string) => (pl ? pl.charAt(0).toUpperCase() + pl.slice(1) : 'Somewhere')
 const compact = (n: number) => (n < 1000 ? String(n) : n < 1000000 ? `${Math.floor(n / 1000)}K` : `${Math.floor(n / 1000000)}M`)
 const median = (xs: number[]) => { if (!xs.length) return 0; const s = xs.slice().sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
@@ -91,7 +93,6 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
   const usual = (f: (x: InsightsPost) => number) => (others.length >= 3 ? median(others.map(f)) : null)
   const usualViews = usual((x) => x.reach)
   const ratio = usualViews && counted ? views / usualViews : null
-  const ratioInk = ratio == null ? C.mute : ratio >= 1.2 ? C.greenDk : ratio <= 0.6 ? C.coral : C.mute
   const isBest = counted && others.length >= 3 && others.every((o) => o.reach <= views)
 
   const stats: Array<{ Icon: typeof Heart; label: string; n: number; usual: number | null }> = [
@@ -209,14 +210,22 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
     <div role="dialog" aria-modal="true" aria-label="This post" onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 480, maxHeight: '90dvh', overflowY: 'auto', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 0 calc(24px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.2)' }}>
-        <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
+        style={{ width: '100%', maxWidth: 480, maxHeight: '90dvh', overflowY: 'auto', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 0 calc(24px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.2)', position: 'relative', isolation: 'isolate' }}>
+        {/* THE HAZE (owner 2026-09-15, "world class"): the post's own colours, blurred, are the
+            sheet's light for the top of the page, fading to white where the detail sections
+            begin. Every post opens in its own colour; a post with no picture opens in its
+            network's. */}
+        <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: 0, height: HAZE_H, overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', inset: -60, background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : hero, filter: 'blur(44px) saturate(1.35)', transform: 'scale(1.25)' }} />
+          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to bottom, rgba(0,0,0,.18) 0px, rgba(0,0,0,.5) ${HAZE_H - 280}px, rgba(255,255,255,.35) ${HAZE_H - 120}px, #fff ${HAZE_H - 30}px)` }} />
+        </div>
+        <div style={{ width: 38, height: 4, borderRadius: 99, background: 'rgba(255,255,255,.55)', margin: '0 auto 12px', position: 'relative', zIndex: 1 }} />
 
         {/* ── THE POSTER (owner 2026-09-15: "A, with more detail as you scroll"). The post itself,
             big, with the networks and date on it. Then one number, one sentence on how it
             compares, four small counts, the caption, two buttons. The detail sections follow
             below, unchanged, for whoever keeps scrolling. ── */}
-        <div style={{ margin: '0 12px', position: 'relative', aspectRatio: '4 / 5', maxHeight: 440, borderRadius: 22, overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4' }}>
+        <div style={{ margin: '0 12px', position: 'relative', zIndex: 1, aspectRatio: '4 / 5', maxHeight: 440, borderRadius: 22, overflow: 'hidden', background: best.thumbnailUrl ? `center/cover url(${best.thumbnailUrl})` : '#f1f1f4', boxShadow: '0 22px 50px rgba(0,0,0,.35)' }}>
           {!best.thumbnailUrl && <><span style={{ position: 'absolute', inset: 0, background: hero, opacity: .18 }} /><span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><ImageIcon size={28} color={C.faint} /></span></>}
           <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 90, background: 'linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0))', pointerEvents: 'none' }} />
           <button type="button" onClick={onClose} aria-label="Close" style={{ position: 'absolute', right: 10, top: 10, width: 32, height: 32, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.88)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
@@ -226,37 +235,38 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           </span>
         </div>
 
-        {/* ── one number, one sentence ── */}
-        <div style={{ padding: '16px 20px 0' }}>
+        {/* ── one number, one sentence, in white on the haze ── */}
+        <div style={{ padding: '16px 20px 0', position: 'relative', zIndex: 1, color: '#fff' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: C.ink }}>{counted ? views.toLocaleString() : DASH}</span>
-            <span style={{ fontSize: 14, color: C.mute }}>{counted ? 'people saw it' : ''}</span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 600, letterSpacing: '-.03em', lineHeight: 1, color: '#fff', textShadow: '0 2px 12px rgba(0,0,0,.25)' }}>{counted ? views.toLocaleString() : DASH}</span>
+            <span style={{ fontSize: 14, color: 'rgba(255,255,255,.8)' }}>{counted ? 'people saw it' : ''}</span>
           </div>
-          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>
+          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.8)', marginTop: 6, lineHeight: 1.45 }}>
             {!counted ? (rows.every((x) => x.unreported) ? 'This kind of post does not report views.' : 'Still counting. Numbers land within a day.')
-              : ratio != null ? <><span style={{ color: ratioInk, fontWeight: 700 }}>{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}×</span> what your posts usually do{isBest ? '. Your best on this screen.' : '.'}</>
+              : ratio != null ? <><span style={{ color: ratio >= 1.2 ? '#7ff0c0' : ratio <= 0.6 ? '#ffb4ab' : '#fff', fontWeight: 800 }}>{ratio >= 1.2 ? '▲ ' : ratio <= 0.6 ? '▼ ' : ''}{ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}×</span> what your posts usually do{isBest ? ' · your best on this screen' : ''}</>
               : 'A few more posts and this will say how it compares.'}
           </div>
           {/* the four, small, one line */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.28)' }}>
             {stats.map((s) => (
               <div key={s.label}>
-                <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</div>
-                <div style={{ fontSize: 11, color: C.faint, marginTop: 1 }}>{s.label.toLowerCase()}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', marginTop: 1 }}>{s.label.toLowerCase()}</div>
               </div>
             ))}
           </div>
-          {best.caption && <div style={{ marginTop: 14, fontSize: 13, color: C.mute, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
+          {best.caption && <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(255,255,255,.82)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
           {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
               this post already picked, by the vendor's own post id. */}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: C.ink }}>
+            <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: '#fff', boxShadow: '0 6px 18px rgba(0,0,0,.18)' }}>
               <TrendingUp size={15} /> Boost
             </Link>
-            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: C.ink, background: C.bg }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
+            {!multi && best.permalink && <a href={best.permalink} target="_blank" rel="noreferrer noopener" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, borderRadius: 99, textDecoration: 'none', fontSize: 14, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,.2)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>Open on {name(best.platform)} <ArrowUpRight size={14} /></a>}
           </div>
         </div>
 
+        <div style={{ position: 'relative', zIndex: 1, paddingTop: 10 }}>
         {/* ── how they watched ── */}
         {watchedShown && (
           <div style={{ margin: '18px 16px 0' }}>
@@ -369,6 +379,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           </div>
         </div>
         )}
+        </div>
       </div>
     </div>,
     document.body,
