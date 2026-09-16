@@ -240,21 +240,19 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
               )}
             </div>
             {/* the caption, under the comparison (owner 2026-09-15), as its own card so it reads as the post's words */}
-            {best.caption && (
-              <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 12, background: C.bg, minHeight: 0 }}>
-                <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>
+            {/* the caption card carries the four counts at its foot (owner 2026-09-15) */}
+            <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 12, background: C.bg, minHeight: 0 }}>
+              {best.caption && <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: best.caption ? 8 : 0, paddingTop: best.caption ? 8 : 0, borderTop: best.caption ? `1px solid ${C.line}` : 'none' }}>
+                {stats.map((s) => (
+                  <span key={s.label} aria-label={`${s.n} ${s.label.toLowerCase()}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                    <s.Icon size={14} color={C.ink} strokeWidth={2.2} />
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
+                  </span>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
-        {/* the four, as symbols with their numbers, in one row under the pair */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '14px 16px 0' }}>
-          {stats.map((s) => (
-            <div key={s.label} aria-label={`${s.n} ${s.label.toLowerCase()}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-              <span style={{ width: 32, height: 32, borderRadius: 99, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><s.Icon size={16} color={C.ink} strokeWidth={2.2} /></span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{compact(s.n)}</span>
             </div>
-          ))}
+          </div>
         </div>
         <div style={{ padding: '14px 16px 0' }}>
           {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
