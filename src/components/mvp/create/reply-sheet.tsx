@@ -218,7 +218,7 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
           <>
             {/* the top: where you are */}
             <div style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.15 }}>
-              {waiting.length === 0 ? (doneCount > 0 ? `All ${doneCount} answered` : 'Every review has a reply') : doneCount > 0 ? `${doneCount} answered, ${waiting.length} to go` : `${waiting.length} waiting`}
+              {waiting.length === 0 ? (doneCount > 0 ? `All ${doneCount} answered` : openComments.length > 0 ? `${openComments.length} comment${openComments.length === 1 ? '' : 's'} waiting` : 'Nothing waiting') : doneCount > 0 ? `${doneCount} answered, ${waiting.length} to go` : `${waiting.length} waiting`}
             </div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginTop: 4 }}>
               {waiting.length > 0 && <>{care.length > 0 ? `${care.length} need${care.length === 1 ? 's' : ''} care. ` : ''}{thanks.length > 0 ? `${thanks.length} just need${thanks.length === 1 ? 's' : ''} a thank-you. ` : ''}{read.longestWaitDays != null && read.longestWaitDays > 60 ? 'Old ones get a reply that says it is late, then answers.' : ''}</>}
@@ -296,7 +296,7 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                   const d = cDrafts[c.id]; const busy = cSending.has(c.id); const writing = cWriting.has(c.id)
                   return (
                     <div key={c.id} style={{ borderTop: `0.5px solid ${C.line}`, padding: '10px 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BrandOrMark provider={c.platform} size={14} /><b style={{ fontSize: 13.5 }}>{c.authorName}</b>{c.postCaption && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>on: {c.postCaption.slice(0, 40)}</span>}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BrandOrMark provider={c.platform} size={14} /><b style={{ fontSize: 13.5 }}>{c.authorName}</b>{(c.postPermalink || c.url) ? <a href={c.postPermalink ?? c.url ?? undefined} target="_blank" rel="noreferrer" style={{ marginLeft: 'auto', fontSize: 11.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150, textDecoration: 'none', fontWeight: 600 }}>{c.postCaption ? `on: ${c.postCaption.slice(0, 36)}` : 'Open the post'} ↗</a> : c.postCaption ? <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>on: {c.postCaption.slice(0, 36)}</span> : null}</div>
                       <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 4 }}>{c.text}</div>
                       <Box value={d ?? ''} onChange={(v) => setCDrafts((x) => ({ ...x, [c.id]: v }))} onSend={() => sendComment(c)} onAgain={() => writeComment(c)} busy={busy} writing={writing} rows={2} />
                       {errs[c.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[c.id]}</div>}

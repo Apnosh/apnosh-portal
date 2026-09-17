@@ -296,7 +296,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (k.id === 'slow') { setNight(slowestDay(ctx) ?? 2); setPart('dinner') }
     if (k.id === 'post') setGoogle(false)
     if (k.id === 'update') setGoogle(hasGoogle)
-    setStep(k.id === 'event' ? 'ekind' : k.id === 'slow' ? 'night' : 'facts')
+    setStep(k.id === 'event' ? 'ekind' : k.id === 'slow' ? 'night' : k.picture ? 'picture' : 'facts')
   }
   const isSlow = kind?.id === 'slow'
   const isDeal = kind?.id === 'deal'
@@ -310,8 +310,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     setWeekly(true); setBoost(true); setBoostCents(1500); setTables(10); setPostByTouched(false)
     if (to === 'deal') {
       const from = nextDay(night)
-      setA({ what: '', when: `${DAYS[night]}s, ${p.runs}`, from, until: plusDays(from, 21), code: DAYS[night].toUpperCase(), line: slowWords.trim() ? '' : '' })
-      setStep('facts')
+      setA({ what: '', when: `${DAYS[night]}s, ${p.runs}`, from, until: plusDays(from, 21), code: DAYS[night].toUpperCase(), line: '' })
+      setStep('picture')
     } else {
       setA({ what: '', when: nextDay(night), time: p.runs.replace(' to ', ' to ') + (part === 'late' ? '' : ' pm') })
       setGetin('show'); setEkind(null)
@@ -330,7 +330,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const pickEvent = (e: EventKind) => {
     setEkind(e); setWeekly(e.weekly || fromSlow); setGetin(e.getin)
     setA((x) => ({ ...x, what: x.what?.trim() ? x.what : e.label }))
-    setStep('facts')
+    setStep('picture')
   }
   const isEvent = kind?.id === 'event'
   const required = kind ? kind.fields.filter((f) => !f.optional) : []
@@ -404,7 +404,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         const put = await fetch(j.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
         if (!put.ok) throw new Error('Could not add the photo')
         setMedia((m) => [...m, { url: j.fileUrl, preview: URL.createObjectURL(file), video: file.type.startsWith('video/') }])
-        if (mode === 'words') setMode('own')
+        if (mode === 'words' || mode === 'own') setMode('own')
       }
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not add the photo') }
     setUploading(false)
@@ -576,7 +576,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     </button>
   )
   const Tick = ({ on }: { on: boolean }) => <span style={{ width: 22, height: 22, borderRadius: 7, border: `1.5px solid ${on ? C.ink : C.line}`, background: on ? C.ink : '#fff', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{on && <Check size={14} strokeWidth={3} />}</span>
-  const steps: Step[] = ['facts', 'picture', 'where', 'words', 'plan']
+  /* HOW IT LOOKS COMES FIRST (owner 2026-09-17): choosing a photo, a graphic or a video is the
+     first decision, and the photo lives on that screen, not on the facts. */
+  const steps: Step[] = ['picture', 'facts', 'where', 'words', 'plan']
   const visible: Step[] = isSlow ? ['night', 'play'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const back = () => { const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { const i = visible.indexOf(step); setStep(visible[i + 1]) }
@@ -589,6 +591,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     </div>
   )
   const madeKind = mode === 'graphic' || mode === 'video' || mode === 'shoot'
+  const mediaStrip = media.length > 0 && (
+    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 12 }}>
+      {media.map((m, i) => <div key={i} style={{ position: 'relative', flex: 'none', width: 84, height: 84, borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((_, j) => j !== i))} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button></div>)}
+      {media.length < 10 && <button type="button" onClick={() => fileRef.current?.click()} style={{ flex: 'none', width: 84, height: 84, borderRadius: 14, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute }}>{uploading ? <Loader2 size={18} className="mvp-spin" /> : <Plus size={20} />}</button>}
+    </div>
+  )
 
   return createPortal(
     <div className="cr" role="dialog" aria-modal="true" aria-label="Announce something" onClick={step === 'kind' ? onClose : undefined} style={{ position: 'fixed', left: 0, right: 0, top: vv ? vv.top : 0, height: vv ? vv.h : '100dvh', zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', touchAction: 'none' }}>
@@ -675,7 +683,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         {step === 'facts' && kind && (
           <div style={hv(hue)}>
             <div style={h2}>Tell us about it</div>
-            {kind.photo && (
+            {kind.photo && !kind.picture && (
               <div style={{ margin: '4px 0 6px' }}>
                 {media.length === 0 ? (
                   <button type="button" onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 118, borderRadius: 18, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer', font: 'inherit', color: C.ink }}>
@@ -758,19 +766,20 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={h2}>How should it look?</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {([
-                { m: 'own' as Mode, label: 'Use my photo', small: media.length ? `${media.length} added` : 'Add one a step back', scene: 'photos' as Scene, hue: '#2e9a78', off: media.length === 0 },
+                { m: 'own' as Mode, label: 'Use my photo', small: media.length ? `${media.length} added` : 'Tap to add one', scene: 'photos' as Scene, hue: '#2e9a78', off: false },
                 { m: 'graphic' as Mode, label: 'Make a graphic', small: `${dollars(ctx?.prices.graphic ?? null) || 'Priced'} · 2 days`, scene: 'graphic' as Scene, hue: '#d99a1e', off: false },
                 { m: 'video' as Mode, label: 'Make a video', small: `${dollars(ctx?.prices.video ?? null) || 'Priced'} · 4 days`, scene: 'reel' as Scene, hue: '#0f97a8', off: false },
                 { m: 'shoot' as Mode, label: 'Book a shoot', small: `from ${dollars(ctx?.prices.shoot ?? null) || '$350'} · pick a day`, scene: 'creator' as Scene, hue: '#6a39de', off: false },
                 ...(ctx?.nextShoot ? [{ m: 'nextshoot' as Mode, label: 'Add to my next shoot', small: `${niceDate(ctx.nextShoot.date)}${ctx.nextShoot.who ? ` with ${ctx.nextShoot.who}` : ''}`, scene: 'calendar' as Scene, hue: '#3b6fd4', off: false }] : []),
                 { m: 'words' as Mode, label: 'Words only', small: 'Google and Facebook', scene: 'google' as Scene, hue: '#8a928e', off: false },
               ]).map((o) => (
-                <button key={o.m} type="button" disabled={o.off} onClick={() => choose(o.m)} style={{ ...hv(o.hue), border: `1.5px solid ${mode === o.m ? C.ink : C.line}`, boxShadow: mode === o.m ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 10px 10px', textAlign: 'center', background: '#fff', cursor: o.off ? 'default' : 'pointer', font: 'inherit', color: C.ink, opacity: o.off ? .45 : 1 }}>
+                <button key={o.m} type="button" disabled={o.off} onClick={() => { if (o.m === 'own' && media.length === 0) { fileRef.current?.click(); return } choose(o.m) }} style={{ ...hv(o.hue), border: `1.5px solid ${mode === o.m ? C.ink : C.line}`, boxShadow: mode === o.m ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 10px 10px', textAlign: 'center', background: '#fff', cursor: o.off ? 'default' : 'pointer', font: 'inherit', color: C.ink, opacity: o.off ? .45 : 1 }}>
                   <span style={{ display: 'block', width: 54, margin: '0 auto 6px' }}><Drawing spec={{ scene: o.scene }} name="" rating="" t={(s) => s} /></span>
                   <b style={{ display: 'block', fontSize: 13.5, lineHeight: 1.2 }}>{o.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 11.5, marginTop: 3 }}>{o.small}</small>
                 </button>
               ))}
             </div>
+            {(mode === 'own' || media.length > 0) && mediaStrip}
             {madeKind && (
               <>
                 <div style={h3}>For the {mode === 'graphic' ? 'graphic' : mode === 'video' ? 'video' : 'shoot'}</div>

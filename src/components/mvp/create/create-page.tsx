@@ -807,7 +807,7 @@ export default function CreatePage() {
           {createRow}
           <div ref={sentinelRef} style={{ height: 1 }} />
           <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>{stuck && openH > wrapH && <div aria-hidden style={{ height: openH - wrapH }} />}
-          <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
+          <div style={{ height: 6 }} />
           <div className="qgrid cc-scroll">{QUICK.map((x) => <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><span className="dwm"><Drawing spec={x.scene} name={T('Your business')} rating={T('Google listing')} t={T} /></span></span><span>{x.t}</span></button>)}</div>
           {rail({ t: T('Recommended for you'), list: rec, hue: STAGE_HUE.Actions })}
           {rail({ t: T('Campaigns'), list: bundles, hue: STAGE_HUE.Actions })}
@@ -834,7 +834,7 @@ export default function CreatePage() {
         {createRow}
         <div ref={sentinelRef} style={{ height: 1 }} />
         <div className={`saywrap${stuck ? ' stuck' : ''}`}>{sayBox}{stagesRow}</div>{stuck && openH > wrapH && <div aria-hidden style={{ height: openH - wrapH }} />}
-        <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
+        <div style={{ height: 6 }} />
         <div className="qgrid cc-scroll">{QUICK.map((x) => <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><span className="dwm"><Drawing spec={x.scene} name={T('Your business')} rating={T('Google listing')} t={T} /></span></span><span>{x.t}</span></button>)}</div>
         {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Pick another stage.')}</div>}
         {rail({ t: T('Recommended for you'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
