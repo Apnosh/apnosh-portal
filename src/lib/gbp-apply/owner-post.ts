@@ -41,6 +41,12 @@ export type OwnerCtaType = (typeof OWNER_CTA_TYPES)[number]
 export interface OwnerPostInput {
   text: string
   cta?: { type: OwnerCtaType; url?: string } | null
+  /** An offer or an event post (Announce, owner 2026-09-17). Both need a title and dates. */
+  postType?: 'STANDARD' | 'OFFER' | 'EVENT'
+  event?: { title: string; startDate: string; endDate: string } | null
+  offer?: { couponCode?: string; terms?: string } | null
+  /** One photo, https only. Google takes the first. */
+  mediaUrls?: string[]
 }
 
 export type OwnerPostOutcome =
@@ -149,8 +155,9 @@ export async function publishOwnerGbpPost(
     resourceName: tok.v4Path,
     accessToken: tok.accessToken,
     text: checked.text,
-    mediaUrls: [],
+    mediaUrls: (input.mediaUrls ?? []).filter((u) => typeof u === 'string' && u.startsWith('https://')).slice(0, 1),
     callToAction: checked.cta ? { actionType: checked.cta.type, ...(checked.cta.url ? { url: checked.cta.url } : {}) } : null,
+    ...(input.postType && input.postType !== 'STANDARD' && input.event?.title ? { postType: input.postType, event: input.event, ...(input.postType === 'OFFER' && input.offer ? { offer: input.offer } : {}) } : {}),
   })
   if (!res.success) {
     return { ok: false, error: 'The post did not go through. Try again in a minute.', code: 'google_error' }

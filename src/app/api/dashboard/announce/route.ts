@@ -31,6 +31,7 @@ import { createPost, listPostTargets } from '@/lib/channels/adapters/zernio'
 import { publishOwnerGbpPost } from '@/lib/gbp-apply/owner-post'
 import { isProTier } from '@/lib/entitlements'
 import { notifyClientOwners, notifyStaffForClient } from '@/lib/notifications'
+import { bulkSetSpecialHours } from '@/lib/gbp-bulk'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,6 +39,8 @@ export const dynamic = 'force-dynamic'
 type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
+/** what the print line makes, per kind */
+const PRINT: Record<string, string> = { dish: 'Table tent', deal: 'Flyer', event: 'Poster', hours: 'Door sign', open: 'Banner', holiday: 'Menu insert', hiring: 'Window sign', else: 'Flyer' }
 
 export interface PlanLine {
   key: string
@@ -57,14 +60,21 @@ interface Body {
   answers?: Record<string, unknown>
   picture?: { mode?: Mode; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
-  timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean }
+  timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; reminders?: unknown }
   words?: { social?: string; google?: string; cta?: Cta; languages?: unknown; card?: string }
+  /** the date answers as ISO days, beside the spelled-out ones in `answers` */
+  dates?: Record<string, unknown>
+  /** one-day hours, for Google's special hours: closed, or open and close as HH:MM */
+  hours?: { oneDay?: boolean; closed?: boolean; open?: string; close?: string }
 }
+/** a second post the sheet asked for: a reminder, a teaser, a repeat, a Story the morning of */
+interface Extra { key: string; label: string; detail: string; at: string; text: string; story?: boolean }
 
 const day = (iso: string) => iso.slice(0, 10)
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86400000)
 const clean = (s: unknown, max = 600) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 const isHttps = (u: unknown): u is string => typeof u === 'string' && u.startsWith('https://')
+const niceDay = (iso: string) => { const dt = new Date(iso + 'T12:00:00'); return Number.isNaN(dt.getTime()) ? iso : dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }
 const whenWord = (due: string | null): string => {
   if (!due) return 'No rush'
   const days = Math.round((new Date(due + 'T12:00:00').getTime() - Date.now()) / 86400000)
@@ -163,6 +173,15 @@ export async function POST(req: NextRequest) {
   const gtext = clean(body.words?.google, 1500).replace(/https?:\/\/\S+/g, '').trim()
   const cta: Cta = (['order', 'visit', 'reserve', 'message'] as Cta[]).includes(body.words?.cta as Cta) ? (body.words!.cta as Cta) : 'visit'
   const card = clean(body.words?.card, 1200)
+  const d: Record<string, string> = {}
+  for (const [k, v] of Object.entries(body.dates ?? {})) if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) d[k] = v
+  const hrs = body.hours && typeof body.hours === 'object' ? body.hours : null
+  const hhmm = (v: unknown) => (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : undefined)
+  const extras: Extra[] = (Array.isArray(body.timing?.reminders) ? body.timing!.reminders as unknown[] : [])
+    .map((x) => x as Record<string, unknown>)
+    .filter((x) => x && typeof x.at === 'string' && !Number.isNaN(Date.parse(String(x.at))) && Date.parse(String(x.at)) > Date.now())
+    .slice(0, 4)
+    .map((x) => ({ key: clean(x.key, 20) || 'extra', label: clean(x.label, 60) || 'Another post', detail: clean(x.detail, 120), at: new Date(String(x.at)).toISOString(), text: clean(x.text, 2200), story: x.story === true }))
   const madeLater = mode === 'graphic' || mode === 'video' || mode === 'shoot' || mode === 'nextshoot'
   const postDay = day(atIso ?? new Date().toISOString())
   const plan: PlanLine[] = []
@@ -183,7 +202,7 @@ export async function POST(req: NextRequest) {
   /* ── the picture ── */
   let requestId: string | null = null
   const attachments = media.map((url, i) => ({ url, name: `photo-${i + 1}` }))
-  const facts = [a.line, a.price ? `Price ${a.price}` : '', a.from ? `From ${a.from}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
+  const facts = [a.line, a.doing, a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
   if (mode === 'graphic') {
     const dests: string[] = []
     const destLabels: string[] = []
@@ -279,14 +298,54 @@ export async function POST(req: NextRequest) {
 
   /* ── Google ── */
   if (wantsGoogle && gtext) {
-    const ctaObj = cta === 'order' && ctx.orderUrl ? { type: 'ORDER' as const, url: ctx.orderUrl } : cta === 'reserve' && ctx.reserveUrl ? { type: 'LEARN_MORE' as const, url: ctx.reserveUrl } : cta === 'message' ? { type: 'CALL' as const } : null
+    const link = [a.rsvp, a.how, a.link].find(isHttps) ?? null
+    const ctaObj = cta === 'order' && ctx.orderUrl ? { type: 'ORDER' as const, url: ctx.orderUrl } : cta === 'reserve' && (link ?? ctx.reserveUrl) ? { type: 'LEARN_MORE' as const, url: (link ?? ctx.reserveUrl)! } : link ? { type: 'LEARN_MORE' as const, url: link } : cta === 'message' ? { type: 'CALL' as const } : null
+    /* a deal is an OFFER and an event is an EVENT on Google: both carry a title and dates */
+    const today = day(new Date().toISOString())
+    const gType = kind === 'deal' ? { postType: 'OFFER' as const, event: { title: name.slice(0, 58), startDate: d.from ?? today, endDate: d.until ?? day(addDays(new Date(), 30).toISOString()) }, offer: { ...(a.code ? { couponCode: a.code.slice(0, 58) } : {}), ...(a.line ? { terms: a.line.slice(0, 300) } : {}) } }
+      : kind === 'event' && d.when ? { postType: 'EVENT' as const, event: { title: name.slice(0, 58), startDate: d.when, endDate: d.when } }
+      : {}
     if (ctx.pro && postNow && !madeLater) {
-      const r = await publishOwnerGbpPost(clientId, { text: gtext, cta: ctaObj })
+      const r = await publishOwnerGbpPost(clientId, { text: gtext, cta: ctaObj, mediaUrls: media, ...gType })
       if (r.ok) plan.push({ key: 'google', label: 'Google', detail: r.live ? 'Posted now' : 'Sent to Google', date: postDay, cost: null, status: 'done', ref: { kind: 'gbp', id: r.postUrl ?? null } })
       else errors.push(`Google did not take the post: ${r.error}`)
     } else {
-      const id = await draft(gtext, ['google'], postDay, { cta: ctaObj, waitsFor: requestId })
+      const id = await draft(gtext, ['google'], postDay, { cta: ctaObj, waitsFor: requestId, ...gType })
       plan.push({ key: 'google', label: 'Google', detail: madeLater ? 'Once the picture is in' : !ctx.pro ? 'The team posts it for you' : 'The team posts it on the day', date: postDay, cost: null, status: 'with_team', ref: { kind: 'draft', id } })
+    }
+  }
+
+  /* ── the extra posts: a reminder, a teaser, a repeat, a Story the morning of ── */
+  for (const x of extras) {
+    if (!targets.length || !x.text) continue
+    const st = x.story ? targets.filter((t) => t.platform === 'instagram' || t.platform === 'facebook') : targets
+    if (!st.length) continue
+    const igNeedsPhoto = st.some((t) => t.platform === 'instagram') && media.length === 0
+    if (!madeLater && !igNeedsPhoto && (!x.story || media.length)) {
+      try {
+        const r = await createPost(clientId, { content: x.text, targets: st, mediaUrls: x.story ? [media[0]] : media, when: { kind: 'at', iso: x.at, timezone: tz }, story: x.story, metadata: { source: `announce-${x.key}`, announcementId } })
+        plan.push({ key: x.key, label: x.label, detail: x.detail, date: day(x.at), cost: null, status: 'scheduled', ref: { kind: 'post', id: r.id } })
+      } catch (e) { errors.push(`${x.label} did not schedule: ${e instanceof Error ? e.message : 'the social rail refused it'}`) }
+    } else {
+      const id = await draft(x.text, Array.from(new Set(st.map((t) => t.platform))), day(x.at), { story: x.story, waitsFor: requestId, extra: x.key })
+      plan.push({ key: x.key, label: x.label, detail: `${x.detail}. The team posts it`, date: day(x.at), cost: null, status: 'with_team', ref: { kind: 'draft', id } })
+    }
+  }
+
+  /* ── hours on Google, set directly when it is one day (closed, or open and close) ── */
+  let googleHoursDone = false
+  const hoursDay = kind === 'hours' && hrs?.oneDay ? d.from ?? null : kind === 'holiday' && hrs ? d.date ?? null : null
+  if (hoursDay && hrs && (hrs.closed === true || (hhmm(hrs.open) && hhmm(hrs.close)))) {
+    const { data: locs } = await admin.from('gbp_locations').select('id').eq('client_id', clientId).eq('status', 'assigned')
+    const ids = (locs ?? []).map((l) => String(l.id))
+    if (ids.length) {
+      try {
+        const r = await bulkSetSpecialHours(clientId, ids, hrs.closed === true ? { date: hoursDay, closed: true } : { date: hoursDay, closed: false, open: hhmm(hrs.open), close: hhmm(hrs.close) })
+        if (r.succeeded.length && !r.failed.length) {
+          googleHoursDone = true
+          plan.push({ key: 'ghours-google', label: 'Google hours set', detail: hrs.closed === true ? `Closed ${niceDay(hoursDay)}` : `${hrs.open} to ${hrs.close} on ${niceDay(hoursDay)}`, date: day(new Date().toISOString()), cost: null, status: 'done', ref: null })
+        } else errors.push(`Google did not take the hours: ${r.failed[0]?.error ?? 'no location answered'}. The team will set them.`)
+      } catch (e) { errors.push(`Google did not take the hours: ${e instanceof Error ? e.message : 'unknown'}. The team will set them.`) }
     }
   }
 
@@ -299,9 +358,13 @@ export async function POST(req: NextRequest) {
     if (r.ok) plan.push({ key: 'menus', label: where.charAt(0).toUpperCase() + where.slice(1), detail: `Name${media.length ? ', photo' : ''}${a.price ? `, ${a.price}` : ''}`, date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     else errors.push(`The menu update did not send: ${r.error}`)
   }
-  if (also.includes('ghours')) {
-    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: a.from || postDay, answers: { what: `Update our hours on Google, the website and the delivery apps: ${a.what}${a.line ? `. ${a.line}` : ''}${a.from ? `. From ${a.from}` : ''}`, when: whenWord(a.from || postDay) } })
-    if (r.ok) plan.push({ key: 'ghours', label: 'Hours updated everywhere', detail: 'Google, the website, the delivery apps', date: a.from || postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+  if (also.includes('ghours') || (hoursDay && !googleHoursDone && hrs)) {
+    const hoursDue = d.from ?? d.date ?? postDay
+    const where = googleHoursDone ? 'the website and the delivery apps' : 'Google, the website and the delivery apps'
+    const what = kind === 'open' ? `Mark us open on ${where}: ${name}${a.line ? `. ${a.line}` : ''}${a.from ? `. From ${a.from}` : ''}`
+      : `Update our hours on ${where}: ${name}${a.doing ? `. ${a.doing}` : ''}${a.line ? `. ${a.line}` : ''}${hoursDay && hrs ? `. ${hrs.closed === true ? 'Closed' : `${hrs.open ?? ''} to ${hrs.close ?? ''}`} on ${niceDay(hoursDay)}` : ''}${a.from ? `. From ${a.from}` : ''}${a.until ? ` until ${a.until}` : ''}`
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: hoursDue, answers: { what, when: whenWord(hoursDue) } })
+    if (r.ok) plan.push({ key: 'ghours', label: kind === 'open' ? 'Marked open everywhere' : googleHoursDone ? 'Hours on the website and apps' : 'Hours updated everywhere', detail: where.charAt(0).toUpperCase() + where.slice(1), date: hoursDue, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     else errors.push(`The hours update did not send: ${r.error}`)
   }
   if (also.includes('ordering')) {
@@ -315,8 +378,9 @@ export async function POST(req: NextRequest) {
     else errors.push(`The email did not send to the team: ${r.error}`)
   }
   if (also.includes('print')) {
-    const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `Table tent for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
-    if (r.ok) plan.push({ key: 'print', label: 'Table tent', detail: 'The team quotes it, printed or a file', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    const thing = PRINT[kind] ?? 'Flyer'
+    const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
+    if (r.ok) plan.push({ key: 'print', label: thing, detail: 'The team quotes it, printed or a file', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     else errors.push(`The table tent did not send: ${r.error}`)
   }
   if (also.includes('team') && card) {

@@ -31,8 +31,17 @@ type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'te
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
 type Step = 'kind' | 'facts' | 'picture' | 'where' | 'words' | 'plan' | 'done'
 
-interface Field { key: string; label: string; hint?: string; optional?: boolean; kind?: 'text' | 'date' | 'long' }
-interface KindDef { id: AnnounceKind; label: string; scene: Scene; hue: string; fields: Field[]; photo?: boolean; picture?: boolean; tags?: boolean; limited?: boolean; also: Also[]; cta: Cta }
+interface Field { key: string; label: string; hint?: string; optional?: boolean; kind?: 'text' | 'date' | 'long' | 'time' }
+interface KindDef {
+  id: AnnounceKind; label: string; scene: Scene; hue: string; fields: Field[]
+  photo?: boolean; picture?: boolean; tags?: boolean; limited?: boolean; also: Also[]; cta: Cta
+  /** per-kind wording for an also-update line */
+  alsoLabels?: Partial<Record<Also, { label?: string; detail?: string }>>
+  /** the reminder switch, when this kind has a moment to remind about */
+  reminder?: string
+  /** hours controls: one day (a switch reveals them) or always (a holiday is one day) */
+  hours?: 'oneday' | 'always'
+}
 
 const KINDS: KindDef[] = [
   { id: 'dish', label: 'New dish', scene: 'dish', hue: '#2e9a78', photo: true, picture: true, tags: true, limited: true, cta: 'order', also: ['gmenu', 'sitemenu', 'ordering', 'apps', 'email', 'print', 'team'], fields: [
@@ -41,38 +50,57 @@ const KINDS: KindDef[] = [
     { key: 'price', label: 'Price', hint: '$14', optional: true },
     { key: 'from', label: 'From when', kind: 'date' },
   ] },
-  { id: 'hours', label: 'Hours changed', scene: 'hours', hue: '#3d8ed8', cta: 'visit', also: ['ghours', 'email', 'team'], fields: [
-    { key: 'what', label: 'What is changing?', hint: 'Closed Thanksgiving Day, or open till 10 on Fridays' },
-    { key: 'line', label: 'Anything else?', hint: 'Back to normal on Saturday', optional: true },
+  { id: 'hours', label: 'Hours changed', scene: 'hours', hue: '#3d8ed8', photo: true, cta: 'visit', hours: 'oneday', also: ['ghours', 'print', 'email', 'team'],
+    alsoLabels: { print: { label: 'Door sign', detail: 'The new hours, printed or a file' }, email: { detail: 'Only worth it for a big change' } }, fields: [
+    { key: 'what', label: 'What is changing?', hint: 'Open till 10 on Fridays, or closed for a week' },
+    { key: 'line', label: 'Anything else?', hint: 'Back to normal on the 30th', optional: true },
     { key: 'from', label: 'From when', kind: 'date' },
+    { key: 'until', label: 'Until when', kind: 'date', optional: true, hint: 'Leave it empty if this is for good' },
   ] },
-  { id: 'deal', label: 'A deal', scene: 'offer', hue: '#dd9a1c', photo: true, picture: true, limited: true, cta: 'visit', also: ['email', 'print', 'team'], fields: [
+  { id: 'deal', label: 'A deal', scene: 'offer', hue: '#dd9a1c', photo: true, picture: true, cta: 'visit', also: ['email', 'print', 'team'], reminder: 'A reminder the morning it starts',
+    alsoLabels: { print: { label: 'Flyer', detail: 'For the counter and the window' } }, fields: [
     { key: 'what', label: 'What is the deal?', hint: 'Half-price boba with any sando' },
     { key: 'when', label: 'When does it run?', hint: 'Tuesdays, 4 to 6' },
+    { key: 'from', label: 'Starts', kind: 'date' },
+    { key: 'until', label: 'Ends', kind: 'date', optional: true, hint: 'Google needs an end date. Thirty days if empty' },
+    { key: 'code', label: 'A code, if there is one', hint: 'BOBA5', optional: true },
     { key: 'line', label: 'Any fine print?', hint: 'Dine in only', optional: true },
   ] },
-  { id: 'event', label: 'An event', scene: 'event', hue: '#dd9a1c', photo: true, picture: true, cta: 'reserve', also: ['email', 'print', 'team'], fields: [
+  { id: 'event', label: 'An event', scene: 'event', hue: '#dd9a1c', photo: true, picture: true, cta: 'reserve', also: ['email', 'print', 'team'], reminder: 'A reminder two days before, and a Story the morning of',
+    alsoLabels: { print: { label: 'Poster', detail: 'For the window and the wall' } }, fields: [
     { key: 'what', label: 'What is happening?', hint: 'Trivia night' },
     { key: 'when', label: 'What day?', kind: 'date' },
     { key: 'time', label: 'What time?', hint: '7 pm' },
     { key: 'line', label: 'One line about it', hint: 'Teams of four, winner eats free', optional: true },
+    { key: 'tickets', label: 'Tickets or cost', hint: 'Free, or $10 at the door', optional: true },
+    { key: 'rsvp', label: 'Where to RSVP or buy tickets', hint: 'https://', optional: true },
+    { key: 'where', label: 'Where, if not here', hint: 'The patio, or the park across the street', optional: true },
   ] },
-  { id: 'hiring', label: 'Now hiring', scene: 'hiring', hue: '#7a5fd6', photo: true, cta: 'message', also: ['team'], fields: [
+  { id: 'hiring', label: 'Now hiring', scene: 'hiring', hue: '#7a5fd6', photo: true, picture: true, cta: 'message', also: ['team', 'print'],
+    alsoLabels: { team: { label: 'Ask the team to share', detail: 'The card, and a nudge to post it' }, print: { label: 'Window sign', detail: 'Printed, or a file to print' } }, fields: [
     { key: 'what', label: 'What role?', hint: 'Line cook, weekends' },
-    { key: 'line', label: 'One line about it', hint: 'Full time, starts at $22', optional: true },
-    { key: 'how', label: 'How do they apply?', hint: 'Come in and ask for Ana', optional: true },
+    { key: 'line', label: 'Pay and hours', hint: 'Full time, starts at $22', optional: true },
+    { key: 'how', label: 'How do they apply?', hint: 'Come in and ask for Ana, or a link', optional: true },
+    { key: 'start', label: 'Start date', kind: 'date', optional: true },
   ] },
-  { id: 'open', label: 'Now open', scene: 'open', hue: '#2e9a78', photo: true, picture: true, cta: 'visit', also: ['ghours', 'email', 'print', 'team'], fields: [
+  { id: 'open', label: 'Now open', scene: 'open', hue: '#2e9a78', photo: true, picture: true, cta: 'visit', also: ['ghours', 'email', 'print', 'team'], reminder: 'A countdown post three days before',
+    alsoLabels: { ghours: { label: 'Google says open', detail: 'Google, the website, the delivery apps' }, print: { label: 'Banner', detail: 'For the front, printed or a file' } }, fields: [
     { key: 'what', label: 'What is the news?', hint: 'Grand opening, back open, a new location, now on DoorDash' },
     { key: 'from', label: 'From when', kind: 'date' },
-    { key: 'line', label: 'One line about it', hint: 'First 50 guests get a free drink', optional: true },
+    { key: 'line', label: 'One line about it', hint: 'Same menu, twice the seats', optional: true },
+    { key: 'offer', label: 'An opening offer', hint: 'First 50 guests get a free drink', optional: true },
+    { key: 'address', label: 'The address, if it is new', hint: '412 Main St', optional: true },
   ] },
-  { id: 'holiday', label: 'Holiday', scene: 'holiday', hue: '#dd9a1c', photo: true, picture: true, cta: 'reserve', also: ['ghours', 'email', 'print', 'team'], fields: [
+  { id: 'holiday', label: 'Holiday', scene: 'holiday', hue: '#dd9a1c', photo: true, picture: true, cta: 'reserve', hours: 'always', also: ['ghours', 'email', 'print', 'team'], reminder: 'A reminder before the day, or the pre-order deadline',
+    alsoLabels: { ghours: { label: 'Holiday hours everywhere', detail: 'Google, the website, the delivery apps' }, print: { label: 'Menu insert', detail: 'The holiday menu or the hours, printed or a file' } }, fields: [
     { key: 'what', label: 'Which holiday?', hint: 'Thanksgiving' },
-    { key: 'line', label: 'What are you doing?', hint: 'Pre-orders for pies, open till 2 on the day' },
+    { key: 'date', label: 'Which day?', kind: 'date' },
+    { key: 'doing', label: 'What are you doing?', kind: 'long', hint: 'Pre-orders for pies, a special menu, open till 2 on the day' },
+    { key: 'deadline', label: 'Pre-orders by', kind: 'date', optional: true },
   ] },
   { id: 'else', label: 'Something else', scene: 'else', hue: '#6e6e73', photo: true, picture: true, cta: 'visit', also: ['email', 'team'], fields: [
     { key: 'what', label: 'What is the news?', kind: 'long', hint: 'We hit 100 reviews. Thank you.' },
+    { key: 'from', label: 'A date, if there is one', kind: 'date', optional: true },
   ] },
 ]
 
@@ -135,6 +163,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
   const [atLocal, setAtLocal] = useState(localInput(new Date(Date.now() + 3600e3)))
   const [again, setAgain] = useState(false)
   const [boost, setBoost] = useState(false)
+  const [reminder, setReminder] = useState(true)
+  const [reminderText, setReminderText] = useState('')
+  const [oneDay, setOneDay] = useState(false)
+  const [closed, setClosed] = useState(false)
+  const [openAt, setOpenAt] = useState('10:00')
+  const [closeAt, setCloseAt] = useState('14:00')
   const [writing, setWriting] = useState(false)
   const [social, setSocial] = useState('')
   const [gtext, setGtext] = useState('')
@@ -168,7 +202,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
   }, [clientId])
 
   const pick = (k: KindDef) => {
-    setKind(k); setCta(k.cta); setTags(new Set()); setLimited(false)
+    setKind(k); setCta(k.cta); setTags(new Set()); setLimited(false); setOneDay(false); setClosed(k.id === 'holiday'); setReminder(!!k.reminder); setReminderText('')
     const dateKey = k.fields.find((f) => f.kind === 'date')?.key
     setA(dateKey ? { [dateKey]: todayIso() } : {})
     setAlso(new Set(k.also.filter((x) => ALSO[x].on(ctx))))
@@ -228,17 +262,41 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
     const facts: Record<string, string> = { ...a }
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
     if (tags.size) facts.tags = Array.from(tags).join(', ')
-    if (limited && a.until) facts.until = longDate(a.until); else delete facts.until
+    if (kind?.limited) { if (limited && a.until) facts.until = longDate(a.until); else delete facts.until }
+    if (hoursOn) facts.hours = closed ? `Closed that day` : `Open ${clock(openAt)} to ${clock(closeAt)} that day`
     return facts
+  }
+  const hoursOn = kind?.hours === 'always' || (kind?.hours === 'oneday' && oneDay)
+  const clock = (t: string) => { const [h, m] = t.split(':').map(Number); if (Number.isNaN(h)) return t; const d = new Date(); d.setHours(h, m || 0, 0, 0); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: m ? '2-digit' : undefined }) }
+  const rawDates = (): Record<string, string> => { const out: Record<string, string> = {}; for (const f of kind?.fields ?? []) if (f.kind === 'date' && a[f.key]) out[f.key] = a[f.key]; if (kind?.limited && limited && a.until) out.until = a.until; return out }
+  /* the extra posts this kind asks for: a reminder, a countdown, a Story the morning of, a second repeat */
+  const atHour = (iso: string, h: number, m = 0) => { const d = new Date(iso + 'T00:00:00'); d.setHours(h, m, 0, 0); return d }
+  const reminderWhen = (): { phrase: string; at: Date; label: string; detail: string } | null => {
+    if (!kind?.reminder || !reminder) return null
+    const dd = rawDates()
+    if (kind.id === 'event' && dd.when) { const d = atHour(plusDays(dd.when, -2), bestHour.h, bestHour.m); return { phrase: 'two days before the event', at: d, label: 'Reminder post', detail: 'Two days before' } }
+    if (kind.id === 'deal' && dd.from) { return { phrase: 'the morning the deal starts', at: atHour(dd.from, 10), label: 'Reminder post', detail: 'The morning it starts' } }
+    if (kind.id === 'open' && dd.from) { return { phrase: 'three days before opening', at: atHour(plusDays(dd.from, -3), bestHour.h, bestHour.m), label: 'Countdown post', detail: 'Three days to go' } }
+    if (kind.id === 'holiday' && (dd.deadline || dd.date)) { return dd.deadline ? { phrase: 'three days before the pre-order deadline', at: atHour(plusDays(dd.deadline, -3), bestHour.h, bestHour.m), label: 'Reminder post', detail: 'Three days before the pre-order deadline' } : { phrase: 'the day before', at: atHour(plusDays(dd.date, -1), bestHour.h, bestHour.m), label: 'Reminder post', detail: 'The day before' } }
+    return null
+  }
+  const extras = (): { key: string; label: string; detail: string; at: string; text: string; story?: boolean }[] => {
+    const out: { key: string; label: string; detail: string; at: string; text: string; story?: boolean }[] = []
+    const r = reminderWhen()
+    if (r && r.at.getTime() > Date.now() + 60e3 && reminderText.trim()) out.push({ key: 'reminder', label: r.label, detail: r.detail, at: r.at.toISOString(), text: reminderText.trim() })
+    const dd = rawDates()
+    if (kind?.id === 'event' && reminder && dd.when && story && hasIgFb && media.length) { const d = atHour(dd.when, 10); if (d.getTime() > Date.now()) out.push({ key: 'story-dayof', label: 'Story the morning of', detail: 'Where people scroll that day', at: d.toISOString(), text: reminderText.trim() || social.trim(), story: true }) }
+    if (kind?.id === 'hiring' && again) { const d = new Date((postAt ?? new Date()).getTime() + 14 * 86400e3); out.push({ key: 'again2', label: 'Posted a third time', detail: 'Two weeks on, until it is filled', at: d.toISOString(), text: social.trim() }) }
+    return out
   }
   const write = async () => {
     if (!kind) return
     setWriting(true); setErr(null)
     try {
-      const r = await fetch('/api/dashboard/announce-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, answers: factsOut(), channels, cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') }) })
+      const r = await fetch('/api/dashboard/announce-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, answers: factsOut(), channels, cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team'), reminderWhen: reminderWhen()?.phrase ?? '' }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not write it')
-      setSocial(String(j.social ?? '')); setGtext(String(j.google ?? '')); setCard(String(j.card ?? ''))
+      setSocial(String(j.social ?? '')); setGtext(String(j.google ?? '')); setCard(String(j.card ?? '')); setReminderText(String(j.reminder ?? ''))
       setStep('words')
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not write it') }
     setWriting(false)
@@ -259,20 +317,22 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
       const igNeeds = igChosen && media.length === 0 && !madeLater
       line('post', platforms.map((p) => PLAT[p] ?? p).join(', '), madeLater ? `Once you approve the picture, ${hour}` : igNeeds ? 'Instagram needs a photo. The team adds one, then posts' : postNow ? 'Right now' : `${hour}${bests.length ? ', your best hour' : ''}`, postDay, null, madeLater || igNeeds ? 'with_team' : postNow ? 'done' : 'scheduled')
       if (story && hasIgFb) line('story', 'Story goes up', madeLater ? 'Same day, once the picture is in' : 'An hour after the post', postDay, null, madeLater ? 'with_team' : 'scheduled')
-      if (again) line('again', 'Posted again', 'A week later, for the ones who missed it', plusDays(postDay, 7), null, madeLater ? 'with_team' : 'scheduled')
+      if (again) line('again', 'Posted again', kind.id === 'hiring' ? 'A week later, until it is filled' : 'A week later, for the ones who missed it', plusDays(postDay, 7), null, madeLater ? 'with_team' : 'scheduled')
     }
     if (google) line('google', 'Google', ctx?.pro && postNow && !madeLater ? 'Right now' : madeLater ? 'Once the picture is in' : ctx?.pro === false ? 'The team posts it for you' : 'The team posts it on the day', postDay, null, ctx?.pro && postNow && !madeLater ? 'done' : 'with_team')
     const menus = (['gmenu', 'sitemenu', 'apps'] as Also[]).filter((x) => also.has(x))
     if (menus.length) line('menus', menus.map((x) => ALSO[x].label).join(', '), `Name${media.length ? ', photo' : ''}${a.price ? `, ${a.price}` : ''}`, postDay)
-    if (also.has('ghours')) line('ghours', 'Hours updated everywhere', 'Google, the website, the delivery apps', a.from || postDay)
+    if (hoursOn && (a.from || a.date)) line('ghours-google', 'Google hours set', closed ? `Closed ${niceDate(a.date || a.from)}` : `${clock(openAt)} to ${clock(closeAt)} on ${niceDate(a.date || a.from)}`, todayIso(), null, 'done')
+    if (also.has('ghours')) line('ghours', kind.alsoLabels?.ghours?.label ?? 'Hours updated everywhere', hoursOn ? 'The website and the delivery apps' : 'Google, the website, the delivery apps', a.from || a.date || postDay)
+    if (platforms.length) for (const x of extras()) line(x.key, x.label, madeLater ? `${x.detail}. The team posts it` : x.detail, x.at.slice(0, 10), null, madeLater ? 'with_team' : 'scheduled')
     if (also.has('ordering')) line('ordering', 'Online ordering', 'Added so Order online works', postDay)
     if (also.has('email')) line('email', ctx && ctx.guests > 0 ? `Email to ${ctx.guests.toLocaleString()} regulars` : 'Email to your regulars', 'Written from the same words', plusDays(postDay, 1))
-    if (also.has('print')) line('print', 'Table tent', 'The team quotes it, printed or a file', postDay)
+    if (also.has('print')) line('print', kind.alsoLabels?.print?.label ?? 'Table tent', 'The team quotes it, printed or a file', postDay)
     if (also.has('team')) line('team', 'Team card', 'To everyone on the portal, and one to copy', today, null, 'done')
     if (boost) line('boost', 'Boost it', 'Open Boost once it has posted', postDay, null, 'later')
     line('results', 'How it did', 'Views, saves and mentions, in Insights', plusDays(postDay, 7), null, 'later')
     return L
-  }, [kind, mode, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost])
+  }, [kind, mode, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, reminder, reminderText, oneDay, closed, openAt, closeAt]) // eslint-disable-line react-hooks/exhaustive-deps
   const previewTotal = preview.reduce((s, l) => s + (l.cost ?? 0), 0)
 
   const commit = async () => {
@@ -284,8 +344,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
         clientId, kind: kind.id, answers: factsOut(),
         picture: { mode, mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, nextShootId: ctx?.nextShoot?.id },
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
-        timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost },
+        timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, reminders: extras() },
         words: { social: social.trim(), google: gtext.trim(), cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') ? card.trim() : '' },
+        dates: rawDates(),
+        hours: hoursOn ? { oneDay: true, closed, open: openAt, close: closeAt } : undefined,
       }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not make it happen')
@@ -369,14 +431,21 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
                 )}
               </div>
             )}
-            {kind.fields.map((f) => (
+            {kind.fields.filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).map((f) => (
               <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
                 {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
-                {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} style={input} />
+                {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />
                   : f.kind === 'long' ? <textarea rows={3} value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={{ ...input, resize: 'none', lineHeight: 1.45 }} />
                   : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />}
               </label>
             ))}
+            {kind.hours && (
+              <>
+                {kind.hours === 'oneday' && <div style={{ ...rowS, marginTop: 8 }}><span>Just that one day<small style={sub}>We set it on Google straight away</small></span><Switch on={oneDay} set={setOneDay} /></div>}
+                {hoursOn && <div style={rowS}><span>Closed that day</span><Switch on={closed} set={setClosed} /></div>}
+                {hoursOn && !closed && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 10 }}>Open<input type="time" value={openAt} onChange={(e) => setOpenAt(e.target.value)} style={input} /></label><label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 10 }}>Close<input type="time" value={closeAt} onChange={(e) => setCloseAt(e.target.value)} style={input} /></label></div>}
+              </>
+            )}
             {kind.limited && (
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>For a limited time</span><Switch on={limited} set={setLimited} /></div>
@@ -446,7 +515,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
                 {kind.also.map((k) => { const d = ALSO[k]; const on = also.has(k)
                   return <button key={k} type="button" onClick={() => setAlso((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })} style={{ ...rowS, width: '100%', background: 'none', border: 0, borderBottom: `0.5px solid ${C.line}`, padding: '9px 0', cursor: 'pointer', font: 'inherit', textAlign: 'left', color: C.ink, ...hv(d.hue) }}>
                     <span style={{ width: 38, flex: 'none' }}><Drawing spec={{ scene: d.scene }} name="" rating="" t={(s) => s} /></span>
-                    <span style={{ flex: 1 }}><b style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{d.label}</b><small style={sub}>{d.detail(ctx)}</small></span>
+                    <span style={{ flex: 1 }}><b style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{kind.alsoLabels?.[k]?.label ?? d.label}</b><small style={sub}>{kind.alsoLabels?.[k]?.detail ?? d.detail(ctx)}</small></span>
                     <Tick on={on} />
                   </button> })}
               </>
@@ -460,7 +529,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
             {timing === 'by' && <div style={{ ...rowS, marginTop: 6 }}><span>Post by<small style={sub}>{bests[0] ? `At ${bests[0].label.replace(/^\w+ at /, '')}, your best hour` : 'At 6 pm'}</small></span><input type="date" min={todayIso()} value={postBy} onChange={(e) => setPostBy(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
             {timing === 'at' && <input type="datetime-local" value={atLocal} onChange={(e) => setAtLocal(e.target.value)} style={input} />}
             {timing === 'ready' && madeLater && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>The day after you approve the picture, at your best hour.</div>}
-            {platforms.length > 0 && <div style={rowS}><span>Post again in a week<small style={sub}>Most people miss the first one</small></span><Switch on={again} set={setAgain} /></div>}
+            {kind.reminder && reminderWhen() && <div style={rowS}><span>Remind them<small style={sub}>{kind.reminder}</small></span><Switch on={reminder} set={setReminder} /></div>}
+            {platforms.length > 0 && <div style={rowS}><span>{kind.id === 'hiring' ? 'Post again each week' : 'Post again in a week'}<small style={sub}>{kind.id === 'hiring' ? 'Until it is filled' : 'Most people miss the first one'}</small></span><Switch on={again} set={setAgain} /></div>}
             <div style={rowS}><span>Boost it<small style={sub}>Reach more people nearby, after it posts</small></span><Switch on={boost} set={setBoost} /></div>
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             <button type="button" onClick={write} disabled={writing || channels.length === 0 || (timing === 'at' && !postAt)} style={{ ...cta_, opacity: channels.length === 0 || (timing === 'at' && !postAt) ? .5 : 1 }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : null} {writing ? 'Writing' : 'Write it for me'}</button>
@@ -487,6 +557,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{CTAS.filter((c) => c.id !== 'order' || ctx?.orderUrl).map((c) => <button key={c.id} type="button" onClick={() => setCta(c.id)} style={chip(ctaEff === c.id)}>{c.label}</button>)}</div>
             <div style={h3}>Language</div>
             <div style={{ display: 'flex', gap: 6 }}><span style={chip(true, true)}>English</span><button type="button" onClick={() => setSpanish((s) => !s)} style={chip(spanish)}>{spanish ? '' : '+ '}Spanish</button></div>
+            {reminderText && reminderWhen() && (
+              <>
+                <div style={h3}>{reminderWhen()!.label}, {reminderWhen()!.detail.toLowerCase()}</div>
+                <textarea value={reminderText} onChange={(e) => setReminderText(e.target.value.slice(0, 2200))} rows={3} style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.5, fontSize: 13.5 }} />
+              </>
+            )}
             {also.has('team') && (
               <>
                 <div style={h3}>The team card</div>
