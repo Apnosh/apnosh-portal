@@ -28,7 +28,7 @@ const C = {
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
-interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string; avatar?: string | null }
+interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string; /** a real draft in the owner's voice, not a plain starter */ drafted?: boolean; avatar?: string | null }
 interface Item { id: string; kind: string; chip: Chip; band: 'today' | 'week'; icon: string; source?: string; title: string; subtitle: string; time: string; href: string; status?: string; unread: boolean; review?: Review }
 interface Win { id: string; source?: string; icon: string; title: string; body: string; time: string; link: string | null; read: boolean }
 interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; today: number } }

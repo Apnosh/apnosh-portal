@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
     admin.from('content_drafts').select('id, idea, client_signed_off_at').eq('client_id', clientId).not('client_signed_off_at', 'is', null).order('client_signed_off_at', { ascending: false }).limit(15),
   ])
 
-  type Row = { id: string; kind: string; chip: Chip; band: Band; icon: string; source?: string; title: string; subtitle: string; time: string; whenIso: string; href: string; status?: string; unread: boolean; review?: { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string ; avatar?: string | null } }
+  type Row = { id: string; kind: string; chip: Chip; band: Band; icon: string; source?: string; title: string; subtitle: string; time: string; whenIso: string; href: string; status?: string; unread: boolean; review?: { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string; drafted?: boolean; avatar?: string | null } }
   const items: Row[] = []
 
   // getInbox action items (skip 'review' — built richly below from the reviews table)
@@ -121,6 +121,12 @@ export async function GET(req: NextRequest) {
   // Reviews — unreplied become action rows (with an inline reply); replied go to history.
   const reviews = reviewRes.data ?? []
   const history: { id: string; icon: string; chip: Chip | 'wins'; title: string; subtitle: string; outcome: string; day: string; whenIso: string; href?: string }[] = []
+  /* the real drafts on file for this client, by review id (reply-draft:<id>:<tone>); the newest tone wins */
+  const cachedDrafts = new Map<string, string>()
+  try {
+    const { data: cd } = await admin.from('client_cache').select('key, payload, computed_at').eq('client_id', clientId).like('key', 'reply-draft:%').order('computed_at', { ascending: true }).limit(400)
+    for (const row of cd ?? []) { const id = String(row.key).split(':')[1]; const reply = (row.payload as { reply?: string } | null)?.reply; if (id && typeof reply === 'string' && reply.trim()) cachedDrafts.set(id, reply) }
+  } catch { /* no cache, plain starters */ }
   for (const r of reviews) {
     const author = (r.author_name as string) || 'A guest'
     const first = author.split(' ')[0]
@@ -135,9 +141,13 @@ export async function GET(req: NextRequest) {
         review: {
           reviewId: r.id as string, rating, author, source, text: (r.review_text as string) ?? '',
           avatar: (r.author_avatar_url as string | null) ?? null,
-          suggestedReply: rating >= 4
-            ? `Thank you so much, ${first}! We're thrilled you enjoyed it and can't wait to welcome you back. 🙏`
-            : `Thank you for the honest feedback, ${first}. We're sorry it wasn't perfect and we'd love to make it right next time. Please reach out to us directly.`,
+          /* A REAL draft when one has been written (the Reply now sheet and the review page keep
+             theirs in client_cache); otherwise a plain starter that says what it is, never the
+             old canned emoji line dressed up as a suggestion. */
+          suggestedReply: cachedDrafts.get(r.id as string) ?? (rating >= 4
+            ? `Thank you so much${first ? `, ${first}` : ''}. We are glad you enjoyed it and would love to have you back.`
+            : `Thank you for the honest feedback${first ? `, ${first}` : ''}. We are sorry it was not right, and we would like to make it right next time.`),
+          drafted: cachedDrafts.has(r.id as string),
         },
       })
     } else {
