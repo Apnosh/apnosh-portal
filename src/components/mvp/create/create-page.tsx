@@ -682,14 +682,14 @@ export default function CreatePage() {
      sideways. Every tile is a door to something real: a live screen, a card's own page, or the
      describe box with the first words typed. A tile whose card is not on the shelf is dropped,
      so nothing here opens onto "that one is not on the shelf". */
-  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { announce: true | 'slow' } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
+  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { announce: true | 'slow' | 'post' | 'update' } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
   /* THE ROW IS VERBS FIRST (owner 2026-09-16): the seven things an owner does in a week, then the
      things they ask the team for, each named in two words at most. */
   const QUICK_ALL: Quick[] = [
     { hue: 'announce', t: T('Announce'), I: Megaphone, to: { announce: true }, scene: { scene: 'ad' } },
-    { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' }, scene: { scene: 'post' } },
+    { hue: 'brand', t: T('Post'), I: PenLine, to: { announce: 'post' }, scene: { scene: 'post' } },
     { hue: 'reviews', t: T('Reply'), I: Star, to: { href: '/dashboard/inbox' }, scene: { scene: 'dm' } },
-    { hue: 'newfaces', t: T('Update'), I: Clock, to: { href: '/dashboard/business-info' }, scene: { scene: 'hours' } },
+    { hue: 'newfaces', t: T('Update'), I: Clock, to: { announce: 'update' }, scene: { scene: 'hours' } },
     { hue: 'nights', t: T('Slow night'), I: Tag, to: { announce: 'slow' }, scene: { scene: 'offer' } },
     { hue: 'reviews', t: T('Get reviews'), I: Star, to: { card: 'reviewsplan' }, scene: { scene: 'review' } },
     { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' }, scene: { scene: 'boost' } },
@@ -704,7 +704,7 @@ export default function CreatePage() {
     { t: T('Influencers'), I: Users, to: { card: 'creator' }, scene: { scene: 'creator' } },
   ]
   const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
-  const [announcing, setAnnouncing] = useState<false | true | 'slow'>(false)
+  const [announcing, setAnnouncing] = useState<false | true | 'slow' | 'post' | 'update'>(false)
   function quickGo(x: Quick) {
     if ('announce' in x.to) { setAnnouncing(x.to.announce); return }
     if ('ask' in x.to) { setAsk(T('Announce something: ')); askRef.current?.focus(); return }
@@ -1062,7 +1062,7 @@ export default function CreatePage() {
         {view.name === 'product' && product(view.id)}
       </div>
       {filterSheetUI}
-      {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} initialKind={announcing === 'slow' ? 'slow' : undefined} onClose={() => setAnnouncing(false)} />}
+      {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} initialKind={announcing === true ? undefined : announcing} onClose={() => setAnnouncing(false)} />}
       {view.name !== 'browse' && view.name !== 'product' && (
         <button type="button" onClick={back} aria-label={T('Back')} style={{ display: 'none' }}><ChevronLeft /></button>
       )}

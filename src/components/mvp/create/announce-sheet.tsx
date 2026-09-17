@@ -25,7 +25,7 @@ import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { BrandOrMark } from '../mvp-insights'
 
-export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'open' | 'holiday' | 'else' | 'slow'
+export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'open' | 'holiday' | 'else' | 'slow' | 'post' | 'update'
 type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
@@ -108,6 +108,20 @@ const KINDS: KindDef[] = [
   /* the slow night: a front door, not a flow (owner 2026-09-17: "what would it do"). Two screens,
      which night and which play, then it hands into the Deal or the Event flow with every week on. */
   { id: 'slow', label: 'Slow night', scene: 'offer', hue: '#3b6fd4', hidden: true, cta: 'visit', also: [], fields: [] },
+  /* A post (the Post tile, folded in 2026-09-17): a photo up top, what it is about, the words at
+     the best hour. The full composer stays at /dashboard/post for the controls this hides. */
+  { id: 'post', label: 'A post', scene: 'post', hue: '#0f97a8', hidden: true, photo: true, picture: true, cta: 'visit', also: [], fields: [
+    { key: 'what', label: 'What is it about?', kind: 'long', hint: 'The new patio chairs. Friday prep. Ana on the line. Whatever you would tell a regular.' },
+    { key: 'who', label: 'Anyone to tag', hint: '@thefarm, @ana', optional: true },
+  ] },
+  /* Update (the Update tile, folded): what changed on the listing, from when. One-day hours go
+     to Google straight away; everything else is one team line across Google, the website and
+     the apps. A post is optional. */
+  { id: 'update', label: 'Update', scene: 'hours', hue: '#6a39de', hidden: true, photo: true, cta: 'visit', hours: 'oneday', also: ['ghours', 'team'],
+    alsoLabels: { ghours: { label: 'Everywhere', detail: 'Google, the website, the delivery apps' }, team: { detail: 'So the phone gets it right' } }, fields: [
+    { key: 'what', label: 'What changed?', kind: 'long', hint: 'New phone number. Menu link. Closed Mondays now. A new photo of the front.' },
+    { key: 'from', label: 'From when', kind: 'date' },
+  ] },
 ]
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const PARTS: { id: string; label: string; hour: number; runs: string }[] = [{ id: 'lunch', label: 'Lunch', hour: 10, runs: '11 to 2' }, { id: 'afternoon', label: 'Afternoon', hour: 13, runs: '2 to 5' }, { id: 'dinner', label: 'Dinner', hour: 16, runs: '5 to 8' }, { id: 'late', label: 'Late', hour: 19, runs: '8 to close' }]
@@ -280,6 +294,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     setAlso(new Set(k.also.filter((x) => ALSO[x].on(ctx))))
     setEkind(null); setWeekly(false); setGetin('show'); setLink(''); setPrice(''); setWhere('here'); setAddress(''); setTonight(true); setAfter(true); setTonightText(''); setAfterText(''); setGoal(25); setPostByTouched(false); setSocialEs(''); setFromSlow(false); setTables(10)
     if (k.id === 'slow') { setNight(slowestDay(ctx) ?? 2); setPart('dinner') }
+    if (k.id === 'post') setGoogle(false)
+    if (k.id === 'update') setGoogle(hasGoogle)
     setStep(k.id === 'event' ? 'ekind' : k.id === 'slow' ? 'night' : 'facts')
   }
   const isSlow = kind?.id === 'slow'
@@ -564,7 +580,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const visible: Step[] = isSlow ? ['night', 'play'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const back = () => { const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { const i = visible.indexOf(step); setStep(visible[i + 1]) }
-  const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? 'Slow night' : fromSlow && step === 'facts' ? `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}` : (isEvent && a.what?.trim()) || kind?.label || ''
+  const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? 'Slow night' : kind?.id === 'post' ? 'A post' : kind?.id === 'update' ? 'Update' : fromSlow && step === 'facts' ? `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}` : (isEvent && a.what?.trim()) || kind?.label || ''
   const Line = ({ l }: { l: PlanLine }) => (
     <div style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, alignItems: 'flex-start' }}>
       <span style={{ width: 62, flex: 'none', fontSize: 12, fontWeight: 700, color: C.mute, paddingTop: 2 }}>{l.date ? niceDate(l.date).replace(/^(\w+), /, '$1 ') : ''}</span>
@@ -579,7 +595,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
       <div onClick={(e) => e.stopPropagation()} onFocusCapture={(e) => { const t = e.target as HTMLElement; if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') setTimeout(() => t.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250) }} style={{ width: '100%', maxWidth: 480, maxHeight: vv ? vv.h - 16 : '92dvh', overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink, fontFamily: 'inherit' }}>
         <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 10px' }}>
-          {step !== 'kind' && step !== 'done' && !(isSlow && step === 'night' && initialKind) ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
+          {step !== 'kind' && step !== 'done' && !(initialKind && visible.indexOf(step) === 0) ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
           <span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</span>
           <button type="button" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
         </div>

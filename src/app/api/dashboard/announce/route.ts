@@ -368,7 +368,7 @@ export async function POST(req: NextRequest) {
 
   /* ── hours on Google, set directly when it is one day (closed, or open and close) ── */
   let googleHoursDone = false
-  const hoursDay = kind === 'hours' && hrs?.oneDay ? d.from ?? null : kind === 'holiday' && hrs ? d.date ?? null : null
+  const hoursDay = (kind === 'hours' || kind === 'update') && hrs?.oneDay ? d.from ?? null : kind === 'holiday' && hrs ? d.date ?? null : null
   if (hoursDay && hrs && (hrs.closed === true || (hhmm(hrs.open) && hhmm(hrs.close)))) {
     const { data: locs } = await admin.from('gbp_locations').select('id').eq('client_id', clientId).eq('status', 'assigned')
     const ids = (locs ?? []).map((l) => String(l.id))
