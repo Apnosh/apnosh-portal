@@ -45,9 +45,9 @@ export async function GET(req: NextRequest) {
     admin.from('announcements')
       .select('id, kind, answers, plan, status, created_at')
       .eq('client_id', clientId)
-      .in('status', ['planned', 'in_progress'])
+      .in('status', ['planned', 'in_progress', 'done'])
       .order('created_at', { ascending: false })
-      .limit(10),
+      .limit(20),
   ])
 
   const all = postsR.status === 'fulfilled' ? postsR.value : []
@@ -67,18 +67,24 @@ export async function GET(req: NextRequest) {
     }))
     : []
 
-  type Line = { key: string; label: string; detail: string; date: string | null; cost: number | null; status: string; ref: { kind: string; id: string | null; href?: string } | null }
-  const plans = plansR.status === 'fulfilled' && !plansR.value.error
-    ? (plansR.value.data ?? []).map((r: Record<string, unknown>) => {
-      const answers = (r.answers ?? {}) as Record<string, unknown>
-      const lines = (Array.isArray(r.plan) ? (r.plan as Line[]) : []).filter((l) => l && l.status !== 'done' && l.ref?.kind !== 'post' && l.ref?.kind !== 'draft' && l.ref?.kind !== 'gbp')
-      return { id: String(r.id), kind: String(r.kind), name: String(answers.what ?? '').slice(0, 80) || 'An announcement', lines }
-    }).filter((p) => p.lines.length > 0)
-    : []
+  type Line = { key: string; label: string; detail: string; date: string | null; cost: number | null; status: string; ref: { kind: string; id: string | null; href?: string } | null; why?: string; outcome?: { text: string; n?: number; at: string } }
+  const allPlans = plansR.status === 'fulfilled' && !plansR.value.error ? (plansR.value.data ?? []) as Record<string, unknown>[] : []
+  const nameOf = (r: Record<string, unknown>) => { const a = (r.answers ?? {}) as Record<string, unknown>; return String(a.what ?? '').slice(0, 80) || (r.kind === 'reviews' ? 'More reviews' : 'An announcement') }
+  const plans = allPlans.map((r) => {
+    const lines = (Array.isArray(r.plan) ? (r.plan as Line[]) : []).filter((l) => l && l.status !== 'done' && l.ref?.kind !== 'post' && l.ref?.kind !== 'draft' && l.ref?.kind !== 'gbp')
+    return { id: String(r.id), kind: String(r.kind), name: nameOf(r), lines }
+  }).filter((p) => p.lines.length > 0)
+  /* WHAT YOU GOT: the lines that came back with an outcome in the last two weeks. The one thing
+     the twenty owners said would bring them back is proof that something happened. */
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString()
+  const gotten = allPlans.flatMap((r) => (Array.isArray(r.plan) ? (r.plan as Line[]) : [])
+    .filter((l) => l && l.outcome && l.outcome.at >= twoWeeksAgo)
+    .map((l) => ({ plan: nameOf(r), key: l.key, label: l.label, outcome: l.outcome!.text, at: l.outcome!.at, href: l.ref?.href ?? null })))
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12)
 
   return NextResponse.json(
     {
-      waiting, failed, sent, withTeam, plans,
+      waiting, failed, sent, withTeam, plans, gotten,
       /* Say so rather than showing an empty list as if it were the truth. */
       error: postsR.status === 'rejected'
         ? (postsR.reason instanceof Error ? postsR.reason.message : 'Could not reach your accounts')

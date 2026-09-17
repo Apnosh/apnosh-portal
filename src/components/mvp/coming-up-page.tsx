@@ -22,7 +22,8 @@ interface Post { id: string; content: string; status: string; scheduledFor: stri
 interface Draft { id: string; idea: string; status: string; platforms: string[]; wantedFor: string | null }
 interface PlanLine { key: string; label: string; detail: string; date: string | null; cost: number | null; status: string; ref: { kind: string; id: string | null; href?: string } | null }
 interface Plan { id: string; kind: string; name: string; lines: PlanLine[] }
-interface Data { waiting: Post[]; failed: Post[]; sent: Post[]; withTeam: Draft[]; plans?: Plan[]; error: string | null }
+interface Got { plan: string; key: string; label: string; outcome: string; at: string; href: string | null }
+interface Data { waiting: Post[]; failed: Post[]; sent: Post[]; withTeam: Draft[]; plans?: Plan[]; gotten?: Got[]; error: string | null }
 
 const RED = '#ec1528', AMBER = '#9a6b17', BLUE = '#3b6fd4'
 const NAME: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', google: 'Google', gbp: 'Google', x: 'X', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' }
@@ -106,8 +107,9 @@ export default function ComingUpPage() {
   const byDay = new Map<string, Post[]>()
   for (const p of [...(data?.waiting ?? [])].sort((a, b) => String(a.scheduledFor ?? '9').localeCompare(String(b.scheduledFor ?? '9')))) { const k = dayKey(p.scheduledFor); byDay.set(k, [...(byDay.get(k) ?? []), p]) }
   const plans = data?.plans ?? []
+  const gotten = data?.gotten ?? []
   const total = (data?.waiting.length ?? 0) + (data?.withTeam.length ?? 0) + plans.reduce((n, p) => n + p.lines.length, 0)
-  const empty = data && data.waiting.length === 0 && data.failed.length === 0 && data.withTeam.length === 0 && plans.length === 0
+  const empty = data && data.waiting.length === 0 && data.failed.length === 0 && data.withTeam.length === 0 && plans.length === 0 && gotten.length === 0
   const shortDay = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso.slice(0, 10) + 'T12:00:00'); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }) }
 
   return (
@@ -218,6 +220,23 @@ export default function ComingUpPage() {
                     {l.ref?.href && <Link href={l.ref.href} style={{ fontSize: 12.5, fontWeight: 700, color: l.status === 'needs_payment' ? AMBER : C.greenDk, textDecoration: 'none', whiteSpace: 'nowrap' }}>{l.status === 'needs_payment' ? 'Pay to start' : 'Open'}</Link>}
                   </div>
                 ))}
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* what you got: the outcomes that came back, newest first */}
+        {gotten.length > 0 && (
+          <>
+            <H>What you got</H>
+            {gotten.map((g) => (
+              <div key={`${g.plan}-${g.key}-${g.at}`} style={{ display: 'flex', gap: 12, padding: '10px 0', borderTop: `0.5px solid ${C.line}`, alignItems: 'flex-start' }}>
+                <span style={{ width: 54, flex: 'none', fontSize: 12, fontWeight: 700, color: C.mute, paddingTop: 1 }}>{shortDay(g.at)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{g.label}<span style={{ color: C.faint, fontWeight: 500 }}> · {g.plan}</span></span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: C.greenDk, fontWeight: 600, lineHeight: 1.4, marginTop: 1 }}>{g.outcome}</span>
+                </span>
+                {g.href && <Link href={g.href} style={{ fontSize: 12.5, fontWeight: 700, color: C.mute, textDecoration: 'none', whiteSpace: 'nowrap' }}>Open</Link>}
               </div>
             ))}
           </>

@@ -41,6 +41,10 @@
       "schedule": "0 13 * * *"
     },
     {
+      "path": "/api/cron/plan-results",
+      "schedule": "45 15 * * *"
+    },
+    {
       "path": "/api/cron/publish-scheduled",
       "schedule": "*/5 * * * *"
     },
