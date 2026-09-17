@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, Loader2, X, Star } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Loader2, RotateCcw, X, Star } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { cachedComments, loadComments, type CommentRow } from '../mvp-inbox'
 import { BrandOrMark } from '../mvp-insights'
@@ -47,7 +47,7 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [drafting, setDrafting] = useState<Set<string>>(new Set())
   const [sent, setSent] = useState<Set<string>>(new Set())
-  const [skipped, setSkipped] = useState<Set<string>>(new Set())
+  const [skipped] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState<Set<string>>(new Set())
   const [errs, setErrs] = useState<Record<string, string>>({})
   const [open, setOpen] = useState<Set<string>>(new Set())
@@ -181,12 +181,21 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
   const cta: React.CSSProperties = { width: '100%', height: 48, borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 15, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
   const chip = (on: boolean): React.CSSProperties => ({ fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${on ? C.ink : C.line}`, background: on ? C.ink : '#fff', color: on ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit' })
   /* the row under a reply: one small dark pill to send, plain words for the rest */
-  const sendBtn: React.CSSProperties = { height: 34, padding: '0 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 13, font: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }
-  const textBtn: React.CSSProperties = { height: 34, padding: '0 8px', borderRadius: 99, border: 0, background: 'none', color: C.mute, fontWeight: 600, fontSize: 13, font: 'inherit', cursor: 'pointer' }
   const tweakBtn: React.CSSProperties = { fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, cursor: 'pointer', font: 'inherit' }
   const h3: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '20px 0 8px' }
   const sub: React.CSSProperties = { display: 'block', fontWeight: 500, color: C.mute, fontSize: 12, marginTop: 2 }
   const ta: React.CSSProperties = { display: 'block', width: '100%', marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box', resize: 'none', outline: 'none' }
+  /* THE BOX: the reply, with its two actions inside it. Send is the dark circle, Again the
+     light one. Nothing else to read. */
+  const Box = ({ value, onChange, onSend, onAgain, busy, writing, rows = 4, placeholder }: { value: string; onChange: (v: string) => void; onSend: () => void; onAgain: () => void; busy: boolean; writing: boolean; rows?: number; placeholder?: string }) => (
+    <div style={{ position: 'relative', marginTop: 6 }}>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={rows} placeholder={writing ? 'Writing it in your voice' : placeholder ?? 'Write a reply, or tap the circle to have it written'} style={{ ...ta, marginTop: 0, paddingBottom: 44 }} />
+      <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', gap: 6 }}>
+        <button type="button" onClick={onAgain} disabled={writing} aria-label={value.trim() ? 'Write it again' : 'Write it for me'} title={value.trim() ? 'Again' : 'Write it for me'} style={{ width: 32, height: 32, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: writing ? .6 : 1 }}>{writing ? <Loader2 size={14} className="mvp-spin" /> : <RotateCcw size={14} />}</button>
+        <button type="button" onClick={onSend} disabled={!value.trim() || busy} aria-label="Send" title="Send" style={{ width: 32, height: 32, borderRadius: 99, border: 0, background: C.ink, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: !value.trim() || busy ? .4 : 1 }}>{busy ? <Loader2 size={14} className="mvp-spin" /> : <ArrowUp size={16} strokeWidth={2.5} />}</button>
+      </div>
+    </div>
+  )
   const Stars = ({ n }: { n: number | null }) => <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} fill={n != null && i <= n ? '#f0a12b' : 'none'} color={n != null && i <= n ? '#f0a12b' : C.line} strokeWidth={2} />)}</span>
   const total = read ? read.queue.length : 0
   const doneCount = sent.size
@@ -227,7 +236,7 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
             {/* NEEDS CARE: one at a time */}
             {care.length > 0 && current && (
               <>
-                <div style={{ ...h3, display: 'flex', justifyContent: 'space-between' }}><span>Needs care</span><span style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600 }}>{Math.min(careIndex + 1, care.length)} of {care.length}</span></div>
+                <div style={{ ...h3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>Needs care</span><span style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}>{care.length > 1 && <button type="button" aria-label="Previous" onClick={() => setCareIndex((i) => (i - 1 + care.length) % care.length)} style={{ border: 0, background: 'none', padding: 4, cursor: 'pointer', color: C.mute, display: 'flex' }}><ChevronLeft size={16} /></button>}{Math.min(careIndex + 1, care.length)} of {care.length}{care.length > 1 && <button type="button" aria-label="Next" onClick={() => setCareIndex((i) => (i + 1) % care.length)} style={{ border: 0, background: 'none', padding: 4, cursor: 'pointer', color: C.mute, display: 'flex' }}><ChevronRight size={16} /></button>}</span></div>
                 <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '14px 14px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <BrandOrMark provider="google" size={14} />
@@ -237,24 +246,14 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                   </div>
                   <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: 'pre-wrap' }}>{current.text || 'No written comment, just the stars.'}</div>
                   <div style={{ marginTop: 12, fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.mute }}>Your reply</div>
-                  {drafts[current.id] != null ? (
-                    <textarea value={drafts[current.id]} onChange={(e) => setDrafts((x) => ({ ...x, [current.id]: e.target.value }))} rows={5} style={ta} />
-                  ) : (
-                    <div style={{ marginTop: 6, fontSize: 13, color: C.mute, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>{drafting.has(current.id) ? <><Loader2 size={14} className="mvp-spin" /> Writing it in your voice</> : 'No draft yet. Tap a tone below.'}</div>
-                  )}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    <button type="button" onClick={() => tweak(current.id, 'winback')} style={tweakBtn}>Make it right</button>
+                  <Box value={drafts[current.id] ?? ''} onChange={(v) => setDrafts((x) => ({ ...x, [current.id]: v }))} onSend={async () => { const ok = await send(current); if (ok) setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} onAgain={() => tweak(current.id, 'winback')} busy={sending.has(current.id)} writing={drafting.has(current.id)} rows={5} />
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
                     <button type="button" onClick={() => tweak(current.id, 'thankful')} style={tweakBtn}>Warmer</button>
                     <button type="button" onClick={() => tweak(current.id, 'short')} style={tweakBtn}>Shorter</button>
                     <button type="button" onClick={() => tweak(current.id, 'professional')} style={tweakBtn}>More formal</button>
-                  </div>
-                  {errs[current.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 8 }}>{errs[current.id]}</div>}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 12 }}>
-                    <button type="button" onClick={async () => { const ok = await send(current); if (ok) setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} disabled={!drafts[current.id]?.trim() || sending.has(current.id)} style={{ ...sendBtn, opacity: !drafts[current.id]?.trim() || sending.has(current.id) ? .5 : 1 }}>{sending.has(current.id) ? <Loader2 size={13} className="mvp-spin" /> : <Check size={13} strokeWidth={3} />} Send</button>
-                    <button type="button" onClick={() => { setSkipped((s) => new Set(s).add(current.id)); setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} style={textBtn}>Skip</button>
-                    {care.length > 1 && <button type="button" onClick={() => setCareIndex((i) => (i + 1) % care.length)} style={textBtn}>Next</button>}
                     <a href={`/dashboard/reviews/${current.id}`} style={{ marginLeft: 'auto', fontSize: 12, color: C.faint, textDecoration: 'none' }}>Open</a>
                   </div>
+                  {errs[current.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 8 }}>{errs[current.id]}</div>}
                 </div>
               </>
             )}
@@ -276,13 +275,8 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                       {isOpen && (
                         <div style={{ paddingBottom: 12 }}>
                           {q.text && <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{q.text}</div>}
-                          {d != null ? <textarea value={d} onChange={(e) => setDrafts((x) => ({ ...x, [q.id]: e.target.value }))} rows={4} style={ta} /> : <div style={{ fontSize: 13, color: C.mute, padding: '10px 0', display: 'flex', gap: 8, alignItems: 'center' }}>{drafting.has(q.id) ? <><Loader2 size={14} className="mvp-spin" /> Writing</> : 'Written when you send'}</div>}
+                          <Box value={d ?? ''} onChange={(v) => setDrafts((x) => ({ ...x, [q.id]: v }))} onSend={() => send(q)} onAgain={() => tweak(q.id, 'thankful')} busy={sending.has(q.id)} writing={drafting.has(q.id)} rows={3} />
                           {errs[q.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[q.id]}</div>}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
-                            <button type="button" onClick={() => send(q)} disabled={!d?.trim() || sending.has(q.id)} style={{ ...sendBtn, opacity: !d?.trim() || sending.has(q.id) ? .5 : 1 }}>{sending.has(q.id) ? <Loader2 size={13} className="mvp-spin" /> : <Check size={13} strokeWidth={3} />} Send</button>
-                            <button type="button" onClick={() => tweak(q.id, 'short')} style={textBtn}>Shorter</button>
-                            <button type="button" onClick={() => setSkipped((s) => new Set(s).add(q.id))} style={textBtn}>Skip</button>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -304,13 +298,8 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                     <div key={c.id} style={{ borderTop: `0.5px solid ${C.line}`, padding: '10px 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BrandOrMark provider={c.platform} size={14} /><b style={{ fontSize: 13.5 }}>{c.authorName}</b>{c.postCaption && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>on: {c.postCaption.slice(0, 40)}</span>}</div>
                       <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 4 }}>{c.text}</div>
-                      <textarea value={d ?? ''} onChange={(e) => setCDrafts((x) => ({ ...x, [c.id]: e.target.value }))} rows={2} placeholder={writing ? 'Writing it in your voice' : 'Write a reply, or tap Write it for me'} style={ta} />
+                      <Box value={d ?? ''} onChange={(v) => setCDrafts((x) => ({ ...x, [c.id]: v }))} onSend={() => sendComment(c)} onAgain={() => writeComment(c)} busy={busy} writing={writing} rows={2} />
                       {errs[c.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[c.id]}</div>}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
-                        <button type="button" onClick={() => sendComment(c)} disabled={!d?.trim() || busy} style={{ ...sendBtn, opacity: !d?.trim() || busy ? .5 : 1 }}>{busy ? <Loader2 size={13} className="mvp-spin" /> : <Check size={13} strokeWidth={3} />} Send</button>
-                        <button type="button" onClick={() => writeComment(c)} disabled={writing} style={textBtn}>{writing ? 'Writing' : d?.trim() ? 'Again' : 'Write it for me'}</button>
-                        <button type="button" onClick={() => setCSent((s) => new Set(s).add(c.id))} style={textBtn}>Skip</button>
-                      </div>
                     </div>
                   )
                 })}
