@@ -432,6 +432,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     const snapped = dailyChoices.reduce((best, c) => (Math.abs(c - perDay) < Math.abs(best - perDay) ? c : best), dailyChoices[0])
     setDays(d); setDaily(snapped); setRadius(people <= 1000 ? 3 : people <= 3000 ? 5 : people <= 8000 ? 10 : 25)
   }
+  /* the Ads sheet opens Boost with the goal in the URL; aim once the dials exist */
+  const aimedFromUrl = useRef(false)
+  useEffect(() => {
+    if (aimedFromUrl.current || typeof window === 'undefined') return
+    const g = Number(new URLSearchParams(window.location.search).get('goal'))
+    if (Number.isFinite(g) && g > 0 && picked) { aimedFromUrl.current = true; aim(GOALS.reduce((b, c) => (Math.abs(c - g) < Math.abs(b - g) ? c : b), GOALS[0])) }
+  }, [picked]) // eslint-disable-line react-hooks/exhaustive-deps
   const goalWhy = goal != null ? `${rate.word.charAt(0).toUpperCase() + rate.word.slice(1)}, about ${rate.perDollar} people a dollar, $${total} over ${days} days reaches roughly ${Math.round(rate.perDollar * total).toLocaleString()}${Math.round(rate.perDollar * total) < goal * 0.8 ? `. Short of ${goal.toLocaleString()}: the cap or the floor got in the way, so raise a dial` : ''}.` : ''
   /* A number measured for one town says nothing about the next one. */
   /* Every radius we have ever measured for this place, so the pills arrive

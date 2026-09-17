@@ -31,6 +31,8 @@ import AnnounceSheet, { type AnnounceKind } from './announce-sheet'
 import ReplySheet from './reply-sheet'
 import ReviewsSheet from './reviews-sheet'
 import RequestSheet, { type RequestType } from './request-sheet'
+import AdsSheet from './ads-sheet'
+import InfluencersSheet from './influencers-sheet'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { hrefFor, firstName, type OrderPerson } from '../people-row'
@@ -685,7 +687,7 @@ export default function CreatePage() {
      sideways. Every tile is a door to something real: a live screen, a card's own page, or the
      describe box with the first words typed. A tile whose card is not on the shelf is dropped,
      so nothing here opens onto "that one is not on the shelf". */
-  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { announce: true | 'slow' | 'post' | 'update' } | { reply: true } | { reviews: true } | { request: RequestType } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
+  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { announce: true | 'slow' | 'post' | 'update' } | { reply: true } | { reviews: true } | { request: RequestType } | { ads: true } | { influencers: true } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
   /* THE ROW IS VERBS FIRST (owner 2026-09-16): the seven things an owner does in a week, then the
      things they ask the team for, each named in two words at most. */
   const QUICK_ALL: Quick[] = [
@@ -702,19 +704,23 @@ export default function CreatePage() {
     { hue: 'amber', t: T('Print'), I: Tag, to: { request: 'print' }, scene: { scene: 'print' } },
     { hue: 'brand', t: T('Branding'), I: Tag, to: { request: 'logo' }, scene: { scene: 'brand' } },
     { hue: 'brand', t: T('Website'), I: Store, to: { request: 'website' }, scene: { scene: 'site' } },
-    { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' }, scene: { scene: 'ad' } },
-    { t: T('Influencers'), I: Users, to: { card: 'creator' }, scene: { scene: 'creator' } },
+    { hue: 'event', t: T('Ads'), I: Target, to: { ads: true }, scene: { scene: 'ad' } },
+    { hue: 'newfaces', t: T('Influencers'), I: Users, to: { influencers: true }, scene: { scene: 'creator' } },
   ]
   const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
   const [announcing, setAnnouncing] = useState<false | true | AnnounceKind>(false)
   const [replying, setReplying] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [requesting, setRequesting] = useState<RequestType | null>(null)
+  const [adsOpen, setAdsOpen] = useState(false)
+  const [influencersOpen, setInfluencersOpen] = useState(false)
   function quickGo(x: Quick) {
     if ('announce' in x.to) { setAnnouncing(x.to.announce); return }
     if ('reply' in x.to) { setReplying(true); return }
     if ('reviews' in x.to) { setReviewing(true); return }
     if ('request' in x.to) { setRequesting(x.to.request); return }
+    if ('ads' in x.to) { setAdsOpen(true); return }
+    if ('influencers' in x.to) { setInfluencersOpen(true); return }
     if ('ask' in x.to) { setAsk(T('Announce something: ')); askRef.current?.focus(); return }
     if ('href' in x.to) { router.push(x.to.href); return }
     const c = cards[x.to.card]; if (c) open(c)
@@ -1071,6 +1077,8 @@ export default function CreatePage() {
       </div>
       {filterSheetUI}
       {replying && clientId && <ReplySheet clientId={clientId} onClose={() => setReplying(false)} />}
+      {adsOpen && clientId && <AdsSheet clientId={clientId} onClose={() => setAdsOpen(false)} />}
+      {influencersOpen && clientId && <InfluencersSheet clientId={clientId} onClose={() => setInfluencersOpen(false)} />}
       {requesting && clientId && <RequestSheet clientId={clientId} type={requesting} onClose={() => setRequesting(null)} onAnnounce={(k) => { setRequesting(null); setAnnouncing(k) }} />}
       {reviewing && clientId && <ReviewsSheet clientId={clientId} onClose={() => setReviewing(false)} onReply={() => { setReviewing(false); setReplying(true) }} />}
       {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} initialKind={announcing === true ? undefined : announcing} onClose={() => setAnnouncing(false)} />}

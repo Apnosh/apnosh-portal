@@ -22,11 +22,11 @@ import MarketplaceV2View from './marketplace-v2-view'
 export const dynamic = 'force-dynamic'
 
 interface PageProps {
-  searchParams: Promise<{ clientId?: string }>
+  searchParams: Promise<{ clientId?: string; category?: string }>
 }
 
 export default async function MarketplacePage({ searchParams }: PageProps) {
-  const { clientId: clientIdParam } = await searchParams
+  const { clientId: clientIdParam, category: categoryParam } = await searchParams
   const { user, clientId } = await resolveCurrentClient(clientIdParam ?? null)
   if (!user) redirect('/login')
   if (!clientId) {
@@ -42,5 +42,5 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     getMarketplaceCategoryCounts('WA'),
   ])
 
-  return <MarketplaceV2View vendors={vendors} categoryCounts={categoryCounts} />
+  return <MarketplaceV2View vendors={vendors} categoryCounts={categoryCounts}  initialCategory={categoryParam} />
 }

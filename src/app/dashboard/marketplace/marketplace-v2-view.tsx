@@ -26,6 +26,8 @@ import type { MarketplaceVendor, MarketplaceListing, VendorCategory } from '@/li
 interface Props {
   vendors: MarketplaceVendor[]
   categoryCounts: Record<string, number>
+  /** ?category= from the link that opened the page (the Influencers sheet passes food_influencer) */
+  initialCategory?: string
 }
 
 const CATEGORIES: Array<{ key: VendorCategory; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -61,9 +63,9 @@ function isPackageListing(l: MarketplaceListing): boolean {
   return l.listingType === 'subscription' || l.listingType === 'package'
 }
 
-export default function MarketplaceV2View({ vendors, categoryCounts }: Props) {
+export default function MarketplaceV2View({ vendors, categoryCounts, initialCategory }: Props) {
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState<VendorCategory | 'all'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<VendorCategory | 'all'>(() => (initialCategory && CATEGORIES.some((c) => c.key === initialCategory) ? (initialCategory as VendorCategory) : 'all'))
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [offeringFilter, setOfferingFilter] = useState<OfferingFilter>('all')
 
