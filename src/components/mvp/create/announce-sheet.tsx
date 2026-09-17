@@ -26,7 +26,11 @@ import { Drawing, type Scene } from './drawings'
 import { BrandOrMark } from '../mvp-insights'
 
 export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'open' | 'holiday' | 'else' | 'slow' | 'post' | 'update'
-type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
+/* SOURCE AND PIECES (owner 2026-09-17): where the picture comes from is one choice; what gets
+   made from it is a set. A shoot day holds several plans, each with its own pieces. */
+type Src = 'own' | 'shoot' | 'newshoot' | 'team' | 'words'
+type Piece = 'graphic' | 'reel' | 'photos'
+type Tier = 'standard' | 'full' | 'works'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
 type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'picture' | 'where' | 'words' | 'plan' | 'done'
@@ -162,7 +166,9 @@ const PLAT: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebo
 
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
-interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; nextShoot: { id: string; date: string; who: string | null } | null; prices: { graphic: number | null; video: number | null; shoot: number | null }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
+interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; spots: number; used: number; left: number; attached: { label: string; kind: string; pieces: string[] }[]; needs: Tier | null; upgradeCents: number | null; href: string | null }
+interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
+const TIERS: { id: Tier; label: string; small: string }[] = [{ id: 'standard', label: 'One focus', small: '1 spot · 15 photos' }, { id: 'full', label: 'Full house', small: '3 spots · 25 photos' }, { id: 'works', label: 'The works', small: '5 spots · 40 photos · senior' }]
 interface PlanLine { key: string; label: string; detail: string; date: string | null; cost: number | null; status: 'scheduled' | 'with_team' | 'needs_payment' | 'done' | 'later'; ref: { kind: string; id: string | null; href?: string } | null; why?: string }
 type Goal = 10 | 25 | 50 | 999
 const GOALS: { id: Goal; label: string }[] = [{ id: 10, label: '+10 people' }, { id: 25, label: '+25' }, { id: 50, label: '+50' }, { id: 999, label: 'Full house' }]
@@ -216,7 +222,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [media, setMedia] = useState<{ url: string; preview: string; video: boolean }[]>([])
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
-  const [mode, setMode] = useState<Mode>('words')
+  const [src, setSrc] = useState<Src>('words')
+  const [pieces, setPieces] = useState<Set<Piece>>(new Set())
+  const [tier, setTier] = useState<Tier>('standard')
+  const [shootDate, setShootDate] = useState('')
   const [priceOn, setPriceOn] = useState(true)
   const [brandKit, setBrandKit] = useState(true)
   const [readyBy, setReadyBy] = useState('')
@@ -338,7 +347,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const platforms = useMemo(() => Array.from(new Set((targets ?? []).filter((t) => chosen.has(t.accountId)).map((t) => t.platform))), [targets, chosen])
   const igChosen = platforms.includes('instagram')
   const hasIgFb = (targets ?? []).some((t) => (t.platform === 'instagram' || t.platform === 'facebook') && chosen.has(t.accountId))
-  const madeLater = mode === 'graphic' || mode === 'video' || mode === 'shoot' || mode === 'nextshoot'
+  const onShoot = src === 'shoot' || src === 'newshoot'
+  const madeLater = pieces.size > 0 || onShoot
+  /* the open shoot: the one on file, or a photos order booked at the desk that becomes one */
+  const openShoot = ctx?.shoot ?? (ctx?.nextShoot ? { id: '', requestId: ctx.nextShoot.id, date: ctx.nextShoot.date, tier: 'standard' as Tier, tierLabel: 'One focus', spots: 1, used: 0, left: 1, attached: [], needs: null, upgradeCents: null, href: null } : null)
+  const tierCents = (t: Tier) => ctx?.prices.tiers?.[t] ?? ctx?.prices.shoot ?? null
+  /* the day the pieces come back: three days after the shoot, or the desk's own lead time */
+  const shootLead = src === 'newshoot' ? (shootDate || plusDays(todayIso(), 7)) : openShoot?.date ?? plusDays(todayIso(), 7)
   const channels = useMemo(() => [...(google ? ['google'] : []), ...platforms], [google, platforms])
   /* Order online only when there is a link to order from; otherwise the ask is to come in */
   const ctaEff: Cta = isEvent ? (getin === 'show' ? 'visit' : 'reserve') : cta === 'order' && !ctx?.orderUrl ? 'visit' : cta
@@ -358,13 +373,21 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
   /* the day the picture must be ready: two days before the post for a graphic, longer for a
      video or a shoot, never before the desk can make it */
-  const minReady = (m: Mode) => plusDays(todayIso(), m === 'graphic' ? 2 : m === 'video' ? 4 : 7)
-  const choose = (m: Mode) => {
-    setMode(m)
-    if (m === 'graphic' || m === 'video' || m === 'shoot') setReadyBy(maxIso(minReady(m), timing === 'by' ? plusDays(postBy, -2) : minReady(m)))
+  const minReady = () => onShoot ? plusDays(shootLead, 3) : plusDays(todayIso(), pieces.has('reel') ? 4 : 2)
+  const settle = (nextSrc: Src, nextPieces: Set<Piece>) => {
+    const on = nextSrc === 'shoot' || nextSrc === 'newshoot'
+    if (nextPieces.size || on) { const lead = on ? plusDays(nextSrc === 'newshoot' ? (shootDate || plusDays(todayIso(), 7)) : openShoot?.date ?? plusDays(todayIso(), 7), 3) : plusDays(todayIso(), nextPieces.has('reel') ? 4 : 2); setReadyBy(maxIso(lead, timing === 'by' ? plusDays(postBy, -2) : lead)) }
     else setReadyBy('')
   }
-  useEffect(() => { if (timing === 'by' && (mode === 'graphic' || mode === 'video' || mode === 'shoot') && readyBy > plusDays(postBy, -1)) setReadyBy(maxIso(minReady(mode), plusDays(postBy, -2))) }, [postBy]) // eslint-disable-line react-hooks/exhaustive-deps
+  const choose = (m: Src) => {
+    setSrc(m)
+    /* each source starts with the pieces it usually means; the owner adds or drops from there */
+    const p = new Set<Piece>(m === 'team' ? ['graphic'] : m === 'shoot' || m === 'newshoot' ? ['photos'] : [])
+    setPieces(p); settle(m, p)
+  }
+  const togglePiece = (pc: Piece) => { const p = new Set(pieces); if (p.has(pc)) p.delete(pc); else p.add(pc); if (src === 'team' && !p.size) p.add('graphic'); setPieces(p); settle(src, p) }
+  useEffect(() => { if (timing === 'by' && madeLater && readyBy > plusDays(postBy, -1)) setReadyBy(maxIso(minReady(), plusDays(postBy, -2))) }, [postBy]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (src === 'newshoot') settle(src, pieces) }, [shootDate]) // eslint-disable-line react-hooks/exhaustive-deps
   /* LEAD TIME BY KIND: the announce date is set from what the kind needs, not a flat five days.
      Tickets and RSVPs need two weeks. A walk-in night needs four days. A deal, three before it
      starts. An opening, a week. A holiday, two weeks. A dish, hours or a hire: today. */
@@ -404,7 +427,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         const put = await fetch(j.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
         if (!put.ok) throw new Error('Could not add the photo')
         setMedia((m) => [...m, { url: j.fileUrl, preview: URL.createObjectURL(file), video: file.type.startsWith('video/') }])
-        if (mode === 'words' || mode === 'own') setMode('own')
+        if (src === 'words' || src === 'own') setSrc('own')
       }
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not add the photo') }
     setUploading(false)
@@ -496,10 +519,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const line = (key: string, label: string, detail: string, date: string | null, cost: number | null = null, status: PlanLine['status'] = 'with_team', why?: string) => L.push({ key, label, detail, date, cost, status, ref: null, why })
     const lead = leadDefault()
     const today = todayIso()
-    if (mode === 'graphic') { line('graphic', 'We start the graphic', media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', today, ctx?.prices.graphic ?? null, 'with_team', isEvent ? 'A night needs the date on the picture' : a.price ? 'A price on the picture is what people remember' : undefined); line('approve', 'You approve it', 'One tap in Coming up', readyBy, null, 'later') }
-    if (mode === 'video') { line('video', 'The video', 'Pay to start. Then the team takes it', readyBy, ctx?.prices.video ?? null, 'needs_payment'); line('approve', 'You approve it', 'One tap in Coming up', readyBy, null, 'later') }
-    if (mode === 'shoot') { line('shoot', 'The shoot', 'Pay to book. Then we pick the day', readyBy, ctx?.prices.shoot ?? null, 'needs_payment'); line('approve', 'You pick the shot', 'One tap in Coming up', readyBy, null, 'later') }
-    if (mode === 'nextshoot' && ctx?.nextShoot) { line('nextshoot', 'Added to your shoot', `${ctx.nextShoot.who ? `With ${ctx.nextShoot.who}, ` : ''}we shoot it that day`, ctx.nextShoot.date); line('approve', 'You pick the shot', 'One tap in Coming up', ctx.nextShoot.date, null, 'later') }
+    const pieceDue = readyBy || plusDays(shootLead, 3)
+    if (src === 'newshoot') line('shootday', 'Book the shoot day', `${TIERS.find((t) => t.id === tier)?.label ?? ''}, ${ctx?.prices.spots?.[tier] ?? 1} ${(ctx?.prices.spots?.[tier] ?? 1) === 1 ? 'spot' : 'spots'}. Pay to book it. Put other plans on it too`, shootDate || null, tierCents(tier), 'needs_payment', 'One day feeds every plan you put on it')
+    if (src === 'shoot' && openShoot) { line('shootday', `On the ${openShoot.date ? niceDate(openShoot.date) : 'booked'} shoot`, `${openShoot.used + 1} of ${openShoot.spots} ${openShoot.spots === 1 ? 'spot' : 'spots'} used. Already booked`, openShoot.date, null, 'with_team', 'No new day to pay for'); if (openShoot.used + 1 > openShoot.spots) { const nt: Tier | null = openShoot.used + 1 <= 3 ? 'full' : openShoot.used + 1 <= 5 ? 'works' : null; const up = nt && tierCents(nt) != null && tierCents(openShoot.tier) != null ? (tierCents(nt) as number) - (tierCents(openShoot.tier) as number) : null; line('upgrade', `The day needs ${nt ? TIERS.find((t) => t.id === nt)?.label : 'a bigger crew'} now`, `${openShoot.used + 1} on it is more than ${openShoot.tierLabel} holds. The team confirms before the day`, openShoot.date, up, 'with_team', 'Nothing is charged until you agree the bigger day') } }
+    if (pieces.has('graphic')) line('graphic', onShoot ? 'The graphic, from the shoot' : 'We start the graphic', onShoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', onShoot ? pieceDue : today, ctx?.prices.graphic ?? null, 'with_team', isEvent ? 'A night needs the date on the picture' : a.price ? 'A price on the picture is what people remember' : undefined)
+    if (pieces.has('reel')) line('video', onShoot ? 'The Reel, from the shoot' : 'The video', onShoot ? 'Cut from the clips we film that day' : 'Pay to start. Then the team takes it', pieceDue, ctx?.prices.video ?? null, onShoot ? 'with_team' : 'needs_payment', 'Reels reach further than photos')
+    if (pieces.has('photos') && onShoot) line('photos', 'Photos in your library', `${a.what || 'It'}, edited, tagged with the day`, pieceDue, null, 'later')
+    if (madeLater) line('approve', pieces.size > 1 ? 'You approve each piece' : onShoot && !Array.from(pieces).some((p) => p !== 'photos') ? 'You pick the shot' : 'You approve it', 'One tap in Coming up', pieceDue, null, 'later')
     const hour = postAt ? postAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'now'
     if (platforms.length) {
       const igNeeds = igChosen && media.length === 0 && !madeLater
@@ -534,7 +560,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (weekly && (isDeal || isEvent) && (rawDates().from || rawDates().when)) line('checkin', 'The check-in', `${DAYS[isDeal ? dealDay() : new Date(rawDates().when + 'T12:00:00').getDay()]} sales against the four before${isDeal && a.code?.trim() ? `, and how many said ${a.code.trim()}` : ''}`, plusDays(rawDates().from || rawDates().when, 28), null, 'later', 'Keep it, change it, or stop it, with the numbers')
     else line('results', 'How it did', isEvent ? 'Views, RSVPs and mentions, in Insights' : 'Views, saves and mentions, in Insights', plusDays((isEvent && rawDates().when) || postDay, 7), null, 'later')
     return L
-  }, [kind, mode, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched, night, part, slowWords, tables, fromSlow]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, src, pieces, tier, shootDate, openShoot, shootLead, onShoot, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched, night, part, slowWords, tables, fromSlow]) // eslint-disable-line react-hooks/exhaustive-deps
   const previewTotal = preview.reduce((s, l) => s + (l.cost ?? 0), 0)
 
   const commit = async () => {
@@ -544,7 +570,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     try {
       const r = await fetch('/api/dashboard/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         clientId, kind: kind.id, answers: factsOut(),
-        picture: { mode, mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, nextShootId: ctx?.nextShoot?.id },
+        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, tier, shootDate: shootDate || undefined },
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
@@ -590,7 +616,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
       {l.cost != null && l.cost > 0 && <b style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{dollars(l.cost)}</b>}
     </div>
   )
-  const madeKind = mode === 'graphic' || mode === 'video' || mode === 'shoot'
+  const madeKind = madeLater
   const mediaStrip = media.length > 0 && (
     <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 12 }}>
       {media.map((m, i) => <div key={i} style={{ position: 'relative', flex: 'none', width: 84, height: 84, borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((_, j) => j !== i))} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button></div>)}
@@ -763,36 +789,67 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
         {step === 'picture' && kind && (
           <div style={hv(hue)}>
-            <div style={h2}>How should it look?</div>
+            <div style={h2}>Where does the picture come from?</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {([
-                { m: 'own' as Mode, label: 'Use my photo', small: media.length ? `${media.length} added` : 'Tap to add one', scene: 'photos' as Scene, hue: '#2e9a78', off: false },
-                { m: 'graphic' as Mode, label: 'Make a graphic', small: `${dollars(ctx?.prices.graphic ?? null) || 'Priced'} · 2 days`, scene: 'graphic' as Scene, hue: '#d99a1e', off: false },
-                { m: 'video' as Mode, label: 'Make a video', small: `${dollars(ctx?.prices.video ?? null) || 'Priced'} · 4 days`, scene: 'reel' as Scene, hue: '#0f97a8', off: false },
-                { m: 'shoot' as Mode, label: 'Book a shoot', small: `from ${dollars(ctx?.prices.shoot ?? null) || '$350'} · pick a day`, scene: 'creator' as Scene, hue: '#6a39de', off: false },
-                ...(ctx?.nextShoot ? [{ m: 'nextshoot' as Mode, label: 'Add to my next shoot', small: `${niceDate(ctx.nextShoot.date)}${ctx.nextShoot.who ? ` with ${ctx.nextShoot.who}` : ''}`, scene: 'calendar' as Scene, hue: '#3b6fd4', off: false }] : []),
-                { m: 'words' as Mode, label: 'Words only', small: 'Google and Facebook', scene: 'google' as Scene, hue: '#8a928e', off: false },
+                { m: 'own' as Src, label: 'My photos', small: media.length ? `${media.length} added` : 'Tap to add one', scene: 'photos' as Scene, hue: '#2e9a78' },
+                ...(openShoot ? [{ m: 'shoot' as Src, label: `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, small: openShoot.left > 0 ? `${openShoot.left} ${openShoot.left === 1 ? 'spot' : 'spots'} left` : 'Full. Adding needs a bigger day', scene: 'calendar' as Scene, hue: '#3b6fd4' }] : []),
+                { m: 'newshoot' as Src, label: openShoot ? 'Another shoot day' : 'Book a shoot day', small: `from ${dollars(tierCents('standard')) || '$350'} · holds up to 5 plans`, scene: 'creator' as Scene, hue: '#6a39de' },
+                { m: 'team' as Src, label: 'Our photos', small: 'The team designs from stock', scene: 'graphic' as Scene, hue: '#d99a1e' },
+                { m: 'words' as Src, label: 'Words only', small: 'Google and Facebook', scene: 'google' as Scene, hue: '#8a928e' },
               ]).map((o) => (
-                <button key={o.m} type="button" disabled={o.off} onClick={() => { if (o.m === 'own' && media.length === 0) { fileRef.current?.click(); return } choose(o.m) }} style={{ ...hv(o.hue), border: `1.5px solid ${mode === o.m ? C.ink : C.line}`, boxShadow: mode === o.m ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 10px 10px', textAlign: 'center', background: '#fff', cursor: o.off ? 'default' : 'pointer', font: 'inherit', color: C.ink, opacity: o.off ? .45 : 1 }}>
+                <button key={o.m} type="button" onClick={() => { if (o.m === 'own' && media.length === 0) { fileRef.current?.click(); return } choose(o.m) }} style={{ ...hv(o.hue), border: `1.5px solid ${src === o.m ? C.ink : C.line}`, boxShadow: src === o.m ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 10px 10px', textAlign: 'center', background: '#fff', cursor: 'pointer', font: 'inherit', color: C.ink }}>
                   <span style={{ display: 'block', width: 54, margin: '0 auto 6px' }}><Drawing spec={{ scene: o.scene }} name="" rating="" t={(s) => s} /></span>
                   <b style={{ display: 'block', fontSize: 13.5, lineHeight: 1.2 }}>{o.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 11.5, marginTop: 3 }}>{o.small}</small>
                 </button>
               ))}
             </div>
-            {(mode === 'own' || media.length > 0) && mediaStrip}
-            {madeKind && (
+            {(src === 'own' || media.length > 0) && mediaStrip}
+
+            {src === 'newshoot' && (
               <>
-                <div style={h3}>For the {mode === 'graphic' ? 'graphic' : mode === 'video' ? 'video' : 'shoot'}</div>
-                <div style={rowS}><span>Send what you have<small style={sub}>{media.length ? `${media.length} added. Phone photos are fine` : 'Phone photos are fine'}</small></span><button type="button" onClick={() => fileRef.current?.click()} style={chip(false)}>{uploading ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} Add</button></div>
-                {mode === 'graphic' && a.price && <div style={rowS}><span>Put the price on it</span><Switch on={priceOn} set={setPriceOn} /></div>}
-                {mode === 'graphic' && <div style={rowS}><span>Match my brand kit</span><Switch on={brandKit} set={setBrandKit} /></div>}
-                <div style={rowS}><span>Ready by</span><input type="date" min={minReady(mode)} value={readyBy} onChange={(e) => setReadyBy(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>
-                {mode !== 'graphic' && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>{mode === 'video' ? 'The video' : 'The shoot'} is paid before it starts. The plan shows the price and a Pay link.</div>}
+                <div style={h3}>The day</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  {TIERS.map((t) => <button key={t.id} type="button" onClick={() => setTier(t.id)} style={{ border: `1.5px solid ${tier === t.id ? C.ink : C.line}`, boxShadow: tier === t.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 14, padding: '10px 8px', background: '#fff', cursor: 'pointer', font: 'inherit', color: C.ink, textAlign: 'left' }}><b style={{ display: 'block', fontSize: 13 }}>{t.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 11, marginTop: 2 }}>{t.small}</small><b style={{ display: 'block', fontSize: 12.5, marginTop: 4 }}>{dollars(tierCents(t.id)) || ''}</b></button>)}
+                </div>
+                <div style={rowS}><span>Shoot day<small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>
+                <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>Other plans can ride on this day. Each one takes a spot.</div>
               </>
             )}
-            {mode === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 10 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
-            {mode === 'own' && media[0]?.video && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 10 }}>A vertical video becomes a Reel on Instagram and Facebook.</div>}
-            {mode === 'own' && !media.some((m) => m.video) && <div style={{ fontSize: 12, color: C.mute, marginTop: 10 }}>Got ten seconds of video? It becomes a Reel, and Reels reach further than photos.</div>}
+            {src === 'shoot' && openShoot && (
+              <div style={{ marginTop: 12, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 12.5 }}>
+                <b style={{ display: 'block', fontSize: 13 }}>{openShoot.tierLabel} · {openShoot.spots} {openShoot.spots === 1 ? 'spot' : 'spots'}</b>
+                {openShoot.attached.length ? <div style={{ color: C.mute, marginTop: 3 }}>On it: {openShoot.attached.map((x) => x.label).join(', ')}</div> : <div style={{ color: C.mute, marginTop: 3 }}>Nothing on it yet. This is the first</div>}
+                {openShoot.left <= 0 && <div style={{ color: '#8a5a0c', fontWeight: 600, marginTop: 4 }}>Adding this makes it a bigger day. The team confirms the price before shooting.</div>}
+              </div>
+            )}
+
+            {src !== 'words' && (
+              <>
+                <div style={h3}>What gets made</div>
+                {([
+                  { id: 'graphic' as Piece, label: 'A graphic', small: `${dollars(ctx?.prices.graphic ?? null) || 'Priced'} · post, Story, Google`, on: true },
+                  { id: 'reel' as Piece, label: 'A Reel', small: `${dollars(ctx?.prices.video ?? null) || 'Priced'} · ${onShoot ? 'clips from the day' : media.some((m) => m.video) ? 'from your clips' : 'we come film'}`, on: true },
+                  { id: 'photos' as Piece, label: 'Edited photos', small: 'In the shoot · your library', on: onShoot },
+                ]).filter((p) => p.on).map((p) => (
+                  <button key={p.id} type="button" onClick={() => togglePiece(p.id)} style={{ ...rowS, width: '100%', background: 'none', border: 0, borderBottom: `0.5px solid ${C.line}`, font: 'inherit', color: C.ink, cursor: 'pointer', textAlign: 'left' }}><span>{p.label}<small style={sub}>{p.small}</small></span><Tick on={pieces.has(p.id)} /></button>
+                ))}
+                {src === 'own' && !pieces.size && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Nothing picked: your photo goes up as it is.</div>}
+              </>
+            )}
+            {madeKind && (
+              <>
+                <div style={h3}>For the team</div>
+                {!onShoot && <div style={rowS}><span>Send what you have<small style={sub}>{media.length ? `${media.length} added. Phone photos are fine` : 'Phone photos are fine'}</small></span><button type="button" onClick={() => fileRef.current?.click()} style={chip(false)}>{uploading ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} Add</button></div>}
+                {pieces.has('graphic') && a.price && <div style={rowS}><span>Put the price on it</span><Switch on={priceOn} set={setPriceOn} /></div>}
+                {pieces.has('graphic') && <div style={rowS}><span>Match my brand kit</span><Switch on={brandKit} set={setBrandKit} /></div>}
+                <div style={rowS}><span>Ready by</span><input type="date" min={minReady()} value={readyBy} onChange={(e) => setReadyBy(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>
+                {(src === 'newshoot' || (pieces.has('reel') && !onShoot)) && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>{src === 'newshoot' ? 'The day' : 'The video'} is paid before it starts. The plan shows the price and a Pay link.</div>}
+              </>
+            )}
+            {src === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 10 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
+            {src === 'own' && media[0]?.video && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 10 }}>A vertical video becomes a Reel on Instagram and Facebook.</div>}
+            {src === 'own' && !pieces.size && !media.some((m) => m.video) && <div style={{ fontSize: 12, color: C.mute, marginTop: 10 }}>Got ten seconds of video? It becomes a Reel, and Reels reach further than photos.</div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             <button type="button" onClick={next} disabled={madeKind && !readyBy} style={{ ...cta_, opacity: madeKind && !readyBy ? .5 : 1 }}>Next</button>
           </div>
@@ -850,7 +907,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={h2}>The words</div>
             {platforms.length > 0 && (
               <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
-                {media[0] && !media[0].video ? <div style={{ height: 170, background: `center/cover url(${media[0].preview})` }} /> : <div style={{ height: 110, background: hexa(hue, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 80 }}><Drawing spec={{ scene: madeLater ? (mode === 'video' ? 'reel' : mode === 'graphic' ? 'graphic' : 'photos') : kind.scene }} name="" rating="" t={(s) => s} /></span></div>}
+                {media[0] && !media[0].video ? <div style={{ height: 170, background: `center/cover url(${media[0].preview})` }} /> : <div style={{ height: 110, background: hexa(hue, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 80 }}><Drawing spec={{ scene: madeLater ? (pieces.has('reel') ? 'reel' : pieces.has('graphic') ? 'graphic' : 'photos') : kind.scene }} name="" rating="" t={(s) => s} /></span></div>}
                 <div style={{ padding: '10px 12px 0', fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.mute }}>{platforms.map((p) => PLAT[p] ?? p).join(' and ')}</div>
                 <textarea value={social} onChange={(e) => setSocial(e.target.value)} rows={5} style={{ display: 'block', width: '100%', border: 0, outline: 0, resize: 'none', padding: '6px 12px 10px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box' }} />
               </div>

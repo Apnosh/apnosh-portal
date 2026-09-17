@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents } from '@/lib/requests/create'
+import { openShoot, bookShoot, attachToShoot, adoptShoot, asTier, tierCents, TIER_LABEL, SPOTS, type Shoot } from '@/lib/shoot/day'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
 import { createPost, listPostTargets } from '@/lib/channels/adapters/zernio'
@@ -38,6 +39,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
+/* SOURCE AND PIECES (owner 2026-09-17): where the picture comes from is one choice, what gets
+   made from it is a set. A shoot day holds several plans; each plan lists its pieces. */
+type Src = 'own' | 'shoot' | 'newshoot' | 'team' | 'words'
+type Piece = 'graphic' | 'reel' | 'photos'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
 /** what the print line makes, per kind */
@@ -61,7 +66,7 @@ interface Body {
   clientId?: string
   kind?: string
   answers?: Record<string, unknown>
-  picture?: { mode?: Mode; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string }
+  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; tier?: string; shootDate?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
   timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
@@ -89,7 +94,7 @@ const whenWord = (due: string | null): string => {
 async function context(admin: ReturnType<typeof createAdminClient>, clientId: string) {
   const today = new Date().toISOString().slice(0, 10)
   const since = new Date(Date.now() - 56 * 86400000).toISOString().slice(0, 10)
-  const [client, site, guests, shoot, card, pos] = await Promise.all([
+  const [client, site, guests, shoot, card, pos, open] = await Promise.all([
     admin.from('clients').select('name, tier, website').eq('id', clientId).maybeSingle(),
     admin.from('site_settings').select('order_online_url, reservation_url').eq('client_id', clientId).maybeSingle(),
     admin.from('guest_contacts').select('id', { count: 'exact', head: true }).eq('client_id', clientId).is('unsubscribed_at', null),
@@ -97,6 +102,7 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
       .in('status', ['requested', 'quoted', 'accepted', 'in_progress', 'awaiting_payment']).gte('due_date', today).order('due_date', { ascending: true }).limit(1).maybeSingle(),
     getActiveRateCard().catch(() => null),
     admin.from('pos_daily_sales').select('day, gross_cents, orders, source').eq('client_id', clientId).gte('day', since).order('day', { ascending: true }).limit(400),
+    openShoot(admin, clientId).catch(() => null),
   ])
   /* the register, by weekday: what each day does on average over the last eight weeks, so the
      slow night is a fact on the screen and not a question. Statement imports (an app's monthly
@@ -122,8 +128,9 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     orderUrl: isHttps(s.order_online_url) ? s.order_online_url : null,
     reserveUrl: isHttps(s.reservation_url) ? s.reservation_url : null,
     guests: guests.count ?? 0,
-    nextShoot: sh ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
-    prices: { graphic, video, shoot: shootPrice },
+    nextShoot: sh && sh.id !== open?.requestId ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
+    shoot: open,
+    prices: { graphic, video, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },
     weekdays,
     avgTicketCents,
   }
@@ -177,6 +184,12 @@ export async function POST(req: NextRequest) {
   for (const [k, v] of Object.entries(body.answers ?? {})) if (typeof v === 'string' && v.trim()) a[k] = clean(v, 300)
   const name = a.what || 'the news'
   const mode: Mode = (['own', 'graphic', 'video', 'shoot', 'nextshoot', 'words'] as Mode[]).includes(body.picture?.mode as Mode) ? (body.picture!.mode as Mode) : 'words'
+  /* new sheets send src + pieces; an old one sends mode, which maps onto them */
+  const legacy: { src: Src; pieces: Piece[] } = mode === 'own' ? { src: 'own', pieces: [] } : mode === 'graphic' ? { src: 'team', pieces: ['graphic'] } : mode === 'video' ? { src: 'team', pieces: ['reel'] } : mode === 'shoot' ? { src: 'newshoot', pieces: ['photos'] } : mode === 'nextshoot' ? { src: 'shoot', pieces: ['photos'] } : { src: 'words', pieces: [] }
+  const src: Src = (['own', 'shoot', 'newshoot', 'team', 'words'] as Src[]).includes(body.picture?.src as Src) ? (body.picture!.src as Src) : legacy.src
+  const pieces: Piece[] = body.picture?.src ? Array.from(new Set((Array.isArray(body.picture?.pieces) ? body.picture!.pieces : []).filter((x): x is Piece => ['graphic', 'reel', 'photos'].includes(String(x))))) : legacy.pieces
+  const onShoot = src === 'shoot' || src === 'newshoot'
+  const shootDate = typeof body.picture?.shootDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.picture.shootDate) ? body.picture.shootDate : null
   const media = (Array.isArray(body.picture?.mediaUrls) ? body.picture!.mediaUrls : []).filter(isHttps).slice(0, 10) as string[]
   const priceOn = body.picture?.priceOn !== false
   const readyBy = typeof body.picture?.readyBy === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.picture.readyBy) ? body.picture.readyBy : null
@@ -205,7 +218,7 @@ export async function POST(req: NextRequest) {
     .filter((x) => x && typeof x.at === 'string' && !Number.isNaN(Date.parse(String(x.at))) && Date.parse(String(x.at)) > Date.now())
     .slice(0, 12)
     .map((x) => ({ key: clean(x.key, 20) || 'extra', label: clean(x.label, 60) || 'Another post', detail: clean(x.detail, 120), at: new Date(String(x.at)).toISOString(), text: clean(x.text, 2200), story: x.story === true }))
-  const madeLater = mode === 'graphic' || mode === 'video' || mode === 'shoot' || mode === 'nextshoot'
+  const madeLater = pieces.length > 0 || onShoot
   const postDay = day(atIso ?? new Date().toISOString())
   const plan: PlanLine[] = []
   const errors: string[] = []
@@ -214,7 +227,7 @@ export async function POST(req: NextRequest) {
   /* ── the announcement row first, so every line can point back at it ── */
   const { data: row } = await admin.from('announcements').insert({
     client_id: clientId, kind, status: 'planned', answers: a,
-    picture: { mode, mediaUrls: media, priceOn, readyBy },
+    picture: { mode, src, pieces, mediaUrls: media, priceOn, readyBy },
     places: { accountIds, google: wantsGoogle, story: wantsStory, also },
     timing: { at: atIso, timezone: tz, again, boost, boostCents },
     words: { social, google: gtext, cta },
@@ -222,11 +235,39 @@ export async function POST(req: NextRequest) {
   }).select('id').single()
   const announcementId = (row?.id as string | undefined) ?? null
 
-  /* ── the picture ── */
+  /* ── the picture: the source first, then every piece made from it ── */
   let requestId: string | null = null
   const attachments = media.map((url, i) => ({ url, name: `photo-${i + 1}` }))
   const facts = [a.line, a.doing, a.kindOfNight ? `Kind: ${a.kindOfNight}` : '', a.night ? `The slow night: ${a.night}` : '', a.goal ? `Goal: ${a.goal}` : '', a.plays ? `Plays: ${a.plays}` : '', a.off ? `${a.off}` : '', a.getin ? `Getting in: ${a.getin}` : '', a.who ? `With ${a.who}` : '', a.weekly ? 'Every week' : '', a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
-  if (mode === 'graphic') {
+
+  /* the shoot day: book a new one, or put this plan on the open one */
+  let shoot: Shoot | null = null
+  if (src === 'newshoot') {
+    const r = await bookShoot(admin, { clientId, userId, tier: asTier(body.picture?.tier), date: shootDate, note: `${name}: ${facts}` })
+    if (r.ok) {
+      shoot = r.shoot; total += r.orderCents ?? 0
+      plan.push({ key: 'shootday', label: r.needsPayment ? 'Book the shoot day' : 'The shoot day', detail: `${shoot.tierLabel}, ${shoot.spots} ${shoot.spots === 1 ? 'spot' : 'spots'}. ${r.needsPayment ? 'Pay to book it. ' : ''}Put other plans on it too`, date: shoot.date ?? readyBy, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'One day feeds every plan you put on it' })
+    } else errors.push(`The shoot did not book: ${r.error}`)
+  } else if (src === 'shoot') {
+    const id = typeof body.picture?.shootId === 'string' ? body.picture.shootId : null
+    if (id && ctx.shoot?.id === id) shoot = ctx.shoot
+    else if (ctx.nextShoot && body.picture?.nextShootId === ctx.nextShoot.id) shoot = await adoptShoot(admin, clientId, userId, ctx.nextShoot.id)
+    if (!shoot) errors.push('That shoot day is not open any more')
+  }
+  if (shoot) {
+    const after = await attachToShoot(admin, clientId, shoot.id, { label: name, kind, planId: announcementId, pieces })
+    if (after) {
+      shoot = after
+      if (src === 'shoot') plan.push({ key: 'shootday', label: `On the ${shoot.date ? niceDay(shoot.date) : ''} shoot`.replace('  ', ' '), detail: `${shoot.used} of ${shoot.spots} ${shoot.spots === 1 ? 'spot' : 'spots'} used. Already booked`, date: shoot.date, cost: null, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'No new day to pay for' })
+      if (shoot.needs) plan.push({ key: 'upgrade', label: `The day needs ${TIER_LABEL[shoot.needs]} now`, detail: `${shoot.used} on it is more than ${shoot.tierLabel} holds. The team confirms before the day`, date: shoot.date, cost: shoot.upgradeCents, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Nothing is charged until you agree the bigger day' })
+    }
+    requestId = shoot.requestId
+  }
+  const shootWord = shoot ? `the ${shoot.date ? niceDay(shoot.date) : 'booked'} shoot day (request ${shoot.requestId ?? ''})` : ''
+  const pieceDue = readyBy ?? (shoot?.date ? day(addDays(new Date(shoot.date + 'T12:00:00'), 3).toISOString()) : null)
+
+  /* the pieces, one request each, every one pointing at the same announcement (and shoot) */
+  if (pieces.includes('graphic')) {
     const dests: string[] = []
     const destLabels: string[] = []
     if (accountIds.length) { dests.push('instagram-post', 'facebook-post'); destLabels.push('Instagram post', 'Facebook post') }
@@ -234,43 +275,32 @@ export async function POST(req: NextRequest) {
     if (wantsGoogle) { dests.push('google-listing'); destLabels.push('Google listing') }
     if (also.includes('print')) { dests.push('table-tent'); destLabels.push('Table tent') }
     if (!dests.length) { dests.push('instagram-post'); destLabels.push('Instagram post') }
+    const photos = onShoot ? 'shoot' : media.length ? 'own' : 'none'
     const r = await createCreativeRequest({
-      clientId, userId, type: 'graphic', order: true, due_date: readyBy,
-      answers: { what: `${name} announcement`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(readyBy), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} Announcement ${announcementId ?? ''}`.trim() },
+      clientId, userId, type: 'graphic', order: true, due_date: pieceDue,
+      answers: { what: `${name} announcement`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
       attachments,
-      design: { destinations: dests, tier: 2, photos: media.length ? 'own' : 'none', dueDateISO: readyBy ?? undefined },
+      design: { destinations: dests, tier: 2, photos, dueDateISO: pieceDue ?? undefined },
     })
     if (r.ok) {
-      requestId = r.row.id; total += r.orderCents ?? 0
-      plan.push({ key: 'graphic', label: 'We start the graphic', detail: media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', date: day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
-      plan.push({ key: 'approve', label: 'You approve it', detail: 'One tap in Coming up', date: readyBy, cost: null, status: 'later', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+      requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
+      plan.push({ key: 'graphic', label: shoot ? 'The graphic, from the shoot' : 'We start the graphic', detail: shoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', date: shoot ? pieceDue : day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     } else errors.push(`The graphic did not start: ${r.error}`)
-  } else if (mode === 'video' || mode === 'shoot') {
-    const isVideo = mode === 'video'
+  }
+  if (pieces.includes('reel')) {
     const r = await createCreativeRequest({
-      clientId, userId, type: isVideo ? 'video' : 'photos', order: true, due_date: readyBy, attachments,
-      answers: isVideo
-        ? { what: `${name}: ${a.line || 'the dish, plated'}`, filming: media.length ? 'Use clips and photos I have' : 'Come film at my place', count: 'Just 1', featuring: name, when: whenWord(readyBy), notes: `Announce: ${name}. ${facts}` }
-        : { what: 'Food and dishes', use: 'Social media, Google and Yelp, Menus', dishes: name, featuring: name, when: whenWord(readyBy), notes: `Announce: ${name}. ${facts}` },
+      clientId, userId, type: 'video', order: true, due_date: pieceDue, attachments,
+      answers: { what: `${name}: ${a.line || 'the dish, plated'}`, filming: onShoot ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place', count: 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
-      requestId = r.row.id; total += r.orderCents ?? 0
-      plan.push({ key: mode, label: isVideo ? 'The video' : 'The shoot', detail: r.needsPayment ? 'Pay to start. Then the team takes it' : 'The team takes it', date: readyBy, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
-      plan.push({ key: 'approve', label: 'You approve it', detail: 'One tap in Coming up', date: readyBy, cost: null, status: 'later', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
-    } else errors.push(`${isVideo ? 'The video' : 'The shoot'} did not start: ${r.error}`)
-  } else if (mode === 'nextshoot' && ctx.nextShoot && body.picture?.nextShootId === ctx.nextShoot.id) {
-    const { data: sh } = await admin.from('creative_requests').select('id, brief, team_note').eq('id', ctx.nextShoot.id).eq('client_id', clientId).maybeSingle()
-    if (sh) {
-      const brief = { ...((sh.brief as Record<string, unknown>) ?? {}) }
-      brief.dishes = [clean(brief.dishes, 400), `${name} (for the announcement)`].filter(Boolean).join('; ')
-      const note = [clean(sh.team_note, 800), `Add ${name} to this shoot. ${facts}`].filter(Boolean).join('\n')
-      await admin.from('creative_requests').update({ brief, team_note: note }).eq('id', sh.id)
-      notifyStaffForClient(clientId, ['strategist', 'designer'], { kind: 'client_request', title: `Add to the shoot: ${name}`, body: facts || name, link: `/admin/requests` }).catch(() => {})
-      requestId = sh.id
-      plan.push({ key: 'nextshoot', label: 'Added to your shoot', detail: `${ctx.nextShoot.who ? `With ${ctx.nextShoot.who}, ` : ''}we shoot it that day`, date: ctx.nextShoot.date, cost: null, status: 'with_team', ref: { kind: 'request', id: sh.id, href: `/dashboard/requests/${sh.id}` } })
-      plan.push({ key: 'approve', label: 'You pick the shot', detail: 'One tap in Coming up', date: ctx.nextShoot.date, cost: null, status: 'later', ref: { kind: 'request', id: sh.id, href: `/dashboard/requests/${sh.id}` } })
-    }
+      requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
+      plan.push({ key: 'video', label: shoot ? 'The Reel, from the shoot' : 'The video', detail: shoot ? 'Cut from the clips we film that day' : r.needsPayment ? 'Pay to start. Then the team takes it' : 'The team takes it', date: shoot ? pieceDue : pieceDue, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    } else errors.push(`The video did not start: ${r.error}`)
   }
+  if (pieces.includes('photos') && shoot) {
+    plan.push({ key: 'photos', label: 'Photos in your library', detail: `${name}, edited, tagged with the day`, date: pieceDue, cost: null, status: 'later', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined } })
+  }
+  if (madeLater) plan.push({ key: 'approve', label: pieces.length > 1 ? 'You approve each piece' : shoot && !pieces.some((p) => p !== 'photos') ? 'You pick the shot' : 'You approve it', detail: 'One tap in Coming up', date: pieceDue, cost: null, status: 'later', ref: requestId ? { kind: 'request', id: requestId, href: `/dashboard/requests/${requestId}` } : null })
 
   /* ── the posts ── */
   const targets = accountIds.length ? (await listPostTargets(clientId).catch(() => [])).filter((t) => accountIds.includes(t.accountId)) : []
