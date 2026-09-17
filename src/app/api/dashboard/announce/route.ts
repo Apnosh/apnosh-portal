@@ -52,6 +52,8 @@ export interface PlanLine {
   cost: number | null
   status: 'scheduled' | 'with_team' | 'needs_payment' | 'done' | 'later'
   ref: { kind: 'post' | 'draft' | 'request' | 'gbp' | 'page'; id: string | null; href?: string } | null
+  /** one short reason, the sheet's, carried through so the done screen reads like the plan did */
+  why?: string
 }
 
 interface Body {
@@ -60,7 +62,9 @@ interface Body {
   answers?: Record<string, unknown>
   picture?: { mode?: Mode; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
-  timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; reminders?: unknown }
+  timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
+  /** the reasons the sheet showed, by plan key, carried onto the lines it made */
+  whys?: Record<string, unknown>
   words?: { social?: string; google?: string; cta?: Cta; languages?: unknown; card?: string }
   /** the date answers as ISO days, beside the spelled-out ones in `answers` */
   dates?: Record<string, unknown>
@@ -169,6 +173,9 @@ export async function POST(req: NextRequest) {
   const postNow = !atIso || Date.parse(atIso) <= Date.now() + 60_000
   const again = body.timing?.again === true
   const boost = body.timing?.boost === true
+  const boostCents = Number.isFinite(Number(body.timing?.boostCents)) ? Math.max(0, Math.min(50000, Math.round(Number(body.timing?.boostCents)))) : 2000
+  const whys: Record<string, string> = {}
+  for (const [k, v] of Object.entries(body.whys ?? {})) if (typeof v === 'string' && v.trim()) whys[k] = clean(v, 140)
   const social = clean(body.words?.social, 2200)
   const gtext = clean(body.words?.google, 1500).replace(/https?:\/\/\S+/g, '').trim()
   const cta: Cta = (['order', 'visit', 'reserve', 'message'] as Cta[]).includes(body.words?.cta as Cta) ? (body.words!.cta as Cta) : 'visit'
@@ -193,7 +200,7 @@ export async function POST(req: NextRequest) {
     client_id: clientId, kind, status: 'planned', answers: a,
     picture: { mode, mediaUrls: media, priceOn, readyBy },
     places: { accountIds, google: wantsGoogle, story: wantsStory, also },
-    timing: { at: atIso, timezone: tz, again, boost },
+    timing: { at: atIso, timezone: tz, again, boost, boostCents },
     words: { social, google: gtext, cta },
     created_by: userId,
   }).select('id').single()
@@ -254,6 +261,18 @@ export async function POST(req: NextRequest) {
   const platforms = Array.from(new Set(targets.map((t) => t.platform)))
   const nice = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p.charAt(0).toUpperCase() + p.slice(1))
   const postWhen = postNow ? { kind: 'now' as const } : { kind: 'at' as const, iso: atIso!, timezone: tz }
+  /* the rails the composer has and the sheet never used (owner 2026-09-17): the people named
+     become collaborators and tags, the location rides the client's own page, the details go in
+     the first comment, and Facebook gets the longer paragraph while Instagram keeps the line */
+  const handles = Array.from(new Set(((a.who ?? '') + ' ' + (a.line ?? '')).match(/@[A-Za-z0-9._]{1,30}/g) ?? [])).map((h) => h.slice(1))
+  const details = [a.getin, a.tickets ? `Tickets ${a.tickets}` : '', a.time ? `${a.when ?? ''} ${a.time}`.trim() : '', a.where, a.code ? `Code ${a.code}` : '', a.tags ? a.tags : '', a.rsvp ?? a.link ?? ''].filter(Boolean).join(' · ')
+  const socialRails = {
+    collaborators: handles.slice(0, 3),
+    tagged: handles.slice(0, 20),
+    locationId: targets.find((t) => t.pageId)?.pageId ?? null,
+    firstComment: details && !social.includes(details) ? details : undefined,
+    perPlatform: details ? { facebook: `${social}\n\n${details}` } : undefined,
+  }
   const hourLabel = atIso ? new Date(atIso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz }) : 'now'
   const draft = async (caption: string, plats: string[], date: string | null, extra: Record<string, unknown> = {}) => {
     const { data } = await admin.from('content_drafts').insert({
@@ -267,8 +286,8 @@ export async function POST(req: NextRequest) {
     const igNeedsPhoto = platforms.includes('instagram') && media.length === 0
     if (!madeLater && !igNeedsPhoto) {
       try {
-        const r = await createPost(clientId, { content: social, targets, mediaUrls: media, when: postWhen, metadata: { source: 'announce', announcementId } })
-        plan.push({ key: 'post', label: platforms.map(nice).join(', '), detail: postNow ? 'Posted now' : `${hourLabel}, your best hour`, date: postDay, cost: null, status: postNow ? 'done' : 'scheduled', ref: { kind: 'post', id: r.id } })
+        const r = await createPost(clientId, { content: social, targets, mediaUrls: media, when: postWhen, ...socialRails, metadata: { source: 'announce', announcementId } })
+        plan.push({ key: 'post', label: platforms.map(nice).join(', '), detail: `${postNow ? 'Posted now' : `${hourLabel}, your best hour`}${handles.length ? `. With ${handles.map((h) => '@' + h).join(' ')}` : ''}`, date: postDay, cost: null, status: postNow ? 'done' : 'scheduled', ref: { kind: 'post', id: r.id }, why: whys.post })
         admin.from('content_drafts').insert({ client_id: clientId, status: 'published', idea: `Announce: ${name}`.slice(0, 300), caption: social, target_platforms: platforms, media_urls: media, proposed_by: userId, proposed_via: 'owner_composer', published_post_id: r.id, ...(postNow ? { published_at: new Date().toISOString() } : { scheduled_for: atIso }) }).then(({ error }) => { if (error) console.error('[announce] post log', error.message) })
       } catch (e) { errors.push(`The post did not go: ${e instanceof Error ? e.message : 'the social rail refused it'}`) }
       if (wantsStory && media.length) {
@@ -404,8 +423,10 @@ export async function POST(req: NextRequest) {
     const r = await notifyClientOwners(clientId, { kind: 'client_request', title: `Team card: ${name}`, body: card.slice(0, 1000), link: '/dashboard/notifications' }).catch(() => ({ notified: 0 }))
     plan.push({ key: 'team', label: 'Team card', detail: r.notified > 1 ? `Sent to ${r.notified} people on the portal. Copy it for the rest` : 'Copy it for the team', date: day(new Date().toISOString()), cost: null, status: 'done', ref: null })
   }
-  if (boost) plan.push({ key: 'boost', label: 'Boost it', detail: 'Open Boost once it has posted', date: postDay, cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/boost' } })
-  plan.push({ key: 'results', label: 'How it did', detail: 'Views, saves and mentions, in Insights', date: day(addDays(new Date(atIso ?? Date.now()), 7).toISOString()), cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/insights/posts' } })
+  if (boost) plan.push({ key: 'boost', label: 'Boost it', detail: `$${Math.round(boostCents / 100)}, about ${(Math.round(boostCents / 100) * 150).toLocaleString()} people nearby. Open Boost once it has posted`, date: postDay, cost: boostCents, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/boost' }, why: whys.boost })
+  plan.push({ key: 'results', label: 'How it did', detail: kind === 'event' ? 'Views, RSVPs and mentions, in Insights' : 'Views, saves and mentions, in Insights', date: day(addDays(new Date(kind === 'event' && d.when ? d.when + 'T12:00:00' : atIso ?? Date.now()), 7).toISOString()), cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/insights/posts' } })
+
+  for (const l of plan) if (!l.why && whys[l.key]) l.why = whys[l.key]
 
   /* ── the team hears the whole plan once ── */
   const lines = [`New announcement: ${name}`, facts, '', ...plan.map((l) => `${l.date ?? ''} ${l.label}: ${l.detail}${l.cost ? ` ($${Math.round(l.cost / 100)})` : ''}`.trim())]

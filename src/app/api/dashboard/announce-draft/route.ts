@@ -19,9 +19,10 @@ export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'ope
 const KINDS: readonly AnnounceKind[] = ['dish', 'hours', 'deal', 'event', 'hiring', 'open', 'holiday', 'else']
 
 const SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['social', 'google', 'card', 'reminder', 'tonight', 'after'],
+  type: 'object', additionalProperties: false, required: ['social', 'google', 'socialEs', 'card', 'reminder', 'tonight', 'after'],
   properties: {
-    social: { type: 'string', description: 'The caption for Instagram and Facebook: 1 to 3 short sentences, warm, plain, in the business voice, ending with the call to action given. No hashtags, no emoji unless the owner used one, no em dashes. Never invent a price, time, date or claim not in the facts. If a second language is asked for, write the English, a blank line, then the same in that language.' },
+    social: { type: 'string', description: 'The caption for Instagram and Facebook: 1 to 3 short sentences, warm, plain, in the business voice, ending with the call to action given. No hashtags, no emoji unless the owner used one, no em dashes. Never invent a price, time, date or claim not in the facts. English only.' },
+    socialEs: { type: 'string', description: 'The same caption in the second language asked for, as its own post. Empty string if no second language was asked for.' },
     google: { type: 'string', description: 'The same news as a Google Business post: 1 to 2 sentences, under 280 characters, no URLs, no phone numbers, no em dashes. Empty string if Google is not among the channels.' },
     card: { type: 'string', description: 'A card for the restaurant staff, 3 to 5 short lines, plain: what it is, how to describe it to a guest in one sentence, the price if given, anything to know (allergens, when it runs, where it is available). Empty string if not asked for.' },
     reminder: { type: 'string', description: 'A short reminder post, 1 to 2 sentences, written as if the moment is close (the day before, the morning of, two days to go, as told). Same facts, no new claims, no hashtags, no em dashes. Empty string if not asked for.' },
@@ -82,8 +83,8 @@ export async function POST(req: NextRequest) {
   const facts = Object.entries(answers).map(([k, v]) => `${k}: ${v}`).join('\n')
   const system = `You write short announcements for ${name}, a local restaurant, in the owner's own warm, plain voice. Use ONLY the facts given. Never add a price, a date, a time, an address, a claim or an offer that is not in the facts. Plain sentences a 5th grader understands. No hashtags. No em dashes. Never mention AI.`
   const LANG: Record<string, string> = { es: 'Spanish', vi: 'Vietnamese', zh: 'Chinese', ko: 'Korean', fr: 'French', tl: 'Tagalog' }
-  const user = `Kind of announcement: ${kind}\nFacts from the owner:\n${facts || '(none)'}\nChannels: ${channels.join(', ') || 'social'}${ctaText || cta ? `\nCall to action to end on: ${ctaText || cta}` : ''}${languages.length ? `\nAlso write the caption in: ${languages.map((l) => LANG[l] ?? l).join(', ')}` : ''}\n\nWrite the social caption${wantsGoogle ? ' and the Google post' : ''}${wantsCard ? ` and ${cardKind}` : ''}${reminderWhen ? ` and a reminder post for ${reminderWhen}` : ''}${wantsTonight ? ' and a day-of post for that afternoon' : ''}${wantsAfter ? ' and a day-after post' : ''}.`
-  const ai = await callStructuredOutput<{ social?: string; google?: string; card?: string; reminder?: string; tonight?: string; after?: string }>({ system, user, schema: SCHEMA, maxTokens: 800, timeoutMs: 15000, tag: { kind: 'announce-draft', clientId, schemaName: 'announce' } })
+  const user = `Kind of announcement: ${kind}\nFacts from the owner:\n${facts || '(none)'}\nChannels: ${channels.join(', ') || 'social'}${ctaText || cta ? `\nCall to action to end on: ${ctaText || cta}` : ''}${languages.length ? `\nAlso write the caption as its own post in: ${languages.map((l) => LANG[l] ?? l).join(', ')}` : ''}\n\nWrite the social caption${wantsGoogle ? ' and the Google post' : ''}${wantsCard ? ` and ${cardKind}` : ''}${reminderWhen ? ` and a reminder post for ${reminderWhen}` : ''}${wantsTonight ? ' and a day-of post for that afternoon' : ''}${wantsAfter ? ' and a day-after post' : ''}.`
+  const ai = await callStructuredOutput<{ social?: string; google?: string; socialEs?: string; card?: string; reminder?: string; tonight?: string; after?: string }>({ system, user, schema: SCHEMA, maxTokens: 800, timeoutMs: 15000, tag: { kind: 'announce-draft', clientId, schemaName: 'announce' } })
   const keepLines = (s: unknown, max: number) => String(s ?? '').replace(/—|–/g, ',').replace(/[ \t]+/g, ' ').trim().slice(0, max)
   const social = keepLines(ai?.social, 2000) || fallback.social
   const google = wantsGoogle ? (clean(ai?.google, 280).replace(/https?:\/\/\S+/g, '').trim() || fallback.google) : ''
@@ -91,5 +92,6 @@ export async function POST(req: NextRequest) {
   const reminder = reminderWhen ? (keepLines(ai?.reminder, 600) || `${reminderWhen.charAt(0).toUpperCase() + reminderWhen.slice(1)}: ${social}`) : ''
   const tonight = wantsTonight ? (keepLines(ai?.tonight, 600) || `Tonight: ${social}`) : ''
   const after = wantsAfter ? (keepLines(ai?.after, 600) || `Thank you for coming out to ${answers.what ?? 'last night'}. See you at ${name}.`) : ''
-  return NextResponse.json({ social, google, card, reminder, tonight, after, source: ai ? 'ai' : 'plain' })
+  const socialEs = languages.length ? keepLines(ai?.socialEs, 2000) : ''
+  return NextResponse.json({ social, google, socialEs, card, reminder, tonight, after, source: ai ? 'ai' : 'plain' })
 }
