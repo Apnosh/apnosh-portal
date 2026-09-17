@@ -315,6 +315,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [previews, setPreviews] = useState<AdPreview[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<{ spent: number; days: number } | null>(null)
+  /* THE GOAL (owner 2026-09-17, "recommend, do not ask"): how many people, and the dials follow
+     from it at the rate we know. Null until they tap one; every dial stays theirs after. */
+  const [goal, setGoal] = useState<number | null>(null)
 
   const load = useCallback(() => {
     setErr(null)
@@ -413,6 +416,23 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
      accept is a control that lies about its own range. */
   const maxDaily = Math.max(minDaily, Math.min(120, Math.floor(limits.maxUsd / Math.max(1, days))))
   useEffect(() => { setDaily((d) => Math.min(Math.max(d, minDaily), maxDaily)) }, [maxDaily, minDaily])
+  /* The people-per-dollar we can honestly claim: their own boosts first, the peer median second,
+     a plain local average last, and the word for each so the reason line never overstates it. */
+  const rate = useMemo((): { perDollar: number; word: string } => {
+    if (history && history.perDollar > 0) return { perDollar: history.perDollar, word: 'at your own rate' }
+    if (peerRate && peerRate.perDollar > 0) return { perDollar: peerRate.perDollar, word: 'at the rate other Apnosh restaurants see' }
+    return { perDollar: 150, word: 'at a plain local average' }
+  }, [history, peerRate])
+  const GOALS = [1000, 3000, 8000, 20000]
+  const aim = (people: number) => {
+    setGoal(people)
+    const wantTotal = people / rate.perDollar
+    const d = wantTotal >= 100 ? 14 : wantTotal >= 40 ? 7 : 3
+    const perDay = Math.max(minDaily, Math.min(Math.max(minDaily, Math.min(120, Math.floor(limits.maxUsd / d))), Math.ceil(wantTotal / d)))
+    const snapped = dailyChoices.reduce((best, c) => (Math.abs(c - perDay) < Math.abs(best - perDay) ? c : best), dailyChoices[0])
+    setDays(d); setDaily(snapped); setRadius(people <= 1000 ? 3 : people <= 3000 ? 5 : people <= 8000 ? 10 : 25)
+  }
+  const goalWhy = goal != null ? `${rate.word.charAt(0).toUpperCase() + rate.word.slice(1)}, about ${rate.perDollar} people a dollar, $${total} over ${days} days reaches roughly ${Math.round(rate.perDollar * total).toLocaleString()}${Math.round(rate.perDollar * total) < goal * 0.8 ? `. Short of ${goal.toLocaleString()}: the cap or the floor got in the way, so raise a dial` : ''}.` : ''
   /* A number measured for one town says nothing about the next one. */
   /* Every radius we have ever measured for this place, so the pills arrive
      filled in rather than as four dashes. */
@@ -484,6 +504,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
           <div style={{ fontFamily: DISPLAY, fontSize: T.hero, fontWeight: 600, letterSpacing: '-.01em', marginBottom: 7 }}>It is running</div>
           <div style={{ fontSize: T.body, color: C.mute, lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>
             ${done.spent} over {done.days} day{done.days === 1 ? '' : 's'}. That is the most it can ever spend, and you can stop it here at any time.
+          </div>
+          <div style={{ fontSize: T.note, color: C.greenDk, fontWeight: 600, lineHeight: 1.5, maxWidth: 320, margin: '12px auto 0' }}>
+            The check-in is {new Date(Date.now() + done.days * 86400000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}: people reached, taps, and what each person cost. It shows here and on the post in Insights.
           </div>
           <div style={{ marginTop: 22 }}>
             <MvpButton label="See it running" onClick={() => { setDone(null); setPicked(null); void load() }} />
@@ -701,6 +724,20 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             )}
 
             <Head hue="brand" note={liveCandidates.length ? `${liveCandidates.length} posts` : null}>Pick a post</Head>
+            {/* THE ONE TO START WITH, with its reason. Only when the score is real: timesMedian is
+                null under five scored posts, and 1.5× is the bar the badge already uses. */}
+            {(() => { const best = [...liveCandidates].sort((a, b) => (b.timesMedian ?? 0) - (a.timesMedian ?? 0))[0]
+              if (!best || best.timesMedian == null || best.timesMedian < 1.5) return null
+              return (
+                <button type="button" onClick={() => setPicked(best)} style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%', textAlign: 'left', padding: '10px 12px', marginBottom: 12, borderRadius: R.box, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', font: 'inherit', color: C.ink }}>
+                  {best.image ? <span style={{ width: 44, height: 55, borderRadius: 8, flex: 'none', background: `center/cover url(${best.image})` }} /> : null}
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.body, fontWeight: 600 }}>Start with this one</span>
+                    <span style={{ display: 'block', fontSize: T.note, color: C.greenDk, fontWeight: 600, marginTop: 2 }}>It did {best.timesMedian}× your usual on its own. Money goes further on a post people already liked.</span>
+                  </span>
+                  <span style={{ fontSize: T.note, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap' }}>Use it</span>
+                </button>
+              ) })()}
             {/* TWO COLUMNS AND A REAL SHAPE. The first version showed a 76px
                 SQUARE crop, on an account where three quarters of the posts are
                 vertical video: a Reel became a slice of its own middle and the
@@ -851,6 +888,15 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 <span style={{ fontSize: T.label, color: C.ink, lineHeight: 1.5 }}>{rules.note}</span>
               </div>
             )}
+
+            <Head hue="mint">How many people</Head>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {GOALS.map((g) => { const on = goal === g
+                return <button key={g} type="button" onClick={() => aim(g)} style={{ font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, padding: '7px 12px', borderRadius: R.pill, cursor: 'pointer', color: on ? '#fff' : C.ink, background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>{g.toLocaleString()}</button> })}
+            </div>
+            <div style={{ fontSize: T.note, color: goal != null ? C.greenDk : C.mute, fontWeight: goal != null ? 600 : 500, lineHeight: 1.45, marginTop: 8 }}>
+              {goal != null ? goalWhy : 'Pick a number and the days, the amount and the circle are set for it. Change any of them after.'}
+            </div>
 
             <Head hue="mint">Who sees it</Head>
 
