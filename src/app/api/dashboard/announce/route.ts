@@ -37,10 +37,10 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
-type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators'
+type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
 /** what the print line makes, per kind */
-const PRINT: Record<string, string> = { dish: 'Table tent', deal: 'Flyer', event: 'Poster', hours: 'Door sign', open: 'Banner', holiday: 'Menu insert', hiring: 'Window sign', else: 'Flyer' }
+const PRINT: Record<string, string> = { dish: 'Table tent', deal: 'Flyer', event: 'Poster', hours: 'Door sign', open: 'Banner', holiday: 'Menu insert', hiring: 'Window sign', slow: 'Table tent and window sign', else: 'Flyer' }
 
 export interface PlanLine {
   key: string
@@ -87,14 +87,27 @@ const whenWord = (due: string | null): string => {
 
 async function context(admin: ReturnType<typeof createAdminClient>, clientId: string) {
   const today = new Date().toISOString().slice(0, 10)
-  const [client, site, guests, shoot, card] = await Promise.all([
+  const since = new Date(Date.now() - 56 * 86400000).toISOString().slice(0, 10)
+  const [client, site, guests, shoot, card, pos] = await Promise.all([
     admin.from('clients').select('name, tier, website').eq('id', clientId).maybeSingle(),
     admin.from('site_settings').select('order_online_url, reservation_url').eq('client_id', clientId).maybeSingle(),
     admin.from('guest_contacts').select('id', { count: 'exact', head: true }).eq('client_id', clientId).is('unsubscribed_at', null),
     admin.from('creative_requests').select('id, due_date, assigned_to_name, status').eq('client_id', clientId).eq('type', 'photos')
       .in('status', ['requested', 'quoted', 'accepted', 'in_progress', 'awaiting_payment']).gte('due_date', today).order('due_date', { ascending: true }).limit(1).maybeSingle(),
     getActiveRateCard().catch(() => null),
+    admin.from('pos_daily_sales').select('day, gross_cents, orders, source').eq('client_id', clientId).gte('day', since).order('day', { ascending: true }).limit(400),
   ])
+  /* the register, by weekday: what each day does on average over the last eight weeks, so the
+     slow night is a fact on the screen and not a question. Statement imports (an app's monthly
+     sheet) are excluded: they are not day-true. */
+  const rows = ((pos.data ?? []) as { day: string; gross_cents: number; orders: number; source: string }[]).filter((r) => !String(r.source).startsWith('statement:'))
+  const byDay = new Map<string, { gross: number; orders: number }>()
+  for (const r of rows) { const cur = byDay.get(r.day) ?? { gross: 0, orders: 0 }; byDay.set(r.day, { gross: cur.gross + Number(r.gross_cents || 0), orders: cur.orders + Number(r.orders || 0) }) }
+  const wk: { sum: number; n: number }[] = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }))
+  let gross = 0, orders = 0
+  for (const [dayStr, v] of byDay) { const w = new Date(dayStr + 'T12:00:00Z').getUTCDay(); wk[w].sum += v.gross; wk[w].n += 1; gross += v.gross; orders += v.orders }
+  const weekdays = byDay.size >= 14 ? wk.map((x, i) => ({ d: i, avgCents: x.n ? Math.round(x.sum / x.n) : 0 })) : null
+  const avgTicketCents = orders > 0 ? Math.round(gross / orders) : null
   const c = (client.data ?? {}) as { name?: string; tier?: string; website?: string }
   const s = (site.data ?? {}) as { order_online_url?: string; reservation_url?: string }
   const sh = shoot.data as { id: string; due_date: string; assigned_to_name?: string | null } | null
@@ -110,6 +123,8 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     guests: guests.count ?? 0,
     nextShoot: sh ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
     prices: { graphic, video, shoot: shootPrice },
+    weekdays,
+    avgTicketCents,
   }
 }
 
@@ -167,7 +182,7 @@ export async function POST(req: NextRequest) {
   const accountIds = (Array.isArray(body.places?.accountIds) ? body.places!.accountIds : []).filter((x): x is string => typeof x === 'string').slice(0, 10)
   const wantsGoogle = body.places?.google === true
   const wantsStory = body.places?.story === true
-  const also = (Array.isArray(body.places?.also) ? body.places!.also : []).filter((x): x is Also => ['gmenu', 'sitemenu', 'ordering', 'apps', 'email', 'print', 'team', 'ghours', 'fbevent', 'sitepage', 'creators'].includes(String(x)))
+  const also = (Array.isArray(body.places?.also) ? body.places!.also : []).filter((x): x is Also => ['gmenu', 'sitemenu', 'ordering', 'apps', 'email', 'print', 'team', 'ghours', 'fbevent', 'sitepage', 'creators', 'gattr', 'banner', 'pos'].includes(String(x)))
   const tz = clean(body.timing?.timezone, 60) || 'America/Los_Angeles'
   const atIso = typeof body.timing?.at === 'string' && !Number.isNaN(Date.parse(body.timing.at)) ? new Date(body.timing.at).toISOString() : null
   const postNow = !atIso || Date.parse(atIso) <= Date.now() + 60_000
@@ -209,7 +224,7 @@ export async function POST(req: NextRequest) {
   /* ── the picture ── */
   let requestId: string | null = null
   const attachments = media.map((url, i) => ({ url, name: `photo-${i + 1}` }))
-  const facts = [a.line, a.doing, a.kindOfNight ? `Kind: ${a.kindOfNight}` : '', a.getin ? `Getting in: ${a.getin}` : '', a.who ? `With ${a.who}` : '', a.weekly ? 'Every week' : '', a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
+  const facts = [a.line, a.doing, a.kindOfNight ? `Kind: ${a.kindOfNight}` : '', a.night ? `The slow night: ${a.night}` : '', a.goal ? `Goal: ${a.goal}` : '', a.plays ? `Plays: ${a.plays}` : '', a.off ? `${a.off}` : '', a.getin ? `Getting in: ${a.getin}` : '', a.who ? `With ${a.who}` : '', a.weekly ? 'Every week' : '', a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
   if (mode === 'graphic') {
     const dests: string[] = []
     const destLabels: string[] = []
@@ -321,7 +336,7 @@ export async function POST(req: NextRequest) {
     const ctaObj = cta === 'order' && ctx.orderUrl ? { type: 'ORDER' as const, url: ctx.orderUrl } : cta === 'reserve' && (link ?? ctx.reserveUrl) ? { type: 'LEARN_MORE' as const, url: (link ?? ctx.reserveUrl)! } : link ? { type: 'LEARN_MORE' as const, url: link } : cta === 'message' ? { type: 'CALL' as const } : null
     /* a deal is an OFFER and an event is an EVENT on Google: both carry a title and dates */
     const today = day(new Date().toISOString())
-    const gType = kind === 'deal' ? { postType: 'OFFER' as const, event: { title: name.slice(0, 58), startDate: d.from ?? today, endDate: d.until ?? day(addDays(new Date(), 30).toISOString()) }, offer: { ...(a.code ? { couponCode: a.code.slice(0, 58) } : {}), ...(a.line ? { terms: a.line.slice(0, 300) } : {}) } }
+    const gType = kind === 'deal' || (kind === 'slow' && a.what) ? { postType: 'OFFER' as const, event: { title: name.slice(0, 58), startDate: d.from ?? today, endDate: d.until ?? day(addDays(new Date(), 30).toISOString()) }, offer: { ...(a.code ? { couponCode: a.code.slice(0, 58) } : {}), ...(a.line ? { terms: a.line.slice(0, 300) } : {}) } }
       : kind === 'event' && d.when ? { postType: 'EVENT' as const, event: { title: name.slice(0, 58), startDate: d.when, endDate: d.when } }
       : {}
     if (ctx.pro && postNow && !madeLater) {
@@ -402,6 +417,21 @@ export async function POST(req: NextRequest) {
     const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: d.when ?? postDay, attachments, answers: { what: `Invite two local food creators to ${name}${eventWhen ? `, ${eventWhen}` : ''}, comped. ${facts}`.trim(), when: whenWord(d.when ?? postDay) } })
     if (r.ok) plan.push({ key: 'creators', label: 'Two creators invited', detail: 'Comped seats, they post from the room', date: d.when ?? postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     else errors.push(`The creator invite did not send: ${r.error}`)
+  }
+  if (also.includes('gattr')) {
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, answers: { what: `Set the happy hour attribute on our Google listing and add the deal to the description: ${name}${a.when ? `, ${a.when}` : ''}. ${facts}`.trim(), when: whenWord(postDay) } })
+    if (r.ok) plan.push({ key: 'gattr', label: 'Google listing says happy hour', detail: 'The attribute, so it shows in search', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`The Google listing update did not send: ${r.error}`)
+  }
+  if (also.includes('banner')) {
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, attachments, answers: { what: `Put a banner on the website home page for ${name}${a.when ? `, ${a.when}` : ''}, shown on that day. ${facts}`.trim(), when: whenWord(postDay) } })
+    if (r.ok) plan.push({ key: 'banner', label: 'Website banner', detail: 'On the home page, on the day', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`The website banner did not send: ${r.error}`)
+  }
+  if (also.includes('pos')) {
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, answers: { what: `Set up the deal on the register so it is one button: ${name}${a.code ? `, code ${a.code}` : ''}. ${facts}`.trim(), when: whenWord(postDay) } })
+    if (r.ok) plan.push({ key: 'pos', label: 'The register has the button', detail: 'One tap for the team, and it counts', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`The register setup did not send: ${r.error}`)
   }
   if (also.includes('ordering')) {
     const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, attachments, answers: { what: `Add ${name}${a.price ? ` (${a.price})` : ''} to online ordering so the Order online button works from day one. ${a.line ?? ''}`.trim(), when: whenWord(postDay) } })

@@ -25,11 +25,11 @@ import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { BrandOrMark } from '../mvp-insights'
 
-export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'open' | 'holiday' | 'else'
+export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'open' | 'holiday' | 'else' | 'slow'
 type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
-type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators'
+type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
-type Step = 'kind' | 'ekind' | 'facts' | 'picture' | 'where' | 'words' | 'plan' | 'done'
+type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'picture' | 'where' | 'words' | 'plan' | 'done'
 type GetIn = 'show' | 'rsvp' | 'tickets' | 'book'
 
 interface Field { key: string; label: string; hint?: string; optional?: boolean; kind?: 'text' | 'date' | 'long' | 'time' }
@@ -42,6 +42,8 @@ interface KindDef {
   reminder?: string
   /** hours controls: one day (a switch reveals them) or always (a holiday is one day) */
   hours?: 'oneday' | 'always'
+  /** not on the Announce grid: reached from its own tile */
+  hidden?: boolean
 }
 
 const KINDS: KindDef[] = [
@@ -101,6 +103,23 @@ const KINDS: KindDef[] = [
     { key: 'what', label: 'What is the news?', kind: 'long', hint: 'We hit 100 reviews. Thank you.' },
     { key: 'from', label: 'A date, if there is one', kind: 'date', optional: true },
   ] },
+  /* the slow night: its own three screens (the night, the goal, the play) stand in for the facts */
+  { id: 'slow', label: 'Slow night', scene: 'offer', hue: '#3b6fd4', hidden: true, photo: true, picture: true, cta: 'visit', also: ['email', 'print', 'banner', 'apps', 'gattr', 'pos', 'team'],
+    alsoLabels: { email: { label: 'Email and text your regulars', detail: 'The day before, every week' }, print: { label: 'Table tent and window sign', detail: 'The people already inside tell friends' }, apps: { label: 'Delivery app promo', detail: 'Off when it is dine in only' }, team: { detail: 'The deal, the code, the button, what to say' } }, fields: [] },
+]
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const PARTS: { id: string; label: string; hour: number }[] = [{ id: 'lunch', label: 'Lunch', hour: 10 }, { id: 'afternoon', label: 'Afternoon', hour: 13 }, { id: 'dinner', label: 'Dinner', hour: 16 }, { id: 'late', label: 'Late', hour: 19 }]
+const WHO = ['Regulars, back', 'New people nearby', 'Families', 'After work', 'Takeout and delivery', 'Late crowd']
+interface Play { id: string; label: string; small: string; scene: Scene; hue: string; why?: (who: Set<string>) => string | '' }
+const PLAYS: Play[] = [
+  { id: 'deal', label: 'A deal that night', small: 'Happy hour, 2 for 1, $ off', scene: 'offer', hue: '#d99a1e', why: (w) => (w.has('New people nearby') || w.has('After work') ? 'Fastest way to fill a dinner' : '') },
+  { id: 'night', label: 'A weekly night', small: 'Trivia, music, industry night', scene: 'event', hue: '#2e73b6', why: () => 'Builds a habit. Slower to start' },
+  { id: 'dish', label: 'A that-day-only dish', small: 'Something you cannot get other days', scene: 'dish', hue: '#2e9a78' },
+  { id: 'stamps', label: 'Double stamps', small: 'Loyalty twice that day', scene: 'stamps', hue: '#6a39de', why: (w) => (w.has('Regulars, back') ? 'Regulars already carry the card' : '') },
+  { id: 'bundle', label: 'Family bundle to go', small: 'A set meal for takeout and delivery', scene: 'apps', hue: '#c92d32', why: (w) => (w.has('Families') || w.has('Takeout and delivery') ? 'Families order in on slow nights' : '') },
+  { id: 'regulars', label: 'Bring the regulars back', small: 'Email and text the people who have not been in', scene: 'email', hue: '#2e9a78', why: (w) => (w.has('Regulars, back') ? 'The cheapest seats you will fill' : '') },
+  { id: 'tables', label: 'Big tables', small: 'Push group bookings and the back room', scene: 'reserve', hue: '#0f97a8' },
+  { id: 'other', label: 'Something else', small: 'Tell us the idea', scene: 'else', hue: '#6e6e73' },
 ]
 
 const TAGS = ['Spicy', 'Vegan', 'Vegetarian', 'Gluten free', 'Nuts', 'Dairy free', 'Halal']
@@ -130,18 +149,22 @@ const ALSO: Record<Also, { label: string; scene: Scene; hue: string; detail: (ct
   fbevent: { label: 'Facebook Event', scene: 'event', hue: '#2e73b6', detail: () => 'People say Going, their friends see it', on: () => true },
   sitepage: { label: 'Website events page', scene: 'site', hue: '#0f97a8', detail: (c) => c?.website ? c.website.replace(/^https?:\/\//, '') : 'If we run your site', on: (c) => !!c?.website },
   creators: { label: 'Invite a creator', scene: 'creator', hue: '#6a39de', detail: () => 'Two local food creators, comped', on: () => false },
+  gattr: { label: 'Google listing: happy hour', scene: 'google', hue: '#3b6fd4', detail: () => 'The attribute, so it shows in search', on: () => true },
+  banner: { label: 'Website banner', scene: 'site', hue: '#0f97a8', detail: (c) => c?.website ? 'On the home page, on the day' : 'If we run your site', on: (c) => !!c?.website },
+  pos: { label: 'The register button', scene: 'order', hue: '#34a76a', detail: () => 'One tap for the team, and it counts', on: () => false },
 }
 const CTAS: { id: Cta; label: string }[] = [{ id: 'order', label: 'Order online' }, { id: 'visit', label: 'Come in' }, { id: 'reserve', label: 'Reserve' }, { id: 'message', label: 'Message us' }]
 const PLAT: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube' }
 
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
-interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; nextShoot: { id: string; date: string; who: string | null } | null; prices: { graphic: number | null; video: number | null; shoot: number | null } }
+interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; nextShoot: { id: string; date: string; who: string | null } | null; prices: { graphic: number | null; video: number | null; shoot: number | null }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
 interface PlanLine { key: string; label: string; detail: string; date: string | null; cost: number | null; status: 'scheduled' | 'with_team' | 'needs_payment' | 'done' | 'later'; ref: { kind: string; id: string | null; href?: string } | null; why?: string }
 type Goal = 10 | 25 | 50 | 999
 const GOALS: { id: Goal; label: string }[] = [{ id: 10, label: '+10 people' }, { id: 25, label: '+25' }, { id: 50, label: '+50' }, { id: 999, label: 'Full house' }]
 /** a dollar of Boost reaches about this many people nearby (Meta local, a plain average) */
 const REACH_PER_DOLLAR = 150
+const slowestDay = (c: Ctx | null): number | null => { const w = c?.weekdays; if (!w || !w.length) return null; const withData = w.filter((x) => x.avgCents > 0); if (withData.length < 4) return null; return withData.reduce((a, b) => (b.avgCents < a.avgCents ? b : a)).d }
 
 function hexa(h: string, a: number) { const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16); return `rgba(${r},${g},${b},${a})` }
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -154,7 +177,7 @@ const longDate = (iso: string) => { const d = new Date(iso + 'T00:00:00'); retur
 const dollars = (c: number | null) => (c == null ? '' : `$${Math.round(c / 100).toLocaleString()}`)
 const localInput = (d: Date) => `${isoDay(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 
-export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: { clientId: string; onClose: () => void; /** whether the client has a Google listing to post to */ hasGoogle?: boolean }) {
+export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, initialKind }: { clientId: string; onClose: () => void; /** whether the client has a Google listing to post to */ hasGoogle?: boolean; /** open straight on one kind: the Slow night tile */ initialKind?: AnnounceKind }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
   /* The page behind must not move while the sheet is up (owner 2026-09-17: "you can move the form
@@ -216,6 +239,19 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
   const [tonightText, setTonightText] = useState('')
   const [afterText, setAfterText] = useState('')
   const [goal, setGoal] = useState<Goal>(25)
+  const [night, setNight] = useState<number>(2)
+  const [part, setPart] = useState('dinner')
+  const [slowWords, setSlowWords] = useState('')
+  const [tables, setTables] = useState<number>(10)
+  const [who, setWho] = useState<Set<string>>(new Set(['Regulars, back', 'New people nearby']))
+  const [weeks, setWeeks] = useState<number>(4)
+  const [plays, setPlays] = useState<Set<string>>(new Set(['deal']))
+  const [dealWhat, setDealWhat] = useState('')
+  const [dealOff, setDealOff] = useState('')
+  const [dealPrice, setDealPrice] = useState('')
+  const [dealCode, setDealCode] = useState(true)
+  const [dineIn, setDineIn] = useState(true)
+  const [playWords, setPlayWords] = useState('')
   const [boostCents, setBoostCents] = useState(2000)
   const [socialEs, setSocialEs] = useState('')
   const [postByTouched, setPostByTouched] = useState(false)
@@ -261,8 +297,17 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
     setA(dateKey ? { [dateKey]: todayIso() } : {})
     setAlso(new Set(k.also.filter((x) => ALSO[x].on(ctx))))
     setEkind(null); setWeekly(false); setGetin('show'); setLink(''); setPrice(''); setWhere('here'); setAddress(''); setTonight(true); setAfter(true); setTonightText(''); setAfterText(''); setGoal(25); setPostByTouched(false); setSocialEs('')
-    setStep(k.id === 'event' ? 'ekind' : 'facts')
+    if (k.id === 'slow') { setNight(slowestDay(ctx) ?? 2); setPart('dinner'); setPlays(new Set(['deal'])); setWeekly(true); setBoost(true); setBoostCents(1500) }
+    setStep(k.id === 'event' ? 'ekind' : k.id === 'slow' ? 'night' : 'facts')
   }
+  const isSlow = kind?.id === 'slow'
+  useEffect(() => { if (initialKind) { const k = KINDS.find((x) => x.id === initialKind); if (k) pick(k) } }, [initialKind]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (isSlow && ctx?.weekdays && step === 'night') { const d = slowestDay(ctx); if (d != null) setNight(d) } }, [ctx]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* the next date that weekday falls on, from tomorrow */
+  const nextDay = (w: number, from = 1) => { const d = new Date(); d.setDate(d.getDate() + from); while (d.getDay() !== w) d.setDate(d.getDate() + 1); return isoDay(d) }
+  const tableCents = ctx?.avgTicketCents && ctx.avgTicketCents > 500 ? ctx.avgTicketCents * 2 : 6000
+  const discount = (): number | null => { const m = dealOff.match(/(\d{1,2})\s*%/); if (m) return Number(m[1]) / 100; const p = dealPrice.match(/\$?\s*(\d+(?:\.\d+)?)/); const off = dealOff.match(/\$\s*(\d+(?:\.\d+)?)\s*off/i); if (p && off) return Math.min(0.9, Number(off[1]) / Number(p[1])); if (/2\s*for\s*1|half/i.test(dealOff)) return 0.5; return null }
+  const breakEven = (): string => { const dsc = discount(); if (dsc == null) return ''; const need = Math.round((dsc / (1 - dsc)) * 100); return `At ${Math.round(dsc * 100)}% off you need ${need}% more orders of it to break even on it alone. Your target is ${tables === 999 ? 'a full room' : `${tables} more tables`}, and drinks and the rest of the order carry it.` }
   const pickEvent = (e: EventKind) => {
     setEkind(e); setWeekly(e.weekly); setGetin(e.getin)
     setA((x) => ({ ...x, what: x.what?.trim() ? x.what : e.label }))
@@ -309,6 +354,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
     const back = (iso: string | undefined, n: number, why: string) => (iso ? { day: maxIso(today, plusDays(iso, -n)), why } : { day: today, why: 'Today. Nothing to wait for' })
     if (isEvent) return getin === 'tickets' || getin === 'rsvp' ? back(dd.when, 14, 'Two weeks before. Tickets and RSVPs need time to plan') : back(dd.when, 4, 'Four days before. Long enough to plan a night, short enough to remember')
     if (kind?.id === 'deal') return back(dd.from, 3, 'Three days before it starts, so the first day is busy')
+    if (kind?.id === 'slow') return back(dd.from, 4, `Four days before the first ${DAYS[night]}, so people can plan it`)
     if (kind?.id === 'open') return back(dd.from, 7, 'A week before, so the countdown has room')
     if (kind?.id === 'holiday') return dd.deadline ? back(dd.deadline, 10, 'Ten days before the pre-order deadline') : back(dd.date, 14, 'Two weeks before the day')
     if (kind?.id === 'dish') return dd.from && dd.from > today ? { day: dd.from, why: 'The day it lands on the menu' } : { day: today, why: 'It is on the menu now, so today' }
@@ -352,6 +398,20 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
     if (tags.size) facts.tags = Array.from(tags).join(', ')
     if (kind?.limited) { if (limited && a.until) facts.until = longDate(a.until); else delete facts.until }
     if (hoursOn) facts.hours = closed ? `Closed that day` : `Open ${clock(openAt)} to ${clock(closeAt)} that day`
+    if (isSlow) {
+      const dayName = DAYS[night]; const partLabel = PARTS.find((p) => p.id === part)?.label ?? 'Dinner'
+      const chosen = PLAYS.filter((p) => plays.has(p.id)).map((p) => p.label)
+      facts.what = plays.has('deal') && dealWhat.trim() ? dealWhat.trim() : chosen[0] ? `${chosen[0]} on ${dayName}s` : `${dayName} ${partLabel.toLowerCase()}`
+      facts.when = `${dayName}s, ${partLabel.toLowerCase()}`
+      facts.night = `${dayName} ${partLabel.toLowerCase()}${slowWords.trim() ? `. ${slowWords.trim()}` : ''}`
+      facts.goal = `${tables === 999 ? 'A full room' : `${tables} more tables`}, ${Array.from(who).join(', ').toLowerCase() || 'anyone'}, for ${weeks ? `${weeks} weeks` : 'as long as it works'}`
+      facts.plays = chosen.join(', ')
+      if (plays.has('deal')) { if (dealOff.trim()) facts.off = `${dealOff.trim()}${dealPrice.trim() ? ` (usually ${dealPrice.trim()})` : ''}`; if (dealCode) facts.code = `${dayName.toUpperCase()}`; facts.line = dineIn ? 'Dine in only' : 'Dine in, takeout and the apps' }
+      if (playWords.trim()) facts.line = [facts.line, playWords.trim()].filter(Boolean).join('. ')
+      facts.from = longDate(nextDay(night))
+      facts.until = weeks ? longDate(plusDays(nextDay(night), 7 * (weeks - 1))) : ''
+      if (!facts.until) delete facts.until
+    }
     if (isEvent) {
       if (ekind) facts.kindOfNight = ekind.label
       const g = GETIN.find((x) => x.id === getin)!
@@ -366,7 +426,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
   }
   const hoursOn = kind?.hours === 'always' || (kind?.hours === 'oneday' && oneDay)
   const clock = (t: string) => { const [h, m] = t.split(':').map(Number); if (Number.isNaN(h)) return t; const d = new Date(); d.setHours(h, m || 0, 0, 0); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: m ? '2-digit' : undefined }) }
-  const rawDates = (): Record<string, string> => { const out: Record<string, string> = {}; for (const f of kind?.fields ?? []) if (f.kind === 'date' && a[f.key]) out[f.key] = a[f.key]; if (kind?.limited && limited && a.until) out.until = a.until; return out }
+  const rawDates = (): Record<string, string> => { const out: Record<string, string> = {}; for (const f of kind?.fields ?? []) if (f.kind === 'date' && a[f.key]) out[f.key] = a[f.key]; if (kind?.limited && limited && a.until) out.until = a.until; if (kind?.id === 'slow') { out.from = nextDay(night); if (weeks) out.until = plusDays(out.from, 7 * (weeks - 1)) } return out }
   /* the extra posts this kind asks for: a reminder, a countdown, a Story the morning of, a second repeat */
   const atHour = (iso: string, h: number, m = 0) => { const d = new Date(iso + 'T00:00:00'); d.setHours(h, m, 0, 0); return d }
   const reminderWhen = (): { phrase: string; at: Date; label: string; detail: string } | null => {
@@ -394,6 +454,15 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
         if (tonight && tonightText.trim()) out.push({ key: `w${w}-tonight`, label: 'Tonight', detail: `Week ${w}, 4 pm`, at: atHour(dayW, 16).toISOString(), text: tonightText.trim() })
       }
     }
+    if (isSlow && weekly) {
+      const first = nextDay(night); const n = weeks || 4
+      const hour = PARTS.find((p) => p.id === part)?.hour ?? 16
+      for (let w = 0; w < n; w++) {
+        const dayW = plusDays(first, 7 * w)
+        if (tonightText.trim()) { const d = atHour(dayW, 11); if (d.getTime() > Date.now()) out.push({ key: `w${w + 1}-morning`, label: `${DAYS[night]} morning`, detail: `Week ${w + 1}, 11 am`, at: d.toISOString(), text: tonightText.trim() }) }
+        if (story && hasIgFb && media.length) { const d = atHour(dayW, hour); if (d.getTime() > Date.now()) out.push({ key: `w${w + 1}-story`, label: 'Story', detail: `Week ${w + 1}, ${clock(`${pad(hour)}:00`)}`, at: d.toISOString(), text: tonightText.trim() || social.trim(), story: true }) }
+      }
+    }
     if (spanish && socialEs.trim()) { const d = new Date((postAt ?? new Date()).getTime() + 2 * 3600e3); out.push({ key: 'spanish', label: 'In Spanish', detail: 'Its own post, two hours after', at: d.toISOString(), text: socialEs.trim() }) }
     if (kind?.id === 'hiring' && again) { const d = new Date((postAt ?? new Date()).getTime() + 14 * 86400e3); out.push({ key: 'again2', label: 'Posted a third time', detail: 'Two weeks on, until it is filled', at: d.toISOString(), text: social.trim() }) }
     return out
@@ -402,7 +471,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
     if (!kind) return
     setWriting(true); setErr(null)
     try {
-      const r = await fetch('/api/dashboard/announce-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, answers: factsOut(), channels, cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team'), reminderWhen: reminderWhen()?.phrase ?? '', tonight: isEvent && tonight, after: isEvent && after, ctaText: isEvent ? GETIN.find((x) => x.id === getin)?.cta : '' }) })
+      const r = await fetch('/api/dashboard/announce-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, answers: factsOut(), channels, cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team'), reminderWhen: reminderWhen()?.phrase ?? '', tonight: (isEvent && tonight) || isSlow, after: isEvent && after, ctaText: isEvent ? GETIN.find((x) => x.id === getin)?.cta : isSlow && dealCode ? `Say ${DAYS[night].toUpperCase()} at the counter` : '' }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not write it')
       setSocial(String(j.social ?? '')); setGtext(String(j.google ?? '')); setCard(String(j.card ?? '')); setReminderText(String(j.reminder ?? '')); setTonightText(String(j.tonight ?? '')); setAfterText(String(j.after ?? '')); setSocialEs(String(j.socialEs ?? ''))
@@ -439,17 +508,24 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
       const xs = extras()
       for (const x of xs.filter((x) => !/^w\d/.test(x.key))) line(x.key, x.label, madeLater ? `${x.detail}. The team posts it` : x.detail, x.at.slice(0, 10), null, madeLater ? 'with_team' : 'scheduled')
       const wk = xs.filter((x) => /^w\d/.test(x.key))
-      if (wk.length) line('weekly', 'Every week from then on', `${wk.length} more posts over the next 4 weeks${madeLater ? ', the team posts them' : ''}. Announce again to extend, cancel any in Coming up`, wk[0].at.slice(0, 10), null, madeLater ? 'with_team' : 'scheduled')
+      if (wk.length && isSlow) line('weekly', `Every ${DAYS[night]} for ${weeks || 4} weeks`, `A post at 11${story && hasIgFb && media.length ? `, a Story at ${clock(`${pad(PARTS.find((p) => p.id === part)?.hour ?? 16)}:00`)}` : ''}${boost ? `, Boost $${Math.round(boostCents / 100)} that afternoon` : ''}`, wk[0].at.slice(0, 10), boost ? boostCents * (weeks || 4) : null, madeLater ? 'with_team' : 'scheduled', boost ? `$${Math.round(boostCents / 100) * (weeks || 4)} over the run. If it brings ${Math.max(1, Math.round((boostCents * (weeks || 4)) / tableCents / (weeks || 4)))} tables a week it paid for itself` : 'People decide dinner that afternoon')
+      else if (wk.length) line('weekly', 'Every week from then on', `${wk.length} more posts over the next 4 weeks${madeLater ? ', the team posts them' : ''}. Announce again to extend, cancel any in Coming up`, wk[0].at.slice(0, 10), null, madeLater ? 'with_team' : 'scheduled')
     }
     if (also.has('ordering')) line('ordering', 'Online ordering', 'Added so Order online works', postDay)
     if (also.has('email')) line('email', ctx && ctx.guests > 0 ? `Email to ${ctx.guests.toLocaleString()} regulars` : 'Email to your regulars', 'Written from the same words', plusDays(postDay, 1), null, 'with_team', ctx && ctx.guests > 0 ? `${ctx.guests.toLocaleString()} people who already like you. The cheapest seats you will fill` : undefined)
-    if (also.has('print')) line('print', kind.alsoLabels?.print?.label ?? 'Table tent', 'The team quotes it, printed or a file', postDay)
+    if (also.has('print')) line('print', kind.alsoLabels?.print?.label ?? 'Table tent', 'The team quotes it, printed or a file', postDay, null, 'with_team', isSlow ? 'The people already inside tell friends' : undefined)
+    if (also.has('gattr')) line('gattr', 'Google listing says happy hour', 'The attribute, so it shows in search', postDay)
+    if (also.has('banner')) line('banner', 'Website banner', 'On the home page, on the day', postDay)
+    if (also.has('pos')) line('pos', 'The register has the button', 'One tap for the team, and it counts', postDay)
+    if (also.has('fbevent')) line('fbevent', 'Facebook Event', 'The team makes it. Going spreads it', postDay, null, 'with_team', 'Going is how friends find out')
+    if (also.has('sitepage')) line('sitepage', 'Website events page', 'Added with the date and the link', postDay)
     if (also.has('team')) line('team', 'Team card', 'To everyone on the portal, and one to copy', today, null, 'done')
-    if (boost) line('boost', isEvent ? 'Boost the announcement' : 'Boost it', `$${Math.round(boostCents / 100)}, about ${(Math.round(boostCents / 100) * REACH_PER_DOLLAR).toLocaleString()} people nearby`, postDay, boostCents, 'later', isEvent && goal >= 25 ? `You want ${goal === 999 ? 'a full house' : `${goal} more people`}. Your own followers will not get you there alone` : undefined)
+    if (boost && !isSlow) line('boost', isEvent ? 'Boost the announcement' : 'Boost it', `$${Math.round(boostCents / 100)}, about ${(Math.round(boostCents / 100) * REACH_PER_DOLLAR).toLocaleString()} people nearby`, postDay, boostCents, 'later', isEvent && goal >= 25 ? `You want ${goal === 999 ? 'a full house' : `${goal} more people`}. Your own followers will not get you there alone` : undefined)
     if (also.has('creators')) { const i = L.findIndex((l) => l.key === 'creators'); if (i < 0) line('creators', 'Two creators invited', 'Comped seats, they post from the room', rawDates().when ?? postDay, null, 'with_team', goal >= 50 ? 'A big night needs other people telling it' : undefined) }
-    line('results', 'How it did', isEvent ? 'Views, RSVPs and mentions, in Insights' : 'Views, saves and mentions, in Insights', plusDays((isEvent && rawDates().when) || postDay, 7), null, 'later')
+    if (isSlow) line('checkin', 'The check-in', `${DAYS[night]} sales against the four before${dealCode ? `, and how many said ${DAYS[night].toUpperCase()}` : ''}`, plusDays(nextDay(night), 7 * (weeks || 4)), null, 'later', 'Keep it, change it, or stop it, with the numbers')
+    else line('results', 'How it did', isEvent ? 'Views, RSVPs and mentions, in Insights' : 'Views, saves and mentions, in Insights', plusDays((isEvent && rawDates().when) || postDay, 7), null, 'later')
     return L
-  }, [kind, mode, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, mode, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched, night, part, slowWords, tables, who, weeks, plays, dealWhat, dealOff, dealPrice, dealCode, dineIn, playWords]) // eslint-disable-line react-hooks/exhaustive-deps
   const previewTotal = preview.reduce((s, l) => s + (l.cost ?? 0), 0)
 
   const commit = async () => {
@@ -492,10 +568,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
   )
   const Tick = ({ on }: { on: boolean }) => <span style={{ width: 22, height: 22, borderRadius: 7, border: `1.5px solid ${on ? C.ink : C.line}`, background: on ? C.ink : '#fff', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{on && <Check size={14} strokeWidth={3} />}</span>
   const steps: Step[] = ['facts', 'picture', 'where', 'words', 'plan']
-  const visible: Step[] = [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const visible: Step[] = [...(isEvent ? ['ekind' as Step] : []), ...(isSlow ? ['night', 'goal', 'play'] as Step[] : []), ...steps.filter((s) => (s !== 'picture' || kind?.picture) && (s !== 'facts' || !isSlow))]
   const back = () => { const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { const i = visible.indexOf(step); setStep(visible[i + 1]) }
-  const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : (isEvent && a.what?.trim()) || kind?.label || ''
+  const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? (step === 'night' ? 'Slow night' : `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}`) : (isEvent && a.what?.trim()) || kind?.label || ''
   const Line = ({ l }: { l: PlanLine }) => (
     <div style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, alignItems: 'flex-start' }}>
       <span style={{ width: 62, flex: 'none', fontSize: 12, fontWeight: 700, color: C.mute, paddingTop: 2 }}>{l.date ? niceDate(l.date).replace(/^(\w+), /, '$1 ') : ''}</span>
@@ -510,7 +586,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
       <div onClick={(e) => e.stopPropagation()} onFocusCapture={(e) => { const t = e.target as HTMLElement; if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') setTimeout(() => t.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250) }} style={{ width: '100%', maxWidth: 480, maxHeight: vv ? vv.h - 16 : '92dvh', overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink, fontFamily: 'inherit' }}>
         <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 10px' }}>
-          {step !== 'kind' && step !== 'done' ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
+          {step !== 'kind' && step !== 'done' && !(isSlow && step === 'night' && initialKind) ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
           <span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</span>
           <button type="button" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
         </div>
@@ -521,7 +597,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
           <>
             <div style={h2}>What is the news?</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 12px' }}>
-              {KINDS.map((k) => (
+              {KINDS.filter((k) => !k.hidden).map((k) => (
                 <button key={k.id} type="button" onClick={() => pick(k)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', font: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, ...hv(k.hue) }}>
                   <span style={{ width: '100%', aspectRatio: '1.25', borderRadius: 22, background: hexa(k.hue, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6, boxSizing: 'border-box' }}><span style={{ width: '72%' }}><Drawing spec={{ scene: k.scene }} name="" rating="" t={(s) => s} /></span></span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{k.label}</span>
@@ -530,6 +606,72 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
             </div>
             <div style={{ fontSize: 12.5, color: C.mute, textAlign: 'center', marginTop: 18, lineHeight: 1.5 }}>Pick one. A few questions, then we write it, make it and post it where you choose.</div>
           </>
+        )}
+
+        {step === 'night' && kind && (
+          <div style={hv(hue)}>
+            <div style={h2}>Which night is slow?</div>
+            {ctx?.weekdays ? (() => { const w = ctx.weekdays!; const max = Math.max(...w.map((x) => x.avgCents), 1); const best = w.reduce((a, b) => (b.avgCents > a.avgCents ? b : a)); const pick_ = w[night]
+              return <>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 96, margin: '8px 0 22px' }}>{[1, 2, 3, 4, 5, 6, 0].map((d) => { const x = w[d]; const on = d === night
+                  return <button key={d} type="button" onClick={() => setNight(d)} style={{ flex: 1, height: `${Math.max(6, Math.round((x.avgCents / max) * 100))}%`, background: on ? hue : hexa(hue, 0.18), border: 0, borderRadius: '6px 6px 3px 3px', position: 'relative', cursor: 'pointer', padding: 0 }}><span style={{ position: 'absolute', bottom: -18, left: 0, right: 0, textAlign: 'center', fontSize: 11, fontWeight: 700, color: on ? hue : C.mute }}>{DAYS[d].slice(0, 3)}</span></button> })}</div>
+                <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, lineHeight: 1.4 }}>From your register, the last 8 weeks. {DAYS[night]} does {Math.round((pick_.avgCents / Math.max(best.avgCents, 1)) * 100)}% of a {DAYS[best.d]}.</div>
+              </> })() : (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{[1, 2, 3, 4, 5, 6, 0].map((d) => <button key={d} type="button" onClick={() => setNight(d)} style={chip(night === d)}>{DAYS[d].slice(0, 3)}</button>)}</div>
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Connect your register and this screen shows the week as numbers.</div>
+              </>
+            )}
+            <div style={h3}>Which part of it</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{PARTS.map((p) => <button key={p.id} type="button" onClick={() => setPart(p.id)} style={chip(part === p.id)}>{p.label}</button>)}</div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>How slow, in your words<span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span><input type="text" value={slowWords} onChange={(e) => setSlowWords(e.target.value)} placeholder="Six tables from 5 to 8, mostly regulars" style={input} /></label>
+            <button type="button" onClick={next} style={cta_}>Next</button>
+          </div>
+        )}
+
+        {step === 'goal' && kind && (
+          <div style={hv(hue)}>
+            <div style={h2}>What would a good {DAYS[night]} look like?</div>
+            <div style={{ ...h3, marginTop: 4 }}>How many more</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{[5, 10, 20, 999].map((n) => <button key={n} type="button" onClick={() => setTables(n)} style={chip(tables === n)}>{n === 999 ? 'Full' : `+${n} tables`}</button>)}</div>
+            <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8, lineHeight: 1.4 }}>{tables === 999 ? 'A full room' : `${tables} more tables`} is about ${((tables === 999 ? 30 : tables) * tableCents / 100).toLocaleString()} more a night{ctx?.avgTicketCents ? ', from your average ticket' : ''}. Worth a deal that costs ${Math.round((tables === 999 ? 30 : tables) * tableCents / 100 / 5).toLocaleString()}.</div>
+            <div style={h3}>Who you want</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{WHO.map((w) => <button key={w} type="button" onClick={() => setWho((s) => { const n = new Set(s); if (n.has(w)) n.delete(w); else n.add(w); return n })} style={chip(who.has(w))}>{w}</button>)}</div>
+            <div style={h3}>For how long</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{[[4, 'Try it 4 weeks'], [8, '8 weeks'], [0, 'Until I stop it']].map(([n, l]) => <button key={n} type="button" onClick={() => setWeeks(n as number)} style={chip(weeks === n)}>{l}</button>)}</div>
+            <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>{weeks === 4 ? 'Four weeks is enough to know. We check in with the numbers then.' : weeks === 8 ? 'Eight weeks, with a check-in at four.' : 'We check in every four weeks. Stop any time.'}</div>
+            <button type="button" onClick={next} style={cta_}>Next</button>
+          </div>
+        )}
+
+        {step === 'play' && kind && (
+          <div style={hv(hue)}>
+            <div style={h2}>The play</div>
+            <div style={{ fontSize: 12.5, color: C.mute, margin: '0 0 8px', lineHeight: 1.45 }}>Pick one or two. The green line says why.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {PLAYS.map((p) => { const on = plays.has(p.id); const w = p.why?.(who) || ''
+                return <button key={p.id} type="button" onClick={() => setPlays((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else if (n.size < 2) n.add(p.id); return n })} style={{ ...hv(p.hue), border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 10px 10px', textAlign: 'center', background: '#fff', cursor: 'pointer', font: 'inherit', color: C.ink }}>
+                  <span style={{ display: 'block', width: 54, margin: '0 auto 6px' }}><Drawing spec={{ scene: p.scene }} name="" rating="" t={(s) => s} /></span>
+                  <b style={{ display: 'block', fontSize: 13.5, lineHeight: 1.2 }}>{p.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 11.5, marginTop: 3 }}>{p.small}</small>{w && <small style={{ display: 'block', color: C.greenDk, fontSize: 11, fontWeight: 700, marginTop: 5 }}>{w}</small>}
+                </button> })}
+            </div>
+            {plays.has('deal') && (
+              <>
+                <div style={h3}>The deal</div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>What is it?<input type="text" value={dealWhat} onChange={(e) => setDealWhat(e.target.value)} placeholder="Half-price wings and $5 drafts" style={input} /></label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>How much off<input type="text" value={dealOff} onChange={(e) => setDealOff(e.target.value)} placeholder="50% on wings" style={input} /></label>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>It is usually<input type="text" value={dealPrice} onChange={(e) => setDealPrice(e.target.value)} placeholder="$14" style={input} /></label>
+                </div>
+                {breakEven() && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8, lineHeight: 1.4 }}>{breakEven()}</div>}
+                <div style={{ ...rowS, marginTop: 6 }}><span>A word at the counter<small style={sub}>So we can count it: {DAYS[night].toUpperCase()}</small></span><Switch on={dealCode} set={setDealCode} /></div>
+                <div style={rowS}><span>Dine in only<small style={sub}>Keeps the deal off the app margins</small></span><Switch on={dineIn} set={setDineIn} /></div>
+              </>
+            )}
+            {plays.has('night') && <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>A weekly night is its own plan. Finish this one, then Announce an event and pick every week.</div>}
+            {[...plays].some((p) => p !== 'deal') && <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>The idea, in a line<input type="text" value={playWords} onChange={(e) => setPlayWords(e.target.value)} placeholder={plays.has('dish') ? 'A Tuesday-only pho, $12' : plays.has('bundle') ? 'Two mains, two sides, a dessert, $38 to go' : plays.has('stamps') ? 'Double stamps on Tuesdays' : plays.has('tables') ? 'Parties of six get the back room and a free app' : 'Tell us the idea'} style={input} /></label>}
+            <button type="button" onClick={next} disabled={plays.size === 0 || (plays.has('deal') && !dealWhat.trim())} style={{ ...cta_, opacity: plays.size === 0 || (plays.has('deal') && !dealWhat.trim()) ? .5 : 1 }}>Next</button>
+          </div>
         )}
 
         {step === 'ekind' && kind && (
@@ -684,12 +826,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
             {timing === 'at' && <input type="datetime-local" value={atLocal} onChange={(e) => setAtLocal(e.target.value)} style={input} />}
             {timing === 'ready' && madeLater && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>The day after you approve the picture, at your best hour.</div>}
             {isEvent && <div style={h3}>The sequence</div>}
+            {isSlow && <div style={h3}>Every {DAYS[night]}</div>}
+            {isSlow && <div style={rowS}><span>{DAYS[night]} morning post, and a Story that afternoon<small style={sub}>Every week for {weeks || 4} weeks. People decide dinner that afternoon</small></span><Switch on={weekly} set={setWeekly} /></div>}
             {kind.reminder && reminderWhen() && <div style={rowS}><span>{isEvent ? 'Reminder' : 'Remind them'}<small style={sub}>{kind.reminder}</small></span><Switch on={reminder} set={setReminder} /></div>}
             {isEvent && <div style={rowS}><span>Tonight<small style={sub}>A Story the morning of, a post at 4 pm</small></span><Switch on={tonight} set={setTonight} /></div>}
             {isEvent && <div style={rowS}><span>The day after<small style={sub}>Thanks and photos. Ask to come back</small></span><Switch on={after} set={setAfter} /></div>}
             {isEvent && weekly && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Every week: the reminder and the tonight post repeat for the next four weeks. Announce again to extend.</div>}
             {platforms.length > 0 && !isEvent && <div style={rowS}><span>{kind.id === 'hiring' ? 'Post again each week' : 'Post again in a week'}<small style={sub}>{kind.id === 'hiring' ? 'Until it is filled' : 'Most people miss the first one'}</small></span><Switch on={again} set={setAgain} /></div>}
-            <div style={{ ...rowS, borderBottom: boost ? 0 : undefined }}><span>{isEvent ? 'Boost the announcement' : 'Boost it'}<small style={sub}>{boost ? `$${Math.round(boostCents / 100)} reaches about ${(Math.round(boostCents / 100) * REACH_PER_DOLLAR).toLocaleString()} people nearby` : 'Reach more people nearby, after it posts'}</small></span><Switch on={boost} set={setBoost} /></div>
+            <div style={{ ...rowS, borderBottom: boost ? 0 : undefined }}><span>{isSlow ? `Boost on ${DAYS[night]}s` : isEvent ? 'Boost the announcement' : 'Boost it'}<small style={sub}>{boost ? `$${Math.round(boostCents / 100)} reaches about ${(Math.round(boostCents / 100) * REACH_PER_DOLLAR).toLocaleString()} people nearby` : 'Reach more people nearby, after it posts'}</small></span><Switch on={boost} set={setBoost} /></div>
             {boost && <div style={{ display: 'flex', gap: 6, padding: '0 0 11px', borderBottom: `0.5px solid ${C.line}` }}>{[1000, 2000, 4000, 8000].map((c) => <button key={c} type="button" onClick={() => setBoostCents(c)} style={chip(boostCents === c)}>${c / 100}</button>)}</div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             <button type="button" onClick={write} disabled={writing || channels.length === 0 || (timing === 'at' && !postAt)} style={{ ...cta_, opacity: channels.length === 0 || (timing === 'at' && !postAt) ? .5 : 1 }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : null} {writing ? 'Writing' : 'Write it for me'}</button>
@@ -718,6 +862,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
                 <textarea value={reminderText} onChange={(e) => setReminderText(e.target.value.slice(0, 2200))} rows={3} style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.5, fontSize: 13.5 }} />
               </>
             )}
+            {isSlow && tonightText && (
+              <>
+                <div style={h3}>Every {DAYS[night]} morning</div>
+                <textarea value={tonightText} onChange={(e) => setTonightText(e.target.value.slice(0, 2200))} rows={3} style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.5, fontSize: 13.5 }} />
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>Same words every week. Say the day, not the date.</div>
+              </>
+            )}
             {isEvent && tonightText && (
               <>
                 <div style={h3}>Tonight, 4 pm</div>
@@ -731,7 +882,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
               </>
             )}
             <div style={h3}>What should they do?</div>
-            {isEvent ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{GETIN.map((g) => <button key={g.id} type="button" onClick={() => setGetin(g.id)} style={chip(getin === g.id)}>{g.label}</button>)}</div>
+            {isSlow ? <div style={{ fontSize: 13, color: C.mute }}>{dealCode ? `Say ${DAYS[night].toUpperCase()} at the counter` : 'Come in'}</div> : isEvent ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{GETIN.map((g) => <button key={g.id} type="button" onClick={() => setGetin(g.id)} style={chip(getin === g.id)}>{g.label}</button>)}</div>
               : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{CTAS.filter((c) => c.id !== 'order' || ctx?.orderUrl).map((c) => <button key={c.id} type="button" onClick={() => setCta(c.id)} style={chip(ctaEff === c.id)}>{c.label}</button>)}</div>}
             {isEvent && weekly && <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Every week uses the same words. Say the day, not the date.</div>}
             <div style={h3}>Language</div>
