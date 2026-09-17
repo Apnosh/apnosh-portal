@@ -33,7 +33,10 @@ const MAX_COMMENTS = 30
 const MAX_TEXT = 500
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { clientId?: string; caption?: string | null; comments?: Array<{ id?: string; text?: string; author?: string }> }
+  const body = (await req.json().catch(() => ({}))) as { clientId?: string; caption?: string | null; comments?: Array<{ id?: string; text?: string; author?: string }>; all?: boolean }
+  /* Reply now asks for a reply on EVERY comment (owner 2026-09-17: "allow everyone to reply"); the
+     reputation page keeps the judgement call of only answering what asks for one. */
+  const all = body.all === true
   const clientId = body.clientId
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
   const access = await checkClientAccess(clientId)
@@ -51,7 +54,8 @@ export async function POST(req: NextRequest) {
      under a key made from the comment ids, so the second open of a post, or of the Reputation
      section, never waits on the model. A new comment changes the key and reads afresh. */
   const cacheKey = `comment-read:v1:${idsKey(comments.map((c) => c.id))}:${String(body.caption ?? '').length}`
-  const hit = await readCache<{ summary: string; items: CommentReadItem[] }>(clientId, cacheKey)
+  const cacheKeyAll = all ? `${cacheKey}:all` : cacheKey
+  const hit = await readCache<{ summary: string; items: CommentReadItem[] }>(clientId, cacheKeyAll)
   if (hit && hit.ageMs < 24 * 60 * 60_000 && Array.isArray(hit.payload.items)) return NextResponse.json(hit.payload)
 
   const admin = createAdminClient()
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
 For EACH comment give:
 - tone: one of love | question | complaint | neutral | spam. "love" is praise or excitement. "question" asks something the owner should answer. "complaint" is unhappy or a problem. "spam" is bots, self-promotion, or unrelated.
 - why: at most 8 plain words saying what it is about.
-- reply: a warm reply in the owner's own voice, at most 35 words, ONLY when the comment is a question, a complaint, or praise that names something specific worth thanking. Otherwise null.
+- reply: a warm reply in the owner's own voice, at most 35 words, ${all ? 'for EVERY comment except spam (spam gets null): a question gets an answer, a complaint gets care, praise gets a thank-you, a plain emoji or a tag gets a short friendly line' : 'ONLY when the comment is a question, a complaint, or praise that names something specific worth thanking. Otherwise null'}.
 Rules for replies: never promise money, refunds, bookings, times or availability. Never answer allergen, dietary or medical questions; invite them to message or call instead. No hashtags, no emoji unless the comment used them, no corporate phrases.
 Also give a one-sentence summary for the owner, at most 18 words, in plain language, that says what the comments are mostly about.
 Answer with JSON only, exactly: {"summary": string, "items": [{"id": string, "tone": string, "why": string, "reply": string | null}]}`
@@ -91,7 +95,7 @@ Answer with JSON only, exactly: {"summary": string, "items": [{"id": string, "to
         reply: typeof x.reply === 'string' && x.reply.trim() ? x.reply.trim().slice(0, 400) : null,
       }))
     const out = { summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 200) : '', items }
-    await writeCache(clientId, cacheKey, out)
+    await writeCache(clientId, cacheKeyAll, out)
     return NextResponse.json(out)
   } catch (e) {
     /* The owner-facing text is fixed. The vendor's own message goes to the log, where it is

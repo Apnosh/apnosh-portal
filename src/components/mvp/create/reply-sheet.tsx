@@ -58,6 +58,9 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
   const [cSent, setCSent] = useState<Set<string>>(new Set())
   const [cSending, setCSending] = useState<Set<string>>(new Set())
   const [bulk, setBulk] = useState<{ phase: 'writing' | 'sending'; done: number; total: number } | null>(null)
+  /* WHERE: All, or any mix of places. Reviews are Google; comments carry their platform. */
+  const [where, setWhere] = useState<Set<string>>(new Set())
+  const [cWriting, setCWriting] = useState<Set<string>>(new Set())
   const asked = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -74,7 +77,10 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
     return () => { live = false }
   }, [clientId])
 
-  const waiting = useMemo(() => (read?.queue ?? []).filter((q) => !sent.has(q.id) && !skipped.has(q.id)), [read, sent, skipped])
+  const showGoogle = where.size === 0 || where.has('google')
+  const waiting = useMemo(() => (showGoogle ? (read?.queue ?? []) : []).filter((q) => !sent.has(q.id) && !skipped.has(q.id)), [read, sent, skipped, showGoogle])
+  const openComments = useMemo(() => (comments ?? []).filter((c) => !cSent.has(c.id) && (where.size === 0 || where.has(c.platform))), [comments, cSent, where])
+  const places = useMemo(() => { const p = new Map<string, number>(); if (read && read.queue.some((q) => !sent.has(q.id) && !skipped.has(q.id))) p.set('google', read.queue.filter((q) => !sent.has(q.id) && !skipped.has(q.id)).length); for (const c of comments ?? []) if (!cSent.has(c.id)) p.set(c.platform, (p.get(c.platform) ?? 0) + 1); return p }, [read, comments, sent, skipped, cSent])
   const care = useMemo(() => waiting.filter((q) => (q.rating ?? 5) <= 3), [waiting])
   const thanks = useMemo(() => waiting.filter((q) => (q.rating ?? 5) >= 4).sort((a, b) => (a.waitingDays ?? 0) - (b.waitingDays ?? 0)), [waiting])
   const current = care[Math.min(careIndex, Math.max(0, care.length - 1))] ?? null
@@ -103,7 +109,7 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
     if (!comments || !comments.length) return
     const batch = comments.slice(0, 30).filter((c) => !cDrafts[c.id])
     if (!batch.length) return
-    fetch('/api/dashboard/comment-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, caption: '', comments: batch.map((c) => ({ id: c.id, text: c.text, author: c.authorName })) }) })
+    fetch('/api/dashboard/comment-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, caption: '', all: true, comments: batch.map((c) => ({ id: c.id, text: c.text, author: c.authorName })) }) })
       .then((r) => (r.ok ? r.json() : null))
       .then((j: { items?: { id: string; reply: string | null }[] } | null) => { if (!j?.items) return; setCDrafts((d) => { const n = { ...d }; for (const it of j.items!) if (it.reply) n[it.id] = it.reply; return n }) })
       .catch(() => {})
@@ -144,6 +150,17 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
     for (const q of list) { if (got[q.id]?.trim()) await send(q, got[q.id]); done += 1; setBulk({ phase: 'sending', done, total: list.length }) }
     setBulk(null)
   }
+  const writeComment = async (c: CommentRow) => {
+    if (cWriting.has(c.id)) return
+    setCWriting((s) => new Set(s).add(c.id))
+    try {
+      const r = await fetch('/api/dashboard/comment-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, caption: c.postCaption ?? '', all: true, comments: [{ id: c.id, text: c.text, author: c.authorName }] }) })
+      const j = (await (r.ok ? r.json() : null)) as { items?: { id: string; reply: string | null }[] } | null
+      const reply = j?.items?.find((x) => x.id === c.id)?.reply
+      setCDrafts((d) => ({ ...d, [c.id]: reply ?? d[c.id] ?? '' }))
+    } catch { setCDrafts((d) => ({ ...d, [c.id]: d[c.id] ?? '' })) }
+    finally { setCWriting((s) => { const n = new Set(s); n.delete(c.id); return n }) }
+  }
   const sendComment = async (c: CommentRow) => {
     const text = (cDrafts[c.id] ?? '').trim()
     if (!text || cSending.has(c.id) || !c.postId || !c.accountId) return
@@ -163,6 +180,10 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
   if (!mounted) return null
   const cta: React.CSSProperties = { width: '100%', height: 48, borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 15, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
   const chip = (on: boolean): React.CSSProperties => ({ fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${on ? C.ink : C.line}`, background: on ? C.ink : '#fff', color: on ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit' })
+  /* the row under a reply: one small dark pill to send, plain words for the rest */
+  const sendBtn: React.CSSProperties = { height: 34, padding: '0 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 13, font: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }
+  const textBtn: React.CSSProperties = { height: 34, padding: '0 8px', borderRadius: 99, border: 0, background: 'none', color: C.mute, fontWeight: 600, fontSize: 13, font: 'inherit', cursor: 'pointer' }
+  const tweakBtn: React.CSSProperties = { fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, cursor: 'pointer', font: 'inherit' }
   const h3: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '20px 0 8px' }
   const sub: React.CSSProperties = { display: 'block', fontWeight: 500, color: C.mute, fontSize: 12, marginTop: 2 }
   const ta: React.CSSProperties = { display: 'block', width: '100%', marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box', resize: 'none', outline: 'none' }
@@ -195,6 +216,13 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
               {waiting.length === 0 && read.unreachable > 0 && `${read.unreachable} more have no address to reply to yet.`}
             </div>
             {total > 0 && <div style={{ height: 4, borderRadius: 2, background: C.line, marginTop: 12, overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: C.greenDk, transition: 'width .3s' }} /></div>}
+            {places.size > 1 && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 12, overflowX: 'auto' }}>
+                <button type="button" onClick={() => setWhere(new Set())} style={{ ...chip(where.size === 0), flex: 'none' }}>All</button>
+                {[...places.entries()].map(([p, n]) => { const on = where.has(p); const NAME: Record<string, string> = { google: 'Google', instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube' }
+                  return <button key={p} type="button" onClick={() => setWhere((s) => { const x = new Set(s); if (x.has(p)) x.delete(p); else x.add(p); return x })} style={{ ...chip(on), flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}><BrandOrMark provider={p} size={12} /> {NAME[p] ?? p} <span style={{ opacity: .7 }}>{n}</span></button> })}
+              </div>
+            )}
 
             {/* NEEDS CARE: one at a time */}
             {care.length > 0 && current && (
@@ -215,18 +243,18 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                     <div style={{ marginTop: 6, fontSize: 13, color: C.mute, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>{drafting.has(current.id) ? <><Loader2 size={14} className="mvp-spin" /> Writing it in your voice</> : 'No draft yet. Tap a tone below.'}</div>
                   )}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    <button type="button" onClick={() => tweak(current.id, 'winback')} style={chip(false)}>Make it right</button>
-                    <button type="button" onClick={() => tweak(current.id, 'thankful')} style={chip(false)}>Warmer</button>
-                    <button type="button" onClick={() => tweak(current.id, 'short')} style={chip(false)}>Shorter</button>
-                    <button type="button" onClick={() => tweak(current.id, 'professional')} style={chip(false)}>More formal</button>
+                    <button type="button" onClick={() => tweak(current.id, 'winback')} style={tweakBtn}>Make it right</button>
+                    <button type="button" onClick={() => tweak(current.id, 'thankful')} style={tweakBtn}>Warmer</button>
+                    <button type="button" onClick={() => tweak(current.id, 'short')} style={tweakBtn}>Shorter</button>
+                    <button type="button" onClick={() => tweak(current.id, 'professional')} style={tweakBtn}>More formal</button>
                   </div>
                   {errs[current.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 8 }}>{errs[current.id]}</div>}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button type="button" onClick={async () => { const ok = await send(current); if (ok) setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} disabled={!drafts[current.id]?.trim() || sending.has(current.id)} style={{ ...cta, height: 44, flex: 1, opacity: !drafts[current.id]?.trim() || sending.has(current.id) ? .5 : 1 }}>{sending.has(current.id) ? <Loader2 size={14} className="mvp-spin" /> : <Check size={15} strokeWidth={3} />} Send</button>
-                    <button type="button" onClick={() => { setSkipped((s) => new Set(s).add(current.id)); setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} style={{ ...cta, height: 44, width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>Skip</button>
-                    {care.length > 1 && <button type="button" onClick={() => setCareIndex((i) => (i + 1) % care.length)} style={{ ...cta, height: 44, width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>Next</button>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 12 }}>
+                    <button type="button" onClick={async () => { const ok = await send(current); if (ok) setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} disabled={!drafts[current.id]?.trim() || sending.has(current.id)} style={{ ...sendBtn, opacity: !drafts[current.id]?.trim() || sending.has(current.id) ? .5 : 1 }}>{sending.has(current.id) ? <Loader2 size={13} className="mvp-spin" /> : <Check size={13} strokeWidth={3} />} Send</button>
+                    <button type="button" onClick={() => { setSkipped((s) => new Set(s).add(current.id)); setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} style={textBtn}>Skip</button>
+                    {care.length > 1 && <button type="button" onClick={() => setCareIndex((i) => (i + 1) % care.length)} style={textBtn}>Next</button>}
+                    <a href={`/dashboard/reviews/${current.id}`} style={{ marginLeft: 'auto', fontSize: 12, color: C.faint, textDecoration: 'none' }}>Open</a>
                   </div>
-                  <a href={`/dashboard/reviews/${current.id}`} style={{ display: 'block', textAlign: 'center', marginTop: 10, fontSize: 12, color: C.mute, textDecoration: 'none' }}>Open the full page</a>
                 </div>
               </>
             )}
@@ -250,10 +278,10 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                           {q.text && <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{q.text}</div>}
                           {d != null ? <textarea value={d} onChange={(e) => setDrafts((x) => ({ ...x, [q.id]: e.target.value }))} rows={4} style={ta} /> : <div style={{ fontSize: 13, color: C.mute, padding: '10px 0', display: 'flex', gap: 8, alignItems: 'center' }}>{drafting.has(q.id) ? <><Loader2 size={14} className="mvp-spin" /> Writing</> : 'Written when you send'}</div>}
                           {errs[q.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[q.id]}</div>}
-                          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                            <button type="button" onClick={() => send(q)} disabled={!d?.trim() || sending.has(q.id)} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 6, opacity: !d?.trim() || sending.has(q.id) ? .5 : 1 }}>{sending.has(q.id) ? <Loader2 size={12} className="mvp-spin" /> : <Check size={12} strokeWidth={3} />} Send this one</button>
-                            <button type="button" onClick={() => tweak(q.id, 'short')} style={chip(false)}>Shorter</button>
-                            <button type="button" onClick={() => setSkipped((s) => new Set(s).add(q.id))} style={chip(false)}>Skip</button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                            <button type="button" onClick={() => send(q)} disabled={!d?.trim() || sending.has(q.id)} style={{ ...sendBtn, opacity: !d?.trim() || sending.has(q.id) ? .5 : 1 }}>{sending.has(q.id) ? <Loader2 size={13} className="mvp-spin" /> : <Check size={13} strokeWidth={3} />} Send</button>
+                            <button type="button" onClick={() => tweak(q.id, 'short')} style={textBtn}>Shorter</button>
+                            <button type="button" onClick={() => setSkipped((s) => new Set(s).add(q.id))} style={textBtn}>Skip</button>
                           </div>
                         </div>
                       )}
@@ -267,20 +295,21 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
               </>
             )}
 
-            {comments && comments.filter((c) => !cSent.has(c.id)).length > 0 && (
+            {openComments.length > 0 && (
               <>
-                <div style={h3}>Comments on your posts</div>
-                {comments.filter((c) => !cSent.has(c.id)).slice(0, 10).map((c) => {
-                  const d = cDrafts[c.id]; const busy = cSending.has(c.id)
+                <div style={{ ...h3, display: 'flex', justifyContent: 'space-between' }}><span>Comments on your posts</span><span style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600 }}>{openComments.length}</span></div>
+                {openComments.slice(0, 12).map((c) => {
+                  const d = cDrafts[c.id]; const busy = cSending.has(c.id); const writing = cWriting.has(c.id)
                   return (
                     <div key={c.id} style={{ borderTop: `0.5px solid ${C.line}`, padding: '10px 0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BrandOrMark provider={c.platform} size={14} /><b style={{ fontSize: 13.5 }}>{c.authorName}</b></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BrandOrMark provider={c.platform} size={14} /><b style={{ fontSize: 13.5 }}>{c.authorName}</b>{c.postCaption && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>on: {c.postCaption.slice(0, 40)}</span>}</div>
                       <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 4 }}>{c.text}</div>
-                      {d != null ? <textarea value={d} onChange={(e) => setCDrafts((x) => ({ ...x, [c.id]: e.target.value }))} rows={2} style={ta} /> : <div style={{ fontSize: 12.5, color: C.mute, padding: '6px 0' }}>No reply needed, or none drafted yet.</div>}
+                      <textarea value={d ?? ''} onChange={(e) => setCDrafts((x) => ({ ...x, [c.id]: e.target.value }))} rows={2} placeholder={writing ? 'Writing it in your voice' : 'Write a reply, or tap Write it for me'} style={ta} />
                       {errs[c.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[c.id]}</div>}
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                        <button type="button" onClick={() => sendComment(c)} disabled={!d?.trim() || busy} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 6, opacity: !d?.trim() || busy ? .5 : 1 }}>{busy ? <Loader2 size={12} className="mvp-spin" /> : <Check size={12} strokeWidth={3} />} Send</button>
-                        <button type="button" onClick={() => setCSent((s) => new Set(s).add(c.id))} style={chip(false)}>Skip</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+                        <button type="button" onClick={() => sendComment(c)} disabled={!d?.trim() || busy} style={{ ...sendBtn, opacity: !d?.trim() || busy ? .5 : 1 }}>{busy ? <Loader2 size={13} className="mvp-spin" /> : <Check size={13} strokeWidth={3} />} Send</button>
+                        <button type="button" onClick={() => writeComment(c)} disabled={writing} style={textBtn}>{writing ? 'Writing' : d?.trim() ? 'Again' : 'Write it for me'}</button>
+                        <button type="button" onClick={() => setCSent((s) => new Set(s).add(c.id))} style={textBtn}>Skip</button>
                       </div>
                     </div>
                   )
