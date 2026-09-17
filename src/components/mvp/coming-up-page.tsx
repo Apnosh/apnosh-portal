@@ -20,7 +20,9 @@ import { gradOf } from './hues'
 
 interface Post { id: string; content: string; status: string; scheduledFor: string | null; platforms: string[]; mediaUrl: string | null; failure: string | null }
 interface Draft { id: string; idea: string; status: string; platforms: string[]; wantedFor: string | null }
-interface Data { waiting: Post[]; failed: Post[]; sent: Post[]; withTeam: Draft[]; error: string | null }
+interface PlanLine { key: string; label: string; detail: string; date: string | null; cost: number | null; status: string; ref: { kind: string; id: string | null; href?: string } | null }
+interface Plan { id: string; kind: string; name: string; lines: PlanLine[] }
+interface Data { waiting: Post[]; failed: Post[]; sent: Post[]; withTeam: Draft[]; plans?: Plan[]; error: string | null }
 
 const RED = '#ec1528', AMBER = '#9a6b17', BLUE = '#3b6fd4'
 const NAME: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', google: 'Google', gbp: 'Google', x: 'X', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' }
@@ -103,8 +105,10 @@ export default function ComingUpPage() {
   const countOn = (d: Date) => (data?.waiting ?? []).filter((p) => dayKey(p.scheduledFor) === localKey(d)).length
   const byDay = new Map<string, Post[]>()
   for (const p of [...(data?.waiting ?? [])].sort((a, b) => String(a.scheduledFor ?? '9').localeCompare(String(b.scheduledFor ?? '9')))) { const k = dayKey(p.scheduledFor); byDay.set(k, [...(byDay.get(k) ?? []), p]) }
-  const total = (data?.waiting.length ?? 0) + (data?.withTeam.length ?? 0)
-  const empty = data && data.waiting.length === 0 && data.failed.length === 0 && data.withTeam.length === 0
+  const plans = data?.plans ?? []
+  const total = (data?.waiting.length ?? 0) + (data?.withTeam.length ?? 0) + plans.reduce((n, p) => n + p.lines.length, 0)
+  const empty = data && data.waiting.length === 0 && data.failed.length === 0 && data.withTeam.length === 0 && plans.length === 0
+  const shortDay = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso.slice(0, 10) + 'T12:00:00'); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }) }
 
   return (
     <MvpShell active="home" title="Coming up" back="/dashboard/insights" backExact>
@@ -194,6 +198,28 @@ export default function ComingUpPage() {
                   </div>
                 </div>
               ) })}
+          </>
+        )}
+
+        {/* announcements: the plan lines that are not posts — the picture being made, the menus, the email, the Pay link */}
+        {plans.length > 0 && (
+          <>
+            <H>Announcements</H>
+            {plans.map((p) => (
+              <div key={p.id} style={{ padding: '12px 0', borderTop: `0.5px solid ${C.line}` }}>
+                <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600 }}>{p.name}</div>
+                {p.lines.map((l) => (
+                  <div key={l.key} style={{ display: 'flex', gap: 12, padding: '8px 0 0', alignItems: 'flex-start' }}>
+                    <span style={{ width: 54, flex: 'none', fontSize: 12, fontWeight: 700, color: C.mute, paddingTop: 1 }}>{shortDay(l.date)}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{l.label}</span>
+                      <span style={{ display: 'block', fontSize: 12.5, color: C.mute, lineHeight: 1.4, marginTop: 1 }}>{l.detail}</span>
+                    </span>
+                    {l.ref?.href && <Link href={l.ref.href} style={{ fontSize: 12.5, fontWeight: 700, color: l.status === 'needs_payment' ? AMBER : C.greenDk, textDecoration: 'none', whiteSpace: 'nowrap' }}>{l.status === 'needs_payment' ? 'Pay to start' : 'Open'}</Link>}
+                  </div>
+                ))}
+              </div>
+            ))}
           </>
         )}
 

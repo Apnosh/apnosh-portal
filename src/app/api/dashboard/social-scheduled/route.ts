@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createAdminClient()
-  const [postsR, draftsR] = await Promise.allSettled([
+  const [postsR, draftsR, plansR] = await Promise.allSettled([
     listScheduledPosts(clientId, 50),
     admin.from('content_drafts')
       .select('id, idea, caption, status, target_platforms, target_publish_date, created_at')
@@ -39,6 +39,15 @@ export async function GET(req: NextRequest) {
       .in('status', ['idea', 'draft', 'revising', 'approved'])
       .order('created_at', { ascending: false })
       .limit(20),
+    /* Announcements (Create → Announce): the plan lines that are not a post or a draft above —
+       the graphic being made, the menu update, the email, the table tent, the Pay link. Best
+       effort: before migration 267 the table is missing and this is simply empty. */
+    admin.from('announcements')
+      .select('id, kind, answers, plan, status, created_at')
+      .eq('client_id', clientId)
+      .in('status', ['planned', 'in_progress'])
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
 
   const all = postsR.status === 'fulfilled' ? postsR.value : []
@@ -58,9 +67,18 @@ export async function GET(req: NextRequest) {
     }))
     : []
 
+  type Line = { key: string; label: string; detail: string; date: string | null; cost: number | null; status: string; ref: { kind: string; id: string | null; href?: string } | null }
+  const plans = plansR.status === 'fulfilled' && !plansR.value.error
+    ? (plansR.value.data ?? []).map((r: Record<string, unknown>) => {
+      const answers = (r.answers ?? {}) as Record<string, unknown>
+      const lines = (Array.isArray(r.plan) ? (r.plan as Line[]) : []).filter((l) => l && l.status !== 'done' && l.ref?.kind !== 'post' && l.ref?.kind !== 'draft' && l.ref?.kind !== 'gbp')
+      return { id: String(r.id), kind: String(r.kind), name: String(answers.what ?? '').slice(0, 80) || 'An announcement', lines }
+    }).filter((p) => p.lines.length > 0)
+    : []
+
   return NextResponse.json(
     {
-      waiting, failed, sent, withTeam,
+      waiting, failed, sent, withTeam, plans,
       /* Say so rather than showing an empty list as if it were the truth. */
       error: postsR.status === 'rejected'
         ? (postsR.reason instanceof Error ? postsR.reason.message : 'Could not reach your accounts')

@@ -481,6 +481,10 @@ export async function createPost(clientId: string, args: {
    *  LinkedIn reads as a paragraph and Instagram as a line and a wall of tags,
    *  and one caption cannot be both. */
   perPlatform?: Record<string, string>
+  /** A Story instead of a feed post, on Instagram and Facebook only (the vendor's
+   *  contentType enum: Instagram ['story'], Facebook ['story','reel']). One media
+   *  item, gone in 24 hours, the caption is not shown. */
+  story?: boolean
   /** Stamped on the vendor's copy of the post so a post we sent is
    *  distinguishable from one the owner made in the app. Without it, every
    *  usage question about this feature is unanswerable -- which is exactly the
@@ -523,6 +527,9 @@ export async function createPost(clientId: string, args: {
       const per: Record<string, unknown> = {}
       if (t.platform === 'instagram' && Object.keys(igExtras).length) per.platformSpecificData = igExtras
       if (t.platform === 'facebook' && args.firstComment?.trim()) per.platformSpecificData = { firstComment: args.firstComment.trim() }
+      if (args.story && (t.platform === 'instagram' || t.platform === 'facebook')) {
+        per.platformSpecificData = { ...((per.platformSpecificData as Record<string, unknown> | undefined) ?? {}), contentType: 'story' }
+      }
       if (t.platform === 'tiktok' && args.tiktokDraft) per.platformSpecificData = { draft: true }
       const own = args.perPlatform?.[t.platform]?.trim()
       if (own && own !== content) per.customContent = own

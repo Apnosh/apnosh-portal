@@ -1062,7 +1062,7 @@ export default function CreatePage() {
         {view.name === 'product' && product(view.id)}
       </div>
       {filterSheetUI}
-      {announcing && clientId && <AnnounceSheet clientId={clientId} onClose={() => setAnnouncing(false)} />}
+      {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} onClose={() => setAnnouncing(false)} />}
       {view.name !== 'browse' && view.name !== 'product' && (
         <button type="button" onClick={back} aria-label={T('Back')} style={{ display: 'none' }}><ChevronLeft /></button>
       )}

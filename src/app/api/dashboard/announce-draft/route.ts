@@ -19,10 +19,11 @@ export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'ope
 const KINDS: readonly AnnounceKind[] = ['dish', 'hours', 'deal', 'event', 'hiring', 'open', 'holiday', 'else']
 
 const SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['social', 'google'],
+  type: 'object', additionalProperties: false, required: ['social', 'google', 'card'],
   properties: {
-    social: { type: 'string', description: 'The caption for Instagram and Facebook: 1 to 3 short sentences, warm, plain, in the business voice. No hashtags, no emoji unless the owner used one, no em dashes. Never invent a price, time, date or claim not in the facts.' },
+    social: { type: 'string', description: 'The caption for Instagram and Facebook: 1 to 3 short sentences, warm, plain, in the business voice, ending with the call to action given. No hashtags, no emoji unless the owner used one, no em dashes. Never invent a price, time, date or claim not in the facts. If a second language is asked for, write the English, a blank line, then the same in that language.' },
     google: { type: 'string', description: 'The same news as a Google Business post: 1 to 2 sentences, under 280 characters, no URLs, no phone numbers, no em dashes. Empty string if Google is not among the channels.' },
+    card: { type: 'string', description: 'A card for the restaurant staff, 3 to 5 short lines, plain: what it is, how to describe it to a guest in one sentence, the price if given, anything to know (allergens, when it runs, where it is available). Empty string if not asked for.' },
   },
 }
 
@@ -50,7 +51,7 @@ function plain(kind: AnnounceKind, a: Record<string, string>, name: string): { s
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { clientId?: string; kind?: string; answers?: Record<string, unknown>; channels?: string[] }
+  const body = (await req.json().catch(() => ({}))) as { clientId?: string; kind?: string; answers?: Record<string, unknown>; channels?: string[]; cta?: string; languages?: string[]; card?: boolean }
   const clientId = body.clientId
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
   const access = await checkClientAccess(clientId)
@@ -60,6 +61,10 @@ export async function POST(req: NextRequest) {
   for (const [k, v] of Object.entries(body.answers ?? {})) if (typeof v === 'string' && v.trim()) answers[k] = clean(v, 300)
   const channels = (Array.isArray(body.channels) ? body.channels : []).map(String)
   const wantsGoogle = channels.includes('google')
+  const CTA: Record<string, string> = { order: 'Order online', visit: 'Come in', reserve: 'Book a table', message: 'Send us a message' }
+  const cta = CTA[String(body.cta ?? '')] ?? ''
+  const languages = (Array.isArray(body.languages) ? body.languages : []).map(String).filter((l) => /^[a-z]{2}$/.test(l) && l !== 'en')
+  const wantsCard = body.card === true
 
   const admin = createAdminClient()
   const { data: row } = await admin.from('clients').select('name').eq('id', clientId).maybeSingle()
@@ -68,9 +73,12 @@ export async function POST(req: NextRequest) {
 
   const facts = Object.entries(answers).map(([k, v]) => `${k}: ${v}`).join('\n')
   const system = `You write short announcements for ${name}, a local restaurant, in the owner's own warm, plain voice. Use ONLY the facts given. Never add a price, a date, a time, an address, a claim or an offer that is not in the facts. Plain sentences a 5th grader understands. No hashtags. No em dashes. Never mention AI.`
-  const user = `Kind of announcement: ${kind}\nFacts from the owner:\n${facts || '(none)'}\nChannels: ${channels.join(', ') || 'social'}\n\nWrite the social caption${wantsGoogle ? ' and the Google post' : ''}.`
-  const ai = await callStructuredOutput<{ social?: string; google?: string }>({ system, user, schema: SCHEMA, maxTokens: 500, timeoutMs: 15000, tag: { kind: 'announce-draft', clientId, schemaName: 'announce' } })
-  const social = clean(ai?.social) || fallback.social
+  const LANG: Record<string, string> = { es: 'Spanish', vi: 'Vietnamese', zh: 'Chinese', ko: 'Korean', fr: 'French', tl: 'Tagalog' }
+  const user = `Kind of announcement: ${kind}\nFacts from the owner:\n${facts || '(none)'}\nChannels: ${channels.join(', ') || 'social'}${cta ? `\nCall to action to end on: ${cta}` : ''}${languages.length ? `\nAlso write the caption in: ${languages.map((l) => LANG[l] ?? l).join(', ')}` : ''}\n\nWrite the social caption${wantsGoogle ? ' and the Google post' : ''}${wantsCard ? ' and the staff card' : ''}.`
+  const ai = await callStructuredOutput<{ social?: string; google?: string; card?: string }>({ system, user, schema: SCHEMA, maxTokens: 800, timeoutMs: 15000, tag: { kind: 'announce-draft', clientId, schemaName: 'announce' } })
+  const keepLines = (s: unknown, max: number) => String(s ?? '').replace(/—|–/g, ',').replace(/[ \t]+/g, ' ').trim().slice(0, max)
+  const social = keepLines(ai?.social, 2000) || fallback.social
   const google = wantsGoogle ? (clean(ai?.google, 280).replace(/https?:\/\/\S+/g, '').trim() || fallback.google) : ''
-  return NextResponse.json({ social, google, source: ai ? 'ai' : 'plain' })
+  const card = wantsCard ? (keepLines(ai?.card, 900) || [answers.what, answers.line, answers.price ? `Price: ${answers.price}` : '', answers.tags ? `Good to know: ${answers.tags}` : ''].filter(Boolean).join('\n')) : ''
+  return NextResponse.json({ social, google, card, source: ai ? 'ai' : 'plain' })
 }

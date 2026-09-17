@@ -175,6 +175,8 @@ export async function POST(req: NextRequest) {
     tagged?: string[]
     tagLocation?: boolean
     tiktokDraft?: boolean
+    /** a Story on Instagram and Facebook: one photo or video, 24 hours, no caption shown */
+    story?: boolean
     /** platform -> its own caption, for the platforms that need a different one */
     perPlatform?: Record<string, string>
   }
@@ -288,6 +290,7 @@ export async function POST(req: NextRequest) {
     /* Sanitised once and used for both the send and the record, so what we log
        is exactly what we sent. */
     const media = Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : []
+    if (body.story === true && media.length !== 1) return NextResponse.json({ error: 'A Story is one photo or one video.' }, { status: 400 })
 
     const r = await createPost(clientId, {
       content: content ?? '',
@@ -299,6 +302,7 @@ export async function POST(req: NextRequest) {
       tagged: handles(body.tagged).slice(0, 20),
       locationId: body.tagLocation ? ownPage : null,
       tiktokDraft: body.tiktokDraft === true,
+      story: body.story === true,
       perPlatform,
       /* Stamped on the vendor's copy so a post we sent is tellable from one the
          owner made in the app. */
