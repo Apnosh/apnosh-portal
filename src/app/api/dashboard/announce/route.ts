@@ -37,7 +37,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type Mode = 'own' | 'graphic' | 'video' | 'shoot' | 'nextshoot' | 'words'
-type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours'
+type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
 /** what the print line makes, per kind */
 const PRINT: Record<string, string> = { dish: 'Table tent', deal: 'Flyer', event: 'Poster', hours: 'Door sign', open: 'Banner', holiday: 'Menu insert', hiring: 'Window sign', else: 'Flyer' }
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
   const accountIds = (Array.isArray(body.places?.accountIds) ? body.places!.accountIds : []).filter((x): x is string => typeof x === 'string').slice(0, 10)
   const wantsGoogle = body.places?.google === true
   const wantsStory = body.places?.story === true
-  const also = (Array.isArray(body.places?.also) ? body.places!.also : []).filter((x): x is Also => ['gmenu', 'sitemenu', 'ordering', 'apps', 'email', 'print', 'team', 'ghours'].includes(String(x)))
+  const also = (Array.isArray(body.places?.also) ? body.places!.also : []).filter((x): x is Also => ['gmenu', 'sitemenu', 'ordering', 'apps', 'email', 'print', 'team', 'ghours', 'fbevent', 'sitepage', 'creators'].includes(String(x)))
   const tz = clean(body.timing?.timezone, 60) || 'America/Los_Angeles'
   const atIso = typeof body.timing?.at === 'string' && !Number.isNaN(Date.parse(body.timing.at)) ? new Date(body.timing.at).toISOString() : null
   const postNow = !atIso || Date.parse(atIso) <= Date.now() + 60_000
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
   const extras: Extra[] = (Array.isArray(body.timing?.reminders) ? body.timing!.reminders as unknown[] : [])
     .map((x) => x as Record<string, unknown>)
     .filter((x) => x && typeof x.at === 'string' && !Number.isNaN(Date.parse(String(x.at))) && Date.parse(String(x.at)) > Date.now())
-    .slice(0, 4)
+    .slice(0, 12)
     .map((x) => ({ key: clean(x.key, 20) || 'extra', label: clean(x.label, 60) || 'Another post', detail: clean(x.detail, 120), at: new Date(String(x.at)).toISOString(), text: clean(x.text, 2200), story: x.story === true }))
   const madeLater = mode === 'graphic' || mode === 'video' || mode === 'shoot' || mode === 'nextshoot'
   const postDay = day(atIso ?? new Date().toISOString())
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
   /* ── the picture ── */
   let requestId: string | null = null
   const attachments = media.map((url, i) => ({ url, name: `photo-${i + 1}` }))
-  const facts = [a.line, a.doing, a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
+  const facts = [a.line, a.doing, a.kindOfNight ? `Kind: ${a.kindOfNight}` : '', a.getin ? `Getting in: ${a.getin}` : '', a.who ? `With ${a.who}` : '', a.weekly ? 'Every week' : '', a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
   if (mode === 'graphic') {
     const dests: string[] = []
     const destLabels: string[] = []
@@ -366,6 +366,23 @@ export async function POST(req: NextRequest) {
     const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: hoursDue, answers: { what, when: whenWord(hoursDue) } })
     if (r.ok) plan.push({ key: 'ghours', label: kind === 'open' ? 'Marked open everywhere' : googleHoursDone ? 'Hours on the website and apps' : 'Hours updated everywhere', detail: where.charAt(0).toUpperCase() + where.slice(1), date: hoursDue, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     else errors.push(`The hours update did not send: ${r.error}`)
+  }
+  /* an event's own lines: the Facebook Event, the events page, two creators at the table. Team work, no rail yet. */
+  const eventWhen = [a.when, a.time].filter(Boolean).join(' at ')
+  if (also.includes('fbevent')) {
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, attachments, answers: { what: `Make a Facebook Event for ${name}${eventWhen ? `, ${eventWhen}` : ''}${a.weekly ? ', every week' : ''}. ${facts}${social ? ` Use these words: ${social}` : ''}`.trim(), when: whenWord(postDay) } })
+    if (r.ok) plan.push({ key: 'fbevent', label: 'Facebook Event', detail: 'The team makes it. Going spreads it', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`The Facebook Event did not send: ${r.error}`)
+  }
+  if (also.includes('sitepage')) {
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, attachments, answers: { what: `Add ${name} to the website events page${eventWhen ? `: ${eventWhen}` : ''}${a.weekly ? ', every week' : ''}. ${facts}`.trim(), when: whenWord(postDay) } })
+    if (r.ok) plan.push({ key: 'sitepage', label: 'Website events page', detail: 'Added with the date and the link', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`The events page did not send: ${r.error}`)
+  }
+  if (also.includes('creators')) {
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: d.when ?? postDay, attachments, answers: { what: `Invite two local food creators to ${name}${eventWhen ? `, ${eventWhen}` : ''}, comped. ${facts}`.trim(), when: whenWord(d.when ?? postDay) } })
+    if (r.ok) plan.push({ key: 'creators', label: 'Two creators invited', detail: 'Comped seats, they post from the room', date: d.when ?? postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`The creator invite did not send: ${r.error}`)
   }
   if (also.includes('ordering')) {
     const r = await createCreativeRequest({ clientId, userId, type: 'other', due_date: postDay, attachments, answers: { what: `Add ${name}${a.price ? ` (${a.price})` : ''} to online ordering so the Order online button works from day one. ${a.line ?? ''}`.trim(), when: whenWord(postDay) } })
