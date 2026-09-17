@@ -24,7 +24,7 @@ export async function draftReviewReply(admin: ReturnType<typeof createAdminClien
   const tone: string = TONES[toneIn] ? toneIn : 'thankful'
   const { data: r } = await admin
     .from('reviews')
-    .select('client_id, author_name, rating, review_text, source')
+    .select('client_id, author_name, rating, review_text, source, posted_at')
     .eq('id', reviewId)
     .maybeSingle()
   if (!r) return { error: 'Review not found', status: 404 as const }
@@ -63,6 +63,10 @@ export async function draftReviewReply(admin: ReturnType<typeof createAdminClien
   const rating = Number(r.rating ?? 0)
   const source = (r.source as string) ?? 'google'
 
+  /* A reply to a review from two years ago that reads as if it came in this morning is a tell.
+     Say, briefly, that it took a while, then answer it properly. */
+  const ageDays = r.posted_at ? Math.round((Date.now() - Date.parse(String(r.posted_at))) / 86400000) : 0
+  const lateLine = ageDays > 60 ? `- This review is ${ageDays > 365 ? 'more than a year' : ageDays > 180 ? 'several months' : 'a couple of months'} old. Say once, briefly and without excuses, that the reply is late (for example "sorry this reply is late"), then answer the review itself as if it matters today, because it still does to the next reader.` : ''
   const greet = first
     ? `- Greet ${first} by name where it feels natural, and thank them.`
     : `- The reviewer left no name, so do not invent or use a name. Open warmly (like "Hi there" or "Thank you so much") and thank them.`
@@ -90,7 +94,7 @@ export async function draftReviewReply(admin: ReturnType<typeof createAdminClien
   const system = `You are the owner of ${businessName}, a ${category}, writing a PUBLIC reply to a customer review on ${source}. Write in the owner's own voice: ${TONES[tone]}.
 Rules:
 ${greet}
-${voiceLines ? voiceLines + '\n' : ''}- For a positive review (4 or 5 stars), be warm and specific, and invite them back.
+${lateLine ? lateLine + '\n' : ''}${voiceLines ? voiceLines + '\n' : ''}- For a positive review (4 or 5 stars), be warm and specific, and invite them back.
 - For a critical review (3 stars or fewer), take it seriously, apologize where fair, and offer to make it right. Never be defensive.
 - REPLY IN THE LANGUAGE THE REVIEW IS WRITTEN IN. If they wrote in Spanish, answer in Spanish; the same for any other language. A guest who writes in their own language and is answered in English has been answered by a machine. Match their register too: usted or tu as they addressed you.
 - No em dashes. Short, plain sentences. Sound like a real person, not a form letter.

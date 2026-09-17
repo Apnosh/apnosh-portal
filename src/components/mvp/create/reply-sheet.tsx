@@ -1,16 +1,19 @@
 'use client'
 /**
- * REPLY NOW (owner 2026-09-17, the corrected order: promise-keepers first).
- * =====================================================================
- * Everything waiting for a reply, worst first, with a real draft on each in the owner's voice.
- * Fix any, send one, or send all the drafted ones. One switch keeps the five-star replies
- * going every day without them. Reviews post to Google through the reply rail; comments post
- * through the social rail. Nothing is canned: a review with no draft yet says so and drafts
- * on the way in.
+ * REPLY NOW, refined (owner 2026-09-17: "what would people actually want").
+ * ========================================================================
+ * Two kinds of review, two kinds of attention.
+ *   NEEDS CARE   three stars and under. One at a time, the whole review, a draft that takes it
+ *                seriously, three quick tweaks (warmer, shorter, more formal), Send or Skip.
+ *   SAY THANKS   four and five stars. A compact list, every one drafted in your voice, one
+ *                button sends them all. Tap any to read or change it first.
+ * Old reviews are answered as old: the draft says the reply is late, once, then answers.
+ * Comments on posts underneath. A daily rule at the bottom. A progress line at the top so it
+ * feels like finishing something, because it is.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Loader2, X, Star, RefreshCw } from 'lucide-react'
+import { Check, ChevronDown, Loader2, X, Star } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { cachedComments, loadComments, type CommentRow } from '../mvp-inbox'
 import { BrandOrMark } from '../mvp-insights'
@@ -18,8 +21,8 @@ import { BrandOrMark } from '../mvp-insights'
 interface Queued { id: string; rating: number | null; author: string; text: string; postedAt: string | null; waitingDays: number | null }
 interface QueueRead { queue: Queued[]; total: number; replied: number; critical: number; longestWaitDays: number | null; unreachable: number; average: number | null; headline: string }
 type Tone = 'thankful' | 'winback' | 'professional' | 'short'
-const TONES: { id: Tone; label: string }[] = [{ id: 'thankful', label: 'Warm' }, { id: 'winback', label: 'Make it right' }, { id: 'professional', label: 'Polished' }, { id: 'short', label: 'Short' }]
-const BATCH = 6
+const BATCH = 8
+const age = (days: number | null) => (days == null ? '' : days < 1 ? 'today' : days < 30 ? `${days}d ago` : days < 365 ? `${Math.round(days / 30)}mo ago` : `${Math.round(days / 365)}y ago`)
 
 export default function ReplySheet({ clientId, onClose }: { clientId: string; onClose: () => void }) {
   const [mounted, setMounted] = useState(false)
@@ -41,23 +44,22 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
 
   const [read, setRead] = useState<QueueRead | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)
-  const [tone, setTone] = useState<Tone>('thankful')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [drafting, setDrafting] = useState<Set<string>>(new Set())
   const [sent, setSent] = useState<Set<string>>(new Set())
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState<Set<string>>(new Set())
   const [errs, setErrs] = useState<Record<string, string>>({})
-  const [shown, setShown] = useState(BATCH)
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const [careIndex, setCareIndex] = useState(0)
   const [rule, setRule] = useState<{ enabled: boolean; available: boolean } | null>(null)
-  const [comments, setComments] = useState<CommentRow[] | null>(() => null)
+  const [comments, setComments] = useState<CommentRow[] | null>(null)
   const [cDrafts, setCDrafts] = useState<Record<string, string>>({})
   const [cSent, setCSent] = useState<Set<string>>(new Set())
   const [cSending, setCSending] = useState<Set<string>>(new Set())
-  const [sendingAll, setSendingAll] = useState(false)
+  const [bulk, setBulk] = useState<{ phase: 'writing' | 'sending'; done: number; total: number } | null>(null)
   const asked = useRef<Set<string>>(new Set())
 
-  /* the queue: every unanswered Google review we hold an address for, worst first */
   useEffect(() => {
     let live = true
     fetch(`/api/dashboard/reviews/queue?clientId=${clientId}`, { cache: 'no-store' })
@@ -73,23 +75,30 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
   }, [clientId])
 
   const waiting = useMemo(() => (read?.queue ?? []).filter((q) => !sent.has(q.id) && !skipped.has(q.id)), [read, sent, skipped])
-  const visible = waiting.slice(0, shown)
+  const care = useMemo(() => waiting.filter((q) => (q.rating ?? 5) <= 3), [waiting])
+  const thanks = useMemo(() => waiting.filter((q) => (q.rating ?? 5) >= 4).sort((a, b) => (a.waitingDays ?? 0) - (b.waitingDays ?? 0)), [waiting])
+  const current = care[Math.min(careIndex, Math.max(0, care.length - 1))] ?? null
 
-  /* drafts arrive in batches for what is on screen, in the tone picked; a tone change redrafts */
+  /* drafts: the one in front, its two neighbours, and the first thank-yous, in the tone each kind wants */
+  const draftMany = async (ids: string[], tone: Tone, fresh = false) => {
+    if (!ids.length) return
+    setDrafting((s) => { const n = new Set(s); for (const id of ids) n.add(id); return n })
+    try {
+      const r = await fetch('/api/dashboard/reviews/draft-many', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, reviewIds: ids, tone, fresh }) })
+      const j = (await (r.ok ? r.json() : { drafts: {} })) as { drafts?: Record<string, string> }
+      setDrafts((d) => ({ ...d, ...(j.drafts ?? {}) }))
+    } catch { /* the card says no draft yet */ }
+    finally { setDrafting((s) => { const n = new Set(s); for (const id of ids) n.delete(id); return n }) }
+  }
   useEffect(() => {
-    const need = visible.filter((q) => !drafts[q.id] && !asked.current.has(`${q.id}:${tone}`)).slice(0, BATCH)
-    if (!need.length) return
-    for (const q of need) asked.current.add(`${q.id}:${tone}`)
-    setDrafting((s) => { const n = new Set(s); for (const q of need) n.add(q.id); return n })
-    fetch('/api/dashboard/reviews/draft-many', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, reviewIds: need.map((q) => q.id), tone }) })
-      .then((r) => (r.ok ? r.json() : { drafts: {} }))
-      .then((j: { drafts?: Record<string, string> }) => { setDrafts((d) => ({ ...d, ...(j.drafts ?? {}) })) })
-      .catch(() => {})
-      .finally(() => setDrafting((s) => { const n = new Set(s); for (const q of need) n.delete(q.id); return n }))
-  }, [visible, tone, drafts, clientId])
-  const changeTone = (t: Tone) => { setTone(t); setDrafts({}); asked.current.clear() }
+    const needCare = care.slice(careIndex, careIndex + 3).filter((q) => !drafts[q.id] && !asked.current.has(q.id)).map((q) => q.id)
+    const needThanks = thanks.slice(0, BATCH).filter((q) => !drafts[q.id] && !asked.current.has(q.id)).map((q) => q.id)
+    for (const id of [...needCare, ...needThanks]) asked.current.add(id)
+    if (needCare.length) draftMany(needCare, 'winback')
+    if (needThanks.length) draftMany(needThanks, 'thankful')
+  }, [care, thanks, careIndex, drafts]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tweak = (id: string, tone: Tone) => { setDrafts((d) => { const n = { ...d }; delete n[id]; return n }); draftMany([id], tone, true) }
 
-  /* comment drafts, read in one batch the way the reputation page does */
   useEffect(() => {
     if (!comments || !comments.length) return
     const batch = comments.slice(0, 30).filter((c) => !cDrafts[c.id])
@@ -100,12 +109,12 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
       .catch(() => {})
   }, [comments]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const send = async (q: Queued): Promise<boolean> => {
-    const text = (drafts[q.id] ?? '').trim()
-    if (!text || sending.has(q.id)) return false
+  const send = async (q: Queued, text?: string): Promise<boolean> => {
+    const body = (text ?? drafts[q.id] ?? '').trim()
+    if (!body || sending.has(q.id)) return false
     setSending((s) => new Set(s).add(q.id)); setErrs((e) => { const n = { ...e }; delete n[q.id]; return n })
     try {
-      const r = await fetch(`/api/dashboard/reviews/${q.id}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replyText: text, clientId }) })
+      const r = await fetch(`/api/dashboard/reviews/${q.id}/reply?clientId=${clientId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ replyText: body }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Google did not take it')
       setSent((s) => new Set(s).add(q.id))
@@ -113,11 +122,27 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
     } catch (e) { setErrs((x) => ({ ...x, [q.id]: e instanceof Error ? e.message : 'Google did not take it' })); return false }
     finally { setSending((s) => { const n = new Set(s); n.delete(q.id); return n }) }
   }
-  const sendAll = async () => {
-    if (sendingAll) return
-    setSendingAll(true)
-    for (const q of visible) if (drafts[q.id]?.trim()) await send(q)
-    setSendingAll(false)
+  /* the one button for the good ones: write what is not written yet, then send every one */
+  const sendThanks = async () => {
+    if (bulk) return
+    const list = thanks.slice()
+    const missing = list.filter((q) => !drafts[q.id]?.trim()).map((q) => q.id)
+    const got: Record<string, string> = { ...drafts }
+    setBulk({ phase: 'writing', done: list.length - missing.length, total: list.length })
+    for (let i = 0; i < missing.length; i += BATCH) {
+      const ids = missing.slice(i, i + BATCH)
+      try {
+        const r = await fetch('/api/dashboard/reviews/draft-many', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, reviewIds: ids, tone: 'thankful' }) })
+        const j = (await (r.ok ? r.json() : { drafts: {} })) as { drafts?: Record<string, string> }
+        Object.assign(got, j.drafts ?? {})
+        setDrafts((d) => ({ ...d, ...(j.drafts ?? {}) }))
+      } catch { /* those stay unsent and say so */ }
+      setBulk({ phase: 'writing', done: Math.min(list.length, list.length - missing.length + i + ids.length), total: list.length })
+    }
+    let done = 0
+    setBulk({ phase: 'sending', done: 0, total: list.length })
+    for (const q of list) { if (got[q.id]?.trim()) await send(q, got[q.id]); done += 1; setBulk({ phase: 'sending', done, total: list.length }) }
+    setBulk(null)
   }
   const sendComment = async (c: CommentRow) => {
     const text = (cDrafts[c.id] ?? '').trim()
@@ -132,18 +157,19 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
   }
   const setRuleOn = async (on: boolean) => {
     setRule((r) => (r ? { ...r, enabled: on } : r))
-    await fetch(`/api/dashboard/reviews/auto-reply?clientId=${clientId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on, clientId }) }).catch(() => {})
+    await fetch(`/api/dashboard/reviews/auto-reply?clientId=${clientId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on }) }).catch(() => {})
   }
 
   if (!mounted) return null
   const cta: React.CSSProperties = { width: '100%', height: 48, borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 15, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }
   const chip = (on: boolean): React.CSSProperties => ({ fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${on ? C.ink : C.line}`, background: on ? C.ink : '#fff', color: on ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit' })
-  const h3: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 0 8px' }
+  const h3: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '20px 0 8px' }
   const sub: React.CSSProperties = { display: 'block', fontWeight: 500, color: C.mute, fontSize: 12, marginTop: 2 }
-  const small = (b: () => void, label: string, disabled = false) => <button type="button" onClick={b} disabled={disabled} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', opacity: disabled ? .5 : 1 }}>{label}</button>
+  const ta: React.CSSProperties = { display: 'block', width: '100%', marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box', resize: 'none', outline: 'none' }
   const Stars = ({ n }: { n: number | null }) => <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} fill={n != null && i <= n ? '#f0a12b' : 'none'} color={n != null && i <= n ? '#f0a12b' : C.line} strokeWidth={2} />)}</span>
-  const doneCount = sent.size + cSent.size
-  const draftedVisible = visible.filter((q) => drafts[q.id]?.trim() && !sending.has(q.id)).length
+  const total = read ? read.queue.length : 0
+  const doneCount = sent.size
+  const pct = total ? Math.round(((doneCount + skipped.size) / total) * 100) : 0
 
   return createPortal(
     <div className="cr" role="dialog" aria-modal="true" aria-label="Reply now" style={{ position: 'fixed', left: 0, right: 0, top: vv ? vv.top : 0, height: vv ? vv.h : '100dvh', zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', touchAction: 'none' }}>
@@ -160,52 +186,86 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
 
         {read && (
           <>
-            <div style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', margin: '4px 2px 6px', lineHeight: 1.15 }}>
-              {waiting.length === 0 ? 'Every review has a reply' : `${waiting.length} waiting`}
+            {/* the top: where you are */}
+            <div style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.15 }}>
+              {waiting.length === 0 ? (doneCount > 0 ? `All ${doneCount} answered` : 'Every review has a reply') : doneCount > 0 ? `${doneCount} answered, ${waiting.length} to go` : `${waiting.length} waiting`}
             </div>
-            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45 }}>
-              {waiting.length > 0 && <>{read.critical > 0 ? `${read.critical - [...sent, ...skipped].filter((id) => (read.queue.find((q) => q.id === id)?.rating ?? 5) <= 3).length} of them three stars or under, first. ` : ''}{read.longestWaitDays != null && read.longestWaitDays > 0 ? `The oldest has waited ${read.longestWaitDays} days. ` : ''}{read.replied} of {read.total} on your listing already have one.</>}
+            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginTop: 4 }}>
+              {waiting.length > 0 && <>{care.length > 0 ? `${care.length} need${care.length === 1 ? 's' : ''} care. ` : ''}{thanks.length > 0 ? `${thanks.length} just need${thanks.length === 1 ? 's' : ''} a thank-you. ` : ''}{read.longestWaitDays != null && read.longestWaitDays > 60 ? 'Old ones get a reply that says it is late, then answers.' : ''}</>}
               {waiting.length === 0 && read.unreachable > 0 && `${read.unreachable} more have no address to reply to yet.`}
             </div>
-            {doneCount > 0 && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 12.5, fontWeight: 700, color: C.greenDk }}><Check size={14} strokeWidth={3} /> {doneCount} sent</div>}
+            {total > 0 && <div style={{ height: 4, borderRadius: 2, background: C.line, marginTop: 12, overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: C.greenDk, transition: 'width .3s' }} /></div>}
 
-            {waiting.length > 0 && (
+            {/* NEEDS CARE: one at a time */}
+            {care.length > 0 && current && (
               <>
-                <div style={h3}>In your voice</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TONES.map((t) => <button key={t.id} type="button" onClick={() => changeTone(t.id)} style={chip(tone === t.id)}>{t.label}</button>)}</div>
-                <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Written from the review, your brand voice, and replies you wrote before. Tap any to change it.</div>
+                <div style={{ ...h3, display: 'flex', justifyContent: 'space-between' }}><span>Needs care</span><span style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600 }}>{Math.min(careIndex + 1, care.length)} of {care.length}</span></div>
+                <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '14px 14px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <BrandOrMark provider="google" size={14} />
+                    <b style={{ fontSize: 14 }}>{current.author}</b>
+                    <Stars n={current.rating} />
+                    <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.faint }}>{age(current.waitingDays)}</span>
+                  </div>
+                  <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: 'pre-wrap' }}>{current.text || 'No written comment, just the stars.'}</div>
+                  <div style={{ marginTop: 12, fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.mute }}>Your reply</div>
+                  {drafts[current.id] != null ? (
+                    <textarea value={drafts[current.id]} onChange={(e) => setDrafts((x) => ({ ...x, [current.id]: e.target.value }))} rows={5} style={ta} />
+                  ) : (
+                    <div style={{ marginTop: 6, fontSize: 13, color: C.mute, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>{drafting.has(current.id) ? <><Loader2 size={14} className="mvp-spin" /> Writing it in your voice</> : 'No draft yet. Tap a tone below.'}</div>
+                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    <button type="button" onClick={() => tweak(current.id, 'winback')} style={chip(false)}>Make it right</button>
+                    <button type="button" onClick={() => tweak(current.id, 'thankful')} style={chip(false)}>Warmer</button>
+                    <button type="button" onClick={() => tweak(current.id, 'short')} style={chip(false)}>Shorter</button>
+                    <button type="button" onClick={() => tweak(current.id, 'professional')} style={chip(false)}>More formal</button>
+                  </div>
+                  {errs[current.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 8 }}>{errs[current.id]}</div>}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button type="button" onClick={async () => { const ok = await send(current); if (ok) setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} disabled={!drafts[current.id]?.trim() || sending.has(current.id)} style={{ ...cta, height: 44, flex: 1, opacity: !drafts[current.id]?.trim() || sending.has(current.id) ? .5 : 1 }}>{sending.has(current.id) ? <Loader2 size={14} className="mvp-spin" /> : <Check size={15} strokeWidth={3} />} Send</button>
+                    <button type="button" onClick={() => { setSkipped((s) => new Set(s).add(current.id)); setCareIndex((i) => Math.min(i, Math.max(0, care.length - 2))) }} style={{ ...cta, height: 44, width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>Skip</button>
+                    {care.length > 1 && <button type="button" onClick={() => setCareIndex((i) => (i + 1) % care.length)} style={{ ...cta, height: 44, width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>Next</button>}
+                  </div>
+                  <a href={`/dashboard/reviews/${current.id}`} style={{ display: 'block', textAlign: 'center', marginTop: 10, fontSize: 12, color: C.mute, textDecoration: 'none' }}>Open the full page</a>
+                </div>
               </>
             )}
 
-            {visible.map((q) => {
-              const d = drafts[q.id]; const busy = sending.has(q.id); const isDrafting = drafting.has(q.id)
-              return (
-                <div key={q.id} style={{ border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 12px 10px', marginTop: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <BrandOrMark provider="google" size={14} />
-                    <b style={{ fontSize: 13.5 }}>{q.author}</b>
-                    <Stars n={q.rating} />
-                    <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.faint }}>{q.waitingDays != null ? `${q.waitingDays}d waiting` : ''}</span>
-                  </div>
-                  <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.45, marginTop: 6, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{q.text || 'No written comment, just the stars.'}</div>
-                  <div style={{ marginTop: 10, fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.mute }}>Your reply</div>
-                  {d != null ? (
-                    <textarea value={d} onChange={(e) => setDrafts((x) => ({ ...x, [q.id]: e.target.value }))} rows={4} style={{ display: 'block', width: '100%', marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box', resize: 'none', outline: 'none' }} />
-                  ) : (
-                    <div style={{ marginTop: 6, fontSize: 13, color: C.mute, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0' }}>{isDrafting ? <><Loader2 size={14} className="mvp-spin" /> Writing it in your voice</> : 'No draft yet.'}</div>
-                  )}
-                  {errs[q.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[q.id]}</div>}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
-                    <button type="button" onClick={() => send(q)} disabled={!d?.trim() || busy} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 6, opacity: !d?.trim() || busy ? .5 : 1 }}>{busy ? <Loader2 size={12} className="mvp-spin" /> : <Check size={12} strokeWidth={3} />} Send</button>
-                    {small(() => { setDrafts((x) => { const n = { ...x }; delete n[q.id]; return n }); asked.current.delete(`${q.id}:${tone}`) }, 'Again', isDrafting)}
-                    {small(() => setSkipped((s) => new Set(s).add(q.id)), 'Skip')}
-                    <a href={`/dashboard/reviews/${q.id}`} style={{ marginLeft: 'auto', fontSize: 12, color: C.mute, textDecoration: 'none' }}>Open</a>
-                  </div>
-                </div>
-              )
-            })}
-            {waiting.length > shown && <button type="button" onClick={() => setShown((n) => n + BATCH)} style={{ ...cta, marginTop: 12, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}`, height: 42, fontSize: 13.5 }}>{Math.min(BATCH, waiting.length - shown)} more</button>}
-            {draftedVisible > 1 && <button type="button" onClick={sendAll} disabled={sendingAll} style={{ ...cta, marginTop: 12, opacity: sendingAll ? .6 : 1 }}>{sendingAll ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} strokeWidth={3} />} Send all {draftedVisible} shown</button>}
+            {/* SAY THANKS: the list, one button */}
+            {thanks.length > 0 && (
+              <>
+                <div style={{ ...h3, display: 'flex', justifyContent: 'space-between' }}><span>Say thanks</span><span style={{ letterSpacing: 0, textTransform: 'none', fontWeight: 600 }}>{thanks.length}</span></div>
+                <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginBottom: 6 }}>Four and five stars. Each gets its own thank-you in your voice. Tap one to read it or change it, or send them all.</div>
+                {thanks.slice(0, 12).map((q) => { const isOpen = open.has(q.id); const d = drafts[q.id]
+                  return (
+                    <div key={q.id} style={{ borderTop: `0.5px solid ${C.line}` }}>
+                      <button type="button" onClick={() => setOpen((s) => { const n = new Set(s); if (n.has(q.id)) n.delete(q.id); else n.add(q.id); return n })} style={{ display: 'flex', gap: 10, alignItems: 'center', width: '100%', padding: '10px 0', background: 'none', border: 0, cursor: 'pointer', font: 'inherit', color: C.ink, textAlign: 'left' }}>
+                        <Stars n={q.rating} />
+                        <span style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 13.5 }}>{q.author}</b><span style={{ color: C.mute, fontSize: 12.5 }}> · {q.text ? q.text.slice(0, 60) + (q.text.length > 60 ? '…' : '') : 'stars only'}</span></span>
+                        <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap' }}>{age(q.waitingDays)}</span>
+                        <ChevronDown size={14} color={C.faint} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', flex: 'none' }} />
+                      </button>
+                      {isOpen && (
+                        <div style={{ paddingBottom: 12 }}>
+                          {q.text && <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{q.text}</div>}
+                          {d != null ? <textarea value={d} onChange={(e) => setDrafts((x) => ({ ...x, [q.id]: e.target.value }))} rows={4} style={ta} /> : <div style={{ fontSize: 13, color: C.mute, padding: '10px 0', display: 'flex', gap: 8, alignItems: 'center' }}>{drafting.has(q.id) ? <><Loader2 size={14} className="mvp-spin" /> Writing</> : 'Written when you send'}</div>}
+                          {errs[q.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[q.id]}</div>}
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                            <button type="button" onClick={() => send(q)} disabled={!d?.trim() || sending.has(q.id)} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 6, opacity: !d?.trim() || sending.has(q.id) ? .5 : 1 }}>{sending.has(q.id) ? <Loader2 size={12} className="mvp-spin" /> : <Check size={12} strokeWidth={3} />} Send this one</button>
+                            <button type="button" onClick={() => tweak(q.id, 'short')} style={chip(false)}>Shorter</button>
+                            <button type="button" onClick={() => setSkipped((s) => new Set(s).add(q.id))} style={chip(false)}>Skip</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) })}
+                {thanks.length > 12 && <div style={{ fontSize: 12.5, color: C.mute, padding: '8px 0', borderTop: `0.5px solid ${C.line}` }}>and {thanks.length - 12} more, all included below</div>}
+                <button type="button" onClick={sendThanks} disabled={!!bulk} style={{ ...cta, marginTop: 12, opacity: bulk ? .7 : 1 }}>
+                  {bulk ? <><Loader2 size={16} className="mvp-spin" /> {bulk.phase === 'writing' ? `Writing ${bulk.done} of ${bulk.total}` : `Sending ${bulk.done} of ${bulk.total}`}</> : <><Check size={16} strokeWidth={3} /> Send all {thanks.length} thank-you{thanks.length === 1 ? '' : 's'}</>}
+                </button>
+                <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8 }}>Each one different, each one yours. About a minute for {thanks.length}.</div>
+              </>
+            )}
 
             {comments && comments.filter((c) => !cSent.has(c.id)).length > 0 && (
               <>
@@ -213,15 +273,14 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
                 {comments.filter((c) => !cSent.has(c.id)).slice(0, 10).map((c) => {
                   const d = cDrafts[c.id]; const busy = cSending.has(c.id)
                   return (
-                    <div key={c.id} style={{ border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 12px 10px', marginTop: 12 }}>
+                    <div key={c.id} style={{ borderTop: `0.5px solid ${C.line}`, padding: '10px 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BrandOrMark provider={c.platform} size={14} /><b style={{ fontSize: 13.5 }}>{c.authorName}</b></div>
-                      <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 6 }}>{c.text}</div>
-                      {d != null ? <textarea value={d} onChange={(e) => setCDrafts((x) => ({ ...x, [c.id]: e.target.value }))} rows={2} style={{ display: 'block', width: '100%', marginTop: 8, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box', resize: 'none', outline: 'none' }} />
-                        : <div style={{ marginTop: 6, fontSize: 13, color: C.mute, padding: '8px 0' }}>No reply needed, or none drafted yet.</div>}
+                      <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 4 }}>{c.text}</div>
+                      {d != null ? <textarea value={d} onChange={(e) => setCDrafts((x) => ({ ...x, [c.id]: e.target.value }))} rows={2} style={ta} /> : <div style={{ fontSize: 12.5, color: C.mute, padding: '6px 0' }}>No reply needed, or none drafted yet.</div>}
                       {errs[c.id] && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 6 }}>{errs[c.id]}</div>}
                       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                         <button type="button" onClick={() => sendComment(c)} disabled={!d?.trim() || busy} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 6, opacity: !d?.trim() || busy ? .5 : 1 }}>{busy ? <Loader2 size={12} className="mvp-spin" /> : <Check size={12} strokeWidth={3} />} Send</button>
-                        {small(() => setCSent((s) => new Set(s).add(c.id)), 'Skip')}
+                        <button type="button" onClick={() => setCSent((s) => new Set(s).add(c.id))} style={chip(false)}>Skip</button>
                       </div>
                     </div>
                   )
@@ -233,13 +292,13 @@ export default function ReplySheet({ clientId, onClose }: { clientId: string; on
               <>
                 <div style={h3}>Every day, without you</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 0 2px', fontSize: 14, fontWeight: 600 }}>
-                  <span>Reply to five-star reviews for me<small style={sub}>Up to five a day, in your voice, only where nobody replied. You see them in the inbox.</small></span>
+                  <span>Answer the five-star ones for me<small style={sub}>Up to five a day, in your voice, only where nobody replied. Anything under five stars waits here for you.</small></span>
                   <button type="button" role="switch" aria-checked={rule.enabled} onClick={() => setRuleOn(!rule.enabled)} style={{ width: 40, height: 24, borderRadius: 99, border: 0, background: rule.enabled ? C.greenDk : C.line, position: 'relative', flex: 'none', cursor: 'pointer', padding: 0 }}><span style={{ position: 'absolute', top: 2, left: rule.enabled ? 18 : 2, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .15s' }} /></button>
                 </div>
               </>
             )}
             <button type="button" onClick={onClose} style={{ ...cta, marginTop: 18, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{doneCount > 0 ? 'Done for now' : 'Close'}</button>
-            <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><RefreshCw size={11} /> Replies go to Google within a minute. Comments go straight to the post.</div>
+            <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10 }}>Replies show on Google within a minute. Change one later from its page.</div>
           </>
         )}
       </div>
