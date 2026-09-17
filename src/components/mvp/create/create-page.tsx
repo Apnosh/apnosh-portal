@@ -499,7 +499,7 @@ export default function CreatePage() {
   /* row: a setup */
   const Sec = ({ t, s, hue, more }: { t: string; s?: string; hue: HueKey; more?: () => void }) => (
     <div className="sec" style={hv(hue)}>
-      <div><h2><span className="dot" />{t}</h2>{s && <div className="sub">{s}</div>}</div>
+      <div><h2>{t}</h2>{s && <div className="sub">{s}</div>}</div>
       {more && <button type="button" onClick={more} className="more" aria-label={T('See all')}><ChevronRight size={18} /></button>}
     </div>
   )
@@ -722,7 +722,7 @@ export default function CreatePage() {
   const stagesRow = (
     <div className="stages cc-scroll" style={{ margin: '10px 16px 0' }}>
         <button type="button" className={`stg${stage == null ? ' on' : ''}`} onClick={() => setStage(null)}>{T('For you')}</button>
-        {STAGES.map((s) => <button key={s} type="button" className={`stg${stage === s ? ' on' : ''}`} onClick={() => setStage(s)} style={hv(STAGE_HUE[s])}><i />{T(s)}</button>)}
+        {STAGES.map((s) => <button key={s} type="button" className={`stg${stage === s ? ' on' : ''}`} onClick={() => setStage(s)} style={hv(STAGE_HUE[s])}>{T(s)}</button>)}
     </div>
   )
 
@@ -749,7 +749,7 @@ export default function CreatePage() {
   const pcService = (c: ShelfCard, wide?: boolean) => { const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
     return (
       <button key={c.id} type="button" onClick={() => open(c)} className={`pc2 press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(STAGE_HUE[c.stage])}>
-        <div className="st"><em className="tag"><i />{T(c.stage)}</em><div className="dwm">{draw(c)}</div></div>
+        <div className="st"><em className="tag">{T(c.stage)}</em><div className="dwm">{draw(c)}</div></div>
         <div className="t">{c.title}</div>
         {why && buy && <div className="why">{why}</div>}
         <div className="m">{isDone ? <b className="done"><Check size={11} strokeWidth={3} /> {T('Done')}</b> : buy ? <>{priceWord(c.price)} · {T(c.ready)}</> : T('Coming soon')}</div>
@@ -954,7 +954,7 @@ export default function CreatePage() {
         {/* the hero: the drawing on a soft wash of the stage colour that fades into the page */}
         <div className="pp2-hero" style={hv(STAGE_HUE[c.stage])}><div className="art">{draw(c)}</div></div>
         <div className="pp2-head">
-          <div className="eb" style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)} · {word}</div>
+          <div className="eb" style={hv(STAGE_HUE[c.stage])}>{T(c.stage)} · {word}</div>
           <h1>{c.title}</h1>
           {why && buy && <div className="why">{why}</div>}
           {!buy && <div className="why"><span className="pill-w grey">{T('Coming soon')}</span></div>}
