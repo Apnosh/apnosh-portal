@@ -17,6 +17,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest } from '@/lib/requests/create'
 import { notifyClientOwners } from '@/lib/notifications'
+import { withTurnaround } from '@/lib/plan/turnaround'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
   if (ctx.unreplied > 0) plan.push({ key: 'reply', label: `Reply to the ${ctx.unreplied} waiting`, detail: 'Reply now, from Create', date: today, cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/campaigns/new' }, why: whys.reply ?? 'A listing that answers gets more reviews' })
   plan.push({ key: 'checkin', label: 'The check-in', detail: `${ctx.count != null ? `${ctx.count} reviews today` : 'Today\'s count'}, the goal is ${goal} more`, date: checkin, cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/insights' }, why: 'Google updates the count on the listing, so this one measures itself' })
 
-  if (announcementId) await admin.from('announcements').update({ plan, updated_at: new Date().toISOString() }).eq('id', announcementId)
-  return NextResponse.json({ ok: true, id: announcementId, plan, errors })
+  const shaped = withTurnaround(plan)
+  if (announcementId) await admin.from('announcements').update({ plan: shaped, updated_at: new Date().toISOString() }).eq('id', announcementId)
+  return NextResponse.json({ ok: true, id: announcementId, plan: shaped, errors })
 }

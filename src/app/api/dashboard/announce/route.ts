@@ -32,6 +32,7 @@ import { publishOwnerGbpPost } from '@/lib/gbp-apply/owner-post'
 import { isProTier } from '@/lib/entitlements'
 import { notifyClientOwners, notifyStaffForClient } from '@/lib/notifications'
 import { bulkSetSpecialHours } from '@/lib/gbp-bulk'
+import { withTurnaround } from '@/lib/plan/turnaround'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -457,6 +458,7 @@ export async function POST(req: NextRequest) {
   plan.push({ key: 'results', label: 'How it did', detail: kind === 'event' ? 'Views, RSVPs and mentions, in Insights' : 'Views, saves and mentions, in Insights', date: day(addDays(new Date(kind === 'event' && d.when ? d.when + 'T12:00:00' : atIso ?? Date.now()), 7).toISOString()), cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/insights/posts' } })
 
   for (const l of plan) if (!l.why && whys[l.key]) l.why = whys[l.key]
+  const shaped = withTurnaround(plan); plan.splice(0, plan.length, ...shaped)
 
   /* ── the team hears the whole plan once ── */
   const lines = [`New announcement: ${name}`, facts, '', ...plan.map((l) => `${l.date ?? ''} ${l.label}: ${l.detail}${l.cost ? ` ($${Math.round(l.cost / 100)})` : ''}`.trim())]
