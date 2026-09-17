@@ -19,6 +19,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   themeColor: '#4abd98',
   viewportFit: 'cover',
+  /* the keyboard shrinks the page instead of covering it, so a bottom sheet stays in reach */
+  interactiveWidget: 'resizes-content',
 }
 
 export const metadata: Metadata = {

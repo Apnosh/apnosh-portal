@@ -137,6 +137,25 @@ const localInput = (d: Date) => `${isoDay(d)}T${pad(d.getHours())}:${pad(d.getMi
 export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: { clientId: string; onClose: () => void; /** whether the client has a Google listing to post to */ hasGoogle?: boolean }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+  /* The page behind must not move while the sheet is up (owner 2026-09-17: "you can move the form
+     around"): the body is pinned at its scroll position and put back on close. */
+  useEffect(() => {
+    const y = window.scrollY
+    const b = document.body.style
+    const prev = { position: b.position, top: b.top, width: b.width, overflow: b.overflow }
+    b.position = 'fixed'; b.top = `-${y}px`; b.width = '100%'; b.overflow = 'hidden'
+    return () => { b.position = prev.position; b.top = prev.top; b.width = prev.width; b.overflow = prev.overflow; window.scrollTo(0, y) }
+  }, [])
+  /* The sheet sits in the VISIBLE part of the screen: when the keyboard comes up the visual
+     viewport shrinks and the sheet shrinks with it instead of being shoved off the top. */
+  const [vv, setVv] = useState<{ h: number; top: number } | null>(null)
+  useEffect(() => {
+    const v = window.visualViewport
+    const read = () => setVv(v ? { h: Math.round(v.height), top: Math.round(v.offsetTop) } : null)
+    read()
+    v?.addEventListener('resize', read); v?.addEventListener('scroll', read)
+    return () => { v?.removeEventListener('resize', read); v?.removeEventListener('scroll', read) }
+  }, [])
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
 
   const [step, setStep] = useState<Step>('kind')
@@ -388,8 +407,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true }: {
   const madeKind = mode === 'graphic' || mode === 'video' || mode === 'shoot'
 
   return createPortal(
-    <div className="cr" role="dialog" aria-modal="true" aria-label="Announce something" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '92dvh', overflowY: 'auto', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink, fontFamily: 'inherit' }}>
+    <div className="cr" role="dialog" aria-modal="true" aria-label="Announce something" onClick={step === 'kind' ? onClose : undefined} style={{ position: 'fixed', left: 0, right: 0, top: vv ? vv.top : 0, height: vv ? vv.h : '100dvh', zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', touchAction: 'none' }}>
+      <div onClick={(e) => e.stopPropagation()} onFocusCapture={(e) => { const t = e.target as HTMLElement; if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') setTimeout(() => t.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250) }} style={{ width: '100%', maxWidth: 480, maxHeight: vv ? vv.h - 16 : '92dvh', overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink, fontFamily: 'inherit' }}>
         <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 10px' }}>
           {step !== 'kind' && step !== 'done' ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
