@@ -47,20 +47,20 @@ interface KindDef {
 }
 
 const KINDS: KindDef[] = [
-  { id: 'dish', label: 'New dish', scene: 'dish', hue: '#2e9a78', photo: true, picture: true, tags: true, limited: true, cta: 'order', also: ['gmenu', 'sitemenu', 'ordering', 'apps', 'email', 'print', 'team'], fields: [
+  { id: 'dish', label: 'New dish', scene: 'dish', hue: '#2e9a78', photo: true, picture: true, tags: true, limited: true, cta: 'order', also: ['gmenu', 'sitemenu', 'ordering', 'apps', 'print', 'team'], fields: [
     { key: 'what', label: 'What is it called?', hint: 'Pork belly bánh mì' },
     { key: 'line', label: 'One line about it', hint: 'Slow-roasted, on a house baguette', optional: true },
     { key: 'price', label: 'Price', hint: '$14', optional: true },
     { key: 'from', label: 'From when', kind: 'date' },
   ] },
-  { id: 'hours', label: 'Hours changed', scene: 'hours', hue: '#3d8ed8', photo: true, cta: 'visit', hours: 'oneday', also: ['ghours', 'print', 'email', 'team'],
+  { id: 'hours', label: 'Hours changed', scene: 'hours', hue: '#3d8ed8', photo: true, cta: 'visit', hours: 'oneday', also: ['ghours', 'print', 'team'],
     alsoLabels: { print: { label: 'Door sign', detail: 'The new hours, printed or a file' }, email: { detail: 'Only worth it for a big change' } }, fields: [
     { key: 'what', label: 'What is changing?', hint: 'Open till 10 on Fridays, or closed for a week' },
     { key: 'line', label: 'Anything else?', hint: 'Back to normal on the 30th', optional: true },
     { key: 'from', label: 'From when', kind: 'date' },
     { key: 'until', label: 'Until when', kind: 'date', optional: true, hint: 'Leave it empty if this is for good' },
   ] },
-  { id: 'deal', label: 'A deal', scene: 'offer', hue: '#dd9a1c', photo: true, picture: true, cta: 'visit', also: ['email', 'print', 'gattr', 'banner', 'pos', 'team'], reminder: 'A reminder the morning it starts',
+  { id: 'deal', label: 'A deal', scene: 'offer', hue: '#dd9a1c', photo: true, picture: true, cta: 'visit', also: ['print', 'gattr', 'banner', 'pos', 'team'], reminder: 'A reminder the morning it starts',
     alsoLabels: { print: { label: 'Flyer, table tent, window sign', detail: 'The people already inside tell friends' }, email: { detail: 'The day before, every time it runs' }, team: { detail: 'The deal, the word, what to say' } }, fields: [
     { key: 'what', label: 'What is the deal?', hint: 'Half-price wings and $5 drafts' },
     { key: 'when', label: 'When does it run?', hint: 'Tuesdays, 5 to 8' },
@@ -71,7 +71,7 @@ const KINDS: KindDef[] = [
     { key: 'code', label: 'A word at the counter', hint: 'TUESDAY. It is how we count', optional: true },
     { key: 'line', label: 'Any fine print?', hint: 'Dine in only', optional: true },
   ] },
-  { id: 'event', label: 'An event', scene: 'event', hue: '#2e73b6', photo: true, picture: true, cta: 'visit', also: ['fbevent', 'sitepage', 'email', 'print', 'creators', 'team'], reminder: 'Two days before',
+  { id: 'event', label: 'An event', scene: 'event', hue: '#2e73b6', photo: true, picture: true, cta: 'visit', also: ['fbevent', 'sitepage', 'print', 'creators', 'team'], reminder: 'Two days before',
     alsoLabels: { print: { label: 'Poster and table tents', detail: 'Printed, or a file' }, email: { detail: 'A week before' }, team: { detail: 'A runsheet: who does what, when' } }, fields: [
     { key: 'what', label: 'What is it called?', hint: 'Trivia night' },
     { key: 'when', label: 'What day?', kind: 'date' },
@@ -86,7 +86,7 @@ const KINDS: KindDef[] = [
     { key: 'how', label: 'How do they apply?', hint: 'Come in and ask for Ana, or a link', optional: true },
     { key: 'start', label: 'Start date', kind: 'date', optional: true },
   ] },
-  { id: 'open', label: 'Now open', scene: 'open', hue: '#2e9a78', photo: true, picture: true, cta: 'visit', also: ['ghours', 'email', 'print', 'team'], reminder: 'A countdown post three days before',
+  { id: 'open', label: 'Now open', scene: 'open', hue: '#2e9a78', photo: true, picture: true, cta: 'visit', also: ['ghours', 'print', 'team'], reminder: 'A countdown post three days before',
     alsoLabels: { ghours: { label: 'Google says open', detail: 'Google, the website, the delivery apps' }, print: { label: 'Banner', detail: 'For the front, printed or a file' } }, fields: [
     { key: 'what', label: 'What is the news?', hint: 'Grand opening, back open, a new location, now on DoorDash' },
     { key: 'from', label: 'From when', kind: 'date' },
@@ -94,14 +94,14 @@ const KINDS: KindDef[] = [
     { key: 'offer', label: 'An opening offer', hint: 'First 50 guests get a free drink', optional: true },
     { key: 'address', label: 'The address, if it is new', hint: '412 Main St', optional: true },
   ] },
-  { id: 'holiday', label: 'Holiday', scene: 'holiday', hue: '#dd9a1c', photo: true, picture: true, cta: 'reserve', hours: 'always', also: ['ghours', 'email', 'print', 'team'], reminder: 'A reminder before the day, or the pre-order deadline',
+  { id: 'holiday', label: 'Holiday', scene: 'holiday', hue: '#dd9a1c', photo: true, picture: true, cta: 'reserve', hours: 'always', also: ['ghours', 'print', 'team'], reminder: 'A reminder before the day, or the pre-order deadline',
     alsoLabels: { ghours: { label: 'Holiday hours everywhere', detail: 'Google, the website, the delivery apps' }, print: { label: 'Menu insert', detail: 'The holiday menu or the hours, printed or a file' } }, fields: [
     { key: 'what', label: 'Which holiday?', hint: 'Thanksgiving' },
     { key: 'date', label: 'Which day?', kind: 'date' },
     { key: 'doing', label: 'What are you doing?', kind: 'long', hint: 'Pre-orders for pies, a special menu, open till 2 on the day' },
     { key: 'deadline', label: 'Pre-orders by', kind: 'date', optional: true },
   ] },
-  { id: 'else', label: 'Something else', scene: 'else', hue: '#6e6e73', photo: true, picture: true, cta: 'visit', also: ['email', 'team'], fields: [
+  { id: 'else', label: 'Something else', scene: 'else', hue: '#6e6e73', photo: true, picture: true, cta: 'visit', also: ['team'], fields: [
     { key: 'what', label: 'What is the news?', kind: 'long', hint: 'We hit 100 reviews. Thank you.' },
     { key: 'from', label: 'A date, if there is one', kind: 'date', optional: true },
   ] },
@@ -390,7 +390,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     setGoal(g)
     if (!isEvent) return
     setBoost(g >= 25 || getin === 'tickets'); setBoostCents(g >= 50 ? 4000 : 2000)
-    setAlso((prev) => { const n = new Set(prev); if (g >= 50) n.add('creators'); else n.delete('creators'); if (ctx && ctx.guests > 0) n.add('email'); return n })
+    setAlso((prev) => { const n = new Set(prev); if (g >= 50) n.add('creators'); else n.delete('creators'); return n })
   }
 
   const upload = async (files: FileList | null) => {
