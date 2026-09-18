@@ -215,7 +215,11 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }, [])
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [onClose])
 
-  const [step, setStep] = useState<Step>('kind')
+  const [step, setStepRaw] = useState<Step>('kind')
+  /* MOTION (owner 2026-09-18): screens slide, forward to the left, back to the right */
+  const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
+  const ORDER: Step[] = ['kind', 'ekind', 'night', 'goal', 'play', 'facts', 'plans', 'picture', 'where', 'words', 'plan', 'done']
+  const setStep = (next: Step) => { setDir(ORDER.indexOf(next) >= ORDER.indexOf(step) ? 'fwd' : 'back'); setStepRaw(next) }
   const [kind, setKind] = useState<KindDef | null>(null)
   const [a, setA] = useState<Record<string, string>>({})
   const [tags, setTags] = useState<Set<string>>(new Set())
@@ -278,7 +282,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   type Pic = 'own' | 'graphic' | 'shoot' | 'booked' | 'words'
   const [items, setItems] = useState<ItemPick[]>([])
   const [me, setMe] = useState<MenuMe | null>(null)
-  const [openItem, setOpenItem] = useState<string | null>(null)
+  const [openItem, setOpenItemRaw] = useState<string | null>(null)
+  const setOpenItem = (uid: string | null) => { setDir(uid ? 'fwd' : 'back'); setOpenItemRaw(uid) }
   const [suggested, setSuggested] = useState<string | null>(null)
   const [withReel, setWithReel] = useState(false)
   const [budget, setBudget] = useState('')
@@ -726,6 +731,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         {step !== 'kind' && step !== 'done' && visible.length > 1 && <div style={{ display: 'flex', gap: 4, margin: '0 0 14px' }}>{visible.map((s) => <i key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: visible.indexOf(s) <= visible.indexOf(step) ? C.ink : C.line }} />)}</div>}
         <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
 
+        <style>{`@keyframes an-fwd{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}@keyframes an-back{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}@keyframes an-pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}.an-fwd{animation:an-fwd .26s cubic-bezier(.2,.7,.2,1)}.an-back{animation:an-back .26s cubic-bezier(.2,.7,.2,1)}.an-pop{animation:an-pop .28s cubic-bezier(.2,.7,.2,1)}@media(prefers-reduced-motion:reduce){.an-fwd,.an-back,.an-pop{animation:none}}`}</style>
+        <div key={`${step}:${openItem ?? ''}`} className={dir === 'back' ? 'an-back' : 'an-fwd'}>
         {step === 'kind' && (
           <>
             <div style={h2}>What is the news?</div>
@@ -1118,6 +1125,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={{ fontSize: 12.5, color: C.mute, textAlign: 'center', marginTop: 10 }}>It is on Coming up.</div>
           </div>
         )}
+        </div>
       </div>
     </div>,
     document.body,

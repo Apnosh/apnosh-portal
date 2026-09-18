@@ -86,7 +86,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
   /* plan first: what is picked, short. Add more opens the whole menu */
-  const [mode, setMode] = useState<'plan' | 'add'>('plan')
+  const [mode, setModeRaw] = useState<'plan' | 'add'>('plan')
+  const [switched, setSwitched] = useState(false)
+  const setMode = (m: 'plan' | 'add') => { setSwitched(true); setModeRaw(m) }
   const openIt = open ? items.find((x) => x.uid === open) ?? null : null
   const creatorItem = (openIt?.id === 'creator' ? openIt : null) ?? items.find((x) => x.id === 'creator' && x.on) ?? items.find((x) => x.id === 'creator') ?? null
   const slug = (creatorItem?.options.slug as string | undefined) ?? me?.creator?.slug ?? null
@@ -276,12 +278,12 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
       </button>
       <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions && !it.on ? 'from ' : ''}${dollars(cents)}`}</b>
       {MULTI.includes(it.id) && it.on && <button type="button" onClick={() => addNew(it.id)} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>＋ Another</button>}
-      {(() => { const added = it.on; const act = () => (it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid)); return <button type="button" onClick={act} aria-label={added ? 'Added, tap to remove' : 'Add'} style={{ width: 34, height: 34, borderRadius: 99, border: `1.5px solid ${added ? C.greenDk : C.ink}`, background: added ? C.greenDk : '#fff', color: added ? '#fff' : C.ink, cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none' }}>{added ? <Check size={16} strokeWidth={3} /> : <Plus size={16} strokeWidth={2.5} />}</button> })()}
+      {(() => { const added = it.on; const act = () => (it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid)); return <button type="button" onClick={act} aria-label={added ? 'Added, tap to remove' : 'Add'} style={{ width: 34, height: 34, borderRadius: 99, border: `1.5px solid ${added ? C.greenDk : C.ink}`, background: added ? C.greenDk : '#fff', color: added ? '#fff' : C.ink, cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none', transition: 'background .18s, border-color .18s' }}>{added ? <span key="on" className="an-pop" style={{ display: 'grid' }}><Check size={16} strokeWidth={3} /></span> : <Plus size={16} strokeWidth={2.5} />}</button> })()}
     </div>
   ) }
 
   return (
-    <div>
+    <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
       {mode === 'plan' ? <>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 4px' }}><span style={h3}>Your plan</span><span style={{ fontSize: 12, color: C.mute }}>{me?.budgetCents != null ? `Picked inside your $${Math.round(me.budgetCents / 100)}` : 'Picked for you'}</span></div>
         {picked.map((it) => <PlanRow key={it.uid} it={it} />)}
