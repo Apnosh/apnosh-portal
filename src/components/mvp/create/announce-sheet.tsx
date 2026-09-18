@@ -278,6 +278,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [planId, setPlanId] = useState<PlanId>('boost')
   const [pic, setPic] = useState<Pic>('graphic')
   const [withReel, setWithReel] = useState(false)
+  const [budget, setBudget] = useState('')
+  const [customBoost, setCustomBoost] = useState(false)
   const [creatorFit, setCreatorFit] = useState<{ slug: string; name: string; fromCents: number | null; nearby: number | null } | null>(null)
   useEffect(() => {
     fetch(`/api/dashboard/influencers?clientId=${clientId}&fit=1`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); const f = (j.fit ?? [])[0]; if (f?.card) { const a = f.card.audience; setCreatorFit({ slug: f.slug, name: f.card.name, fromCents: f.card.fromCents ?? null, nearby: a?.avgViews && a?.localPct != null ? Math.round(a.avgViews * a.localPct / 100) : a?.followers ?? null }) } }).catch(() => {})
@@ -671,11 +673,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const b3 = 10000
     const cn = cr && cr.nearby ? cr : null
     const menus = kind.id === 'dish' ? 'Menus updated' : isDeal ? 'A Google offer, a table tent' : isEvent ? 'A Google event, reminders' : kind.id === 'hours' || kind.id === 'holiday' ? 'Hours set everywhere' : kind.id === 'hiring' ? 'A page on your site' : 'The team told'
-    const picCost = pic === 'graphic' ? g : pic === 'shoot' ? sh + (withReel ? v : 0) : pic === 'booked' ? (withReel ? v : 0) : 0
+    const shootCost = tierCents(tier) ?? sh
+    const picCost = pic === 'graphic' ? g : pic === 'shoot' ? shootCost + (withReel ? v : 0) : pic === 'booked' ? (withReel ? v : 0) : 0
+    const bAmt = planId === 'boost' && boostCents > 0 ? boostCents : b1
     const picBase = base == null ? null : (pic === 'shoot' || pic === 'booked') && withReel ? base * 2 : base
     const picWord = pic === 'own' ? (media[0]?.video ? 'your video' : 'your photo') : pic === 'graphic' ? 'the graphic' : pic === 'shoot' || pic === 'booked' ? (withReel ? 'the shoot photos and the Reel' : 'the shoot photos') : 'words only'
     const post: Card = { id: 'post', name: 'Post it', cost: picCost, lines: [`${picWord[0].toUpperCase()}${picWord.slice(1)} on ${pic === 'words' ? 'Facebook and Google' : `${plat}${goog}`}${hasIgFb && pic !== 'words' ? ', a Story too' : ''}`, menus, 'Tell the team', `At ${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}, your best hour`], reach: picBase != null ? round2(picBase) : null, note: usualNote }
-    const boostC: Card = { id: 'boost', tag: 'The usual pick', name: 'Boost it', cost: picCost + b1, lines: ['Everything in Post it', `Boost $${b1 / 100}, about ${boostPeople(b1).toLocaleString()} people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2((picBase ?? 0) + boostPeople(b1)) || null, note: usual ? `Your posts usually reach about ${usual.median.toLocaleString()}. Boost adds the rest.` : 'No post history yet, so this is the Boost alone.' }
+    const boostC: Card = { id: 'boost', tag: 'The usual pick', name: 'Boost it', cost: picCost + bAmt, lines: ['Everything in Post it', `Boost $${bAmt / 100}, about ${boostPeople(bAmt).toLocaleString()} people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2((picBase ?? 0) + boostPeople(bAmt)) || null, note: usual ? `Your posts usually reach about ${usual.median.toLocaleString()}. Boost adds the rest.` : 'No post history yet, so this is the Boost alone.' }
     const reach: Card = { id: 'reach', tag: 'Most reach', name: 'Reach new people', cost: picCost + (cn ? b1 + (cn.fromCents ?? 0) : b3), lines: ['Everything in Boost it', ...(cn ? [`${cn.name} visits and posts to about ${cn.nearby!.toLocaleString()} people nearby`, 'A code for their followers, the team counts it'] : [`Boost $${b3 / 100} instead of $${b1 / 100}, about ${boostPeople(b3).toLocaleString()} people nearby`])], reach: round2((picBase ?? 0) + (cn ? boostPeople(b1) + (cn.nearby ?? 0) : boostPeople(b3))) || null, note: cn ? `${cn.name.split(' ')[0]}'s post alone reaches about ${cn.nearby!.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]} is nearby but their reach is not connected yet, so the money goes to Boost.` : 'No local creator fits yet, so the money goes to Boost.' }
     return kind.id === 'hours' || kind.id === 'holiday' ? [post, boostC] : [post, boostC, reach]
   })()
@@ -703,6 +707,34 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (id === 'boost') { setBoost(true); setBoostCents(b1); setAgain(kind.id !== 'hours' && kind.id !== 'holiday') }
     if (id === 'reach') { setBoost(true); setBoostCents(cn ? b1 : 10000); setAgain(true); if (cn && kind.also.includes('creators')) alsoSet.add('creators') }
     setAlso(alsoSet); setStory(nextPic !== 'words')
+  }
+  /* the budget door: the most people for a number, from every picture × push we can price */
+  const pickForBudget = () => {
+    const cents = Math.round(Number(budget.replace(/[^0-9.]/g, '')) * 100)
+    if (!kind || !Number.isFinite(cents) || cents < 0) return
+    const g = ctx?.prices.graphic ?? 23100; const v = ctx?.prices.video ?? 27500; const sh = tierCents(tier) ?? ctx?.prices.shoot ?? 38500
+    const base = usual?.median ?? 0
+    const b1 = isDeal || isEvent ? 4000 : 2000
+    const cn = creatorFit && creatorFit.nearby ? creatorFit : null
+    const pics: { id: Pic; reel: boolean; cost: number; base: number }[] = [
+      ...(media.length ? [{ id: 'own' as Pic, reel: false, cost: 0, base }] : [{ id: 'words' as Pic, reel: false, cost: 0, base: base * 0.7 }]),
+      { id: 'graphic', reel: false, cost: g, base: base * 1.2 },
+      ...(openShoot ? [{ id: 'booked' as Pic, reel: false, cost: 0, base: base * 1.2 }, { id: 'booked' as Pic, reel: true, cost: v, base: base * 2 }] : [{ id: 'shoot' as Pic, reel: false, cost: sh, base: base * 1.2 }, { id: 'shoot' as Pic, reel: true, cost: sh + v, base: base * 2 }]),
+    ]
+    let best: { id: PlanId; pic: Pic; reel: boolean; boost: number; reach: number; cost: number } | null = null
+    for (const pc of pics) {
+      const left = cents - pc.cost
+      if (left < 0) continue
+      const tryOne = (id: PlanId, boost: number, extra: number, reach: number) => { const cost = pc.cost + boost + extra; if (cost <= cents && (!best || reach > best.reach || (reach === best.reach && cost < best.cost))) best = { id, pic: pc.id, reel: pc.reel, boost, reach, cost } }
+      tryOne('post', 0, 0, pc.base)
+      /* boost stops at $100 here: past that the money does more in the picture (a graphic, a Reel) */
+      if (left >= 1000) { const b = Math.min(left, 10000); const bb = Math.floor(b / 500) * 500; tryOne('boost', bb, 0, pc.base + Math.round(bb / 100) * REACH_PER_DOLLAR) }
+      if (cn && left >= b1 + (cn.fromCents ?? 0)) tryOne('reach', b1, cn.fromCents ?? 0, pc.base + Math.round(b1 / 100) * REACH_PER_DOLLAR + (cn.nearby ?? 0))
+    }
+    if (!best) return
+    const b = best as { id: PlanId; pic: Pic; reel: boolean; boost: number }
+    applyPlan(b.id, b.pic, b.reel)
+    if (b.id === 'boost') { setBoostCents(b.boost); setCustomBoost(true) }
   }
   helpers.current = { write, applyPlan }
   const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? 'Slow night' : kind?.id === 'post' ? 'A post' : kind?.id === 'update' ? 'Update' : fromSlow && step === 'facts' ? `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}` : (isEvent && a.what?.trim()) || kind?.label || ''
@@ -880,6 +912,11 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Only what you pick is ever said.</div>
               </>
             )}
+            {simple && moreOpen && (
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>A note for the team<span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>
+                <input type="text" value={a.note ?? ''} onChange={(e) => setA((x) => ({ ...x, note: e.target.value }))} placeholder="The chef is off Tuesdays. Use the blue plates." style={input} />
+              </label>
+            )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             {simple && (
               <>
@@ -890,6 +927,18 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 {pic === 'booked' && openShoot && <div style={{ fontSize: 12, color: openShoot.used + 1 > openShoot.spots ? '#8a5a0c' : C.greenDk, fontWeight: 600, marginTop: 6, lineHeight: 1.4 }}>{openShoot.used + 1 > openShoot.spots ? `Yours makes ${openShoot.used + 1} on the list, more than ${openShoot.tierLabel.toLowerCase()} covers. The team confirms the bigger day with you first.` : `Already booked, ${openShoot.tierLabel.toLowerCase()}. Yours joins the list, nothing new to pay.`}</div>}
                 {(pic === 'shoot' || pic === 'booked') && <div style={{ ...rowS, padding: '8px 0' }}><span style={{ fontSize: 13 }}>Add a Reel from the day<small style={sub}>{dollars(ctx?.prices.video ?? null) || 'Priced'}. Reels reach about twice what a photo does</small></span><Switch on={withReel} set={(v) => applyPlan(planId, pic, v)} /></div>}
                 {pic === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 6 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
+                {pic === 'shoot' && (
+                  <div style={{ marginTop: 8 }}>
+                    <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Also shoot that day: the patio, the team, the tiramisu" style={{ ...input, marginTop: 0, fontSize: 13.5 }} />
+                    <div style={{ fontSize: 12, color: C.mute, marginTop: 6, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tier)?.label}: {sizeOf(listN)}. The longer the list, the bigger the day.</div>
+                  </div>
+                )}
+                {pic !== 'words' && pic !== 'own' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12.5, color: C.mute }}>
+                    <span style={{ flex: 1 }}>Made by {pic === 'graphic' ? 'the Apnosh design desk' : 'a photographer the team picks, and the design desk'}</span>
+                    {pic !== 'graphic' && <a href={`/dashboard/marketplace?category=photographer&clientId=${clientId}`} style={{ fontWeight: 700, color: C.ink, whiteSpace: 'nowrap' }}>See who ›</a>}
+                  </div>
+                )}
                 <div style={h3}>How far should it go?</div>
                 {cards.map((c) => (
                   <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${planId === c.id ? C.ink : C.line}`, boxShadow: planId === c.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 14px', marginTop: 8, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
@@ -899,8 +948,20 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       : <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lines.join(' · ')}</div>}
                     <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: C.greenDk, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span>{c.reach != null ? `About ${c.reach.toLocaleString()} people` : 'Reach: no history yet'}</span>{planId === c.id && <span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ fontSize: 12, fontWeight: 700, color: C.mute }}>What is inside ›</span>}</div>
                     {planId === c.id && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>{c.note}</div>}
+                    {planId === c.id && c.id === 'boost' && (
+                      <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {[2000, 4000, 10000].map((v) => <span key={v} role="button" onClick={() => { setBoostCents(v); setCustomBoost(false) }} style={chip(!customBoost && boostCents === v)}>${v / 100}</span>)}
+                        <span role="button" onClick={() => setCustomBoost(true)} style={chip(customBoost)}>Other</span>
+                        {customBoost && <input type="number" min={5} max={500} value={Math.round(boostCents / 100)} onChange={(e) => setBoostCents(Math.max(500, Math.min(50000, Math.round(Number(e.target.value) || 0) * 100)))} style={{ ...input, width: 84, marginTop: 0, padding: '7px 10px', fontSize: 13 }} />}
+                      </div>
+                    )}
                   </button>
                 ))}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+                  <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick the most people for it.</span>
+                  <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 78, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
+                  <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
+                </div>
                 <button type="button" onClick={go} disabled={!ready || posting || writing} style={{ ...cta_, opacity: ready && !posting ? 1 : .5 }}>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : writing ? 'Writing the words' : 'Make it happen'}</button>
                 <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
               </>

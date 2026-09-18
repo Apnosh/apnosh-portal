@@ -242,7 +242,7 @@ export async function POST(req: NextRequest) {
   /* ── the picture: the source first, then every piece made from it ── */
   let requestId: string | null = null
   const attachments = media.map((url, i) => ({ url, name: `photo-${i + 1}` }))
-  const facts = [a.line, a.doing, a.kindOfNight ? `Kind: ${a.kindOfNight}` : '', a.night ? `The slow night: ${a.night}` : '', a.goal ? `Goal: ${a.goal}` : '', a.plays ? `Plays: ${a.plays}` : '', a.off ? `${a.off}` : '', a.getin ? `Getting in: ${a.getin}` : '', a.who ? `With ${a.who}` : '', a.weekly ? 'Every week' : '', a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : ''].filter(Boolean).join('. ')
+  const facts = [a.line, a.doing, a.kindOfNight ? `Kind: ${a.kindOfNight}` : '', a.night ? `The slow night: ${a.night}` : '', a.goal ? `Goal: ${a.goal}` : '', a.plays ? `Plays: ${a.plays}` : '', a.off ? `${a.off}` : '', a.getin ? `Getting in: ${a.getin}` : '', a.who ? `With ${a.who}` : '', a.weekly ? 'Every week' : '', a.price ? `Price ${a.price}` : '', a.when ? `When: ${a.when}` : '', a.time ? `At ${a.time}` : '', a.where ? `Where: ${a.where}` : '', a.tickets ? `Tickets: ${a.tickets}` : '', a.code ? `Code ${a.code}` : '', a.how ? `Apply: ${a.how}` : '', a.address ? `Address: ${a.address}` : '', a.offer ? `Opening offer: ${a.offer}` : '', a.from ? `From ${a.from}` : '', a.until ? `Until ${a.until}` : '', a.deadline ? `Pre-orders by ${a.deadline}` : '', a.tags ? `Good to know: ${a.tags}` : '', a.note ? `Note from the owner: ${a.note}` : ''].filter(Boolean).join('. ')
 
   /* the shoot day: book a new one, or put this plan on the open one */
   let shoot: Shoot | null = null
@@ -498,6 +498,7 @@ export async function POST(req: NextRequest) {
 
   /* ── the team hears the whole plan once ── */
   const lines = [`New announcement: ${name}`, facts, '', ...plan.map((l) => `${l.date ?? ''} ${l.label}: ${l.detail}${l.cost ? ` ($${Math.round(l.cost / 100)})` : ''}`.trim())]
+  if (a.note) lines.push('', `Note from the owner: ${a.note}`)
   if (social) lines.push('', `Caption\n${social}`)
   if (gtext) lines.push('', `Google\n${gtext}`)
   if (card) lines.push('', `Team card\n${card}`)
