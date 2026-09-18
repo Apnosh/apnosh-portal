@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents } from '@/lib/requests/create'
-import { openShoot, bookShoot, attachToShoot, adoptShoot, asTier, tierCents, TIER_LABEL, SPOTS, type Shoot } from '@/lib/shoot/day'
+import { openShoot, bookShoot, attachToShoot, adoptShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
 import { createPost, listPostTargets } from '@/lib/channels/adapters/zernio'
@@ -66,7 +66,7 @@ interface Body {
   clientId?: string
   kind?: string
   answers?: Record<string, unknown>
-  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; tier?: string; shootDate?: string }
+  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; tier?: string; alsoShoot?: unknown; shootDate?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
   timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
@@ -243,10 +243,12 @@ export async function POST(req: NextRequest) {
   /* the shoot day: book a new one, or put this plan on the open one */
   let shoot: Shoot | null = null
   if (src === 'newshoot') {
-    const r = await bookShoot(admin, { clientId, userId, tier: asTier(body.picture?.tier), date: shootDate, note: `${name}: ${facts}` })
+    /* the list starts with everything else they named; this plan joins it below, so the size counts it */
+    const also = (Array.isArray(body.picture?.alsoShoot) ? body.picture!.alsoShoot : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 5)
+    const r = await bookShoot(admin, { clientId, userId, items: [{ label: name, kind, planId: announcementId, pieces }, ...also.map((label) => ({ label }))], date: shootDate, note: `${name}: ${facts}` })
     if (r.ok) {
       shoot = r.shoot; total += r.orderCents ?? 0
-      plan.push({ key: 'shootday', label: r.needsPayment ? 'Book the shoot day' : 'The shoot day', detail: `${shoot.tierLabel}, ${shoot.spots} ${shoot.spots === 1 ? 'spot' : 'spots'}. ${r.needsPayment ? 'Pay to book it. ' : ''}Put other plans on it too`, date: shoot.date ?? readyBy, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'One day feeds every plan you put on it' })
+      plan.push({ key: 'shootday', label: r.needsPayment ? 'Book the shoot day' : 'The shoot day', detail: `${shoot.tierLabel}: ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list, about ${shoot.photos} photos. ${r.needsPayment ? 'Pay to book it' : 'Booked'}`, date: shoot.date ?? readyBy, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Add to the list until the day. The price follows the list' })
     } else errors.push(`The shoot did not book: ${r.error}`)
   } else if (src === 'shoot') {
     const id = typeof body.picture?.shootId === 'string' ? body.picture.shootId : null
@@ -254,15 +256,15 @@ export async function POST(req: NextRequest) {
     else if (ctx.nextShoot && body.picture?.nextShootId === ctx.nextShoot.id) shoot = await adoptShoot(admin, clientId, userId, ctx.nextShoot.id)
     if (!shoot) errors.push('That shoot day is not open any more')
   }
-  if (shoot) {
+  if (shoot && src === 'shoot') {
     const after = await attachToShoot(admin, clientId, shoot.id, { label: name, kind, planId: announcementId, pieces })
     if (after) {
       shoot = after
-      if (src === 'shoot') plan.push({ key: 'shootday', label: `On the ${shoot.date ? niceDay(shoot.date) : ''} shoot`.replace('  ', ' '), detail: `${shoot.used} of ${shoot.spots} ${shoot.spots === 1 ? 'spot' : 'spots'} used. Already booked`, date: shoot.date, cost: null, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'No new day to pay for' })
-      if (shoot.needs) plan.push({ key: 'upgrade', label: `The day needs ${TIER_LABEL[shoot.needs]} now`, detail: `${shoot.used} on it is more than ${shoot.tierLabel} holds. The team confirms before the day`, date: shoot.date, cost: shoot.upgradeCents, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Nothing is charged until you agree the bigger day' })
+      plan.push({ key: 'shootday', label: `On the ${shoot.date ? niceDay(shoot.date) : ''} shoot`.replace('  ', ' '), detail: `Yours makes ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list. Already booked`, date: shoot.date, cost: null, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'No new day to pay for' })
+      if (shoot.needs) plan.push({ key: 'upgrade', label: `That makes it ${TIER_LABEL[shoot.needs].toLowerCase()}`, detail: `${shoot.used} things is more than ${shoot.tierLabel.toLowerCase()} covers. About ${PHOTOS[shoot.needs]} photos. The team confirms with you before the day`, date: shoot.date, cost: shoot.upgradeCents, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Nothing is charged until you agree the bigger day' })
     }
-    requestId = shoot.requestId
   }
+  if (shoot) requestId = shoot.requestId
   const shootWord = shoot ? `the ${shoot.date ? niceDay(shoot.date) : 'booked'} shoot day (request ${shoot.requestId ?? ''})` : ''
   const pieceDue = readyBy ?? (shoot?.date ? day(addDays(new Date(shoot.date + 'T12:00:00'), 3).toISOString()) : null)
 

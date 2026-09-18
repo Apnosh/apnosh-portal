@@ -5,9 +5,12 @@
  * the photographer, the day) plus an announcements row of kind 'shoot' that remembers what is
  * on it: the plans attached, the spots the tier allows, and the shot list the team carries.
  *
- * Spots come from the desk's own tiers: one focus (1), full house up to three areas (3), the
- * works (5). Attaching past the room does not refuse and does not charge: it adds a line that
- * says which tier this now needs and what that costs, and the team confirms before the day.
+ * THE SIMPLE RULE (owner 2026-09-17, "spots is confusing"): a shoot day is a visit with a shot
+ * list. Things go on the list; the size of the day follows the length of the list; nobody picks
+ * a size. The desk's three photo packages are the sizes: a quick visit covers about 2 things
+ * (15 photos), half a day about 4 (25 photos), a full day about 6 (40 photos). When the list
+ * outgrows the day nothing refuses and nothing is charged: the day says it is a bigger day now,
+ * what that adds, and the team confirms before shooting.
  */
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest } from '@/lib/requests/create'
@@ -18,9 +21,15 @@ type Admin = ReturnType<typeof createAdminClient>
 
 export type ShootTier = 'standard' | 'full' | 'works'
 export const TIERS: ShootTier[] = ['standard', 'full', 'works']
-export const SPOTS: Record<ShootTier, number> = { standard: 1, full: 3, works: 5 }
-export const TIER_LABEL: Record<ShootTier, string> = { standard: 'One focus', full: 'Full house', works: 'The works' }
-export const TIER_SMALL: Record<ShootTier, string> = { standard: '1 spot, 15 photos, one visit', full: '3 spots, 25 photos, food, space and team', works: '5 spots, 40 photos plus social crops, a senior photographer' }
+/** how many things on the list each size of day covers, and the photos it comes back with */
+export const SPOTS: Record<ShootTier, number> = { standard: 2, full: 4, works: 6 }
+export const PHOTOS: Record<ShootTier, number> = { standard: 15, full: 25, works: 40 }
+export const TIER_LABEL: Record<ShootTier, string> = { standard: 'A quick visit', full: 'Half a day', works: 'A full day' }
+export const TIER_SMALL: Record<ShootTier, string> = { standard: 'One or two things, 15 photos', full: 'Three or four things, 25 photos', works: 'Five or six things, 40 photos and a senior photographer' }
+/** the size a list of this length needs */
+export const tierFor = (n: number): ShootTier => (n <= SPOTS.standard ? 'standard' : n <= SPOTS.full ? 'full' : 'works')
+/** one line that says what the day is: "3 things · about 25 photos · $495" */
+export const sizeLine = (n: number): string => { const t = tierFor(n); const c = tierCents(t); return `${n} thing${n === 1 ? '' : 's'} · about ${PHOTOS[t]} photos${c != null ? ` · $${Math.round(c / 100)}` : ''}` }
 const TIER_ANSWERS: Record<ShootTier, Record<string, string>> = {
   standard: { what: 'Food and dishes', use: 'Social media, Google and Yelp, Menus', level: 'Standard', when: 'In 2 weeks' },
   full: { what: 'Food and dishes, The space, The team', use: 'Social media, Google and Yelp, Website, Menus', level: 'Standard', when: 'In 2 weeks' },
@@ -30,7 +39,7 @@ export const tierCents = (t: ShootTier): number | null => priceCreativeRequest('
 export const asTier = (v: unknown, fallback: ShootTier = 'standard'): ShootTier => (TIERS.includes(v as ShootTier) ? (v as ShootTier) : fallback)
 
 export interface Attached { label: string; kind: string; planId: string | null; pieces: string[]; at: string }
-export interface Shoot { id: string; requestId: string | null; date: string | null; tier: ShootTier; tierLabel: string; spots: number; used: number; left: number; attached: Attached[]; cents: number | null; status: string; needs: ShootTier | null; upgradeCents: number | null; href: string | null }
+export interface Shoot { id: string; requestId: string | null; date: string | null; tier: ShootTier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: Attached[]; cents: number | null; status: string; needs: ShootTier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
 export interface Line { key: string; label: string; detail: string; date: string | null; cost: number | null; status: 'scheduled' | 'with_team' | 'needs_payment' | 'done' | 'later'; ref: { kind: string; id: string | null; href?: string } | null; why?: string }
 
 export const dayIso = (d: Date) => d.toISOString().slice(0, 10)
@@ -50,7 +59,7 @@ export function shapeShoot(row: Record<string, unknown>): Shoot {
   const up = needs ? tierCents(needs) : null
   const cur = tierCents(tier)
   const requestId = typeof places.requestId === 'string' ? places.requestId : null
-  return { id: String(row.id), requestId, date: typeof timing.date === 'string' ? timing.date : null, tier, tierLabel: TIER_LABEL[tier], spots, used, left: Math.max(0, spots - used), attached, cents: typeof row.total_cents === 'number' ? row.total_cents : null, status: String(row.status), needs, upgradeCents: up != null && cur != null ? up - cur : null, href: requestId ? `/dashboard/requests/${requestId}` : null }
+  return { id: String(row.id), requestId, date: typeof timing.date === 'string' ? timing.date : null, tier, tierLabel: TIER_LABEL[tier], photos: PHOTOS[tier], spots, used, left: Math.max(0, spots - used), attached, cents: typeof row.total_cents === 'number' ? row.total_cents : null, status: String(row.status), needs, needsLabel: needs ? TIER_LABEL[needs] : null, upgradeCents: up != null && cur != null ? up - cur : null, href: requestId ? `/dashboard/requests/${requestId}` : null }
 }
 
 /** the one open shoot: booked, not yet shot (no date, or a date still ahead) */
@@ -76,22 +85,25 @@ async function syncShotList(admin: Admin, requestId: string | null, attached: At
   if (!r) return
   const brief = { ...((r.brief as Record<string, unknown>) ?? {}) }
   brief.dishes = attached.map((a, i) => `${i + 1}. ${a.label}${a.pieces.length ? ` (${a.pieces.join(', ')})` : ''}`).join('; ') || 'Shot list to follow from the plans attached to this day'
-  const note = [`Shot list, ${attached.length} on the day:`, ...attached.map((a, i) => `${i + 1}. ${a.label} for the ${a.kind}${a.pieces.length ? `: ${a.pieces.join(', ')}` : ''}`), needs ? `NEEDS ${TIER_LABEL[needs]} now (${attached.length} spots). Confirm with the owner before the day.` : ''].filter(Boolean).join('\n')
+  const note = [`Shot list, ${attached.length} on the day:`, ...attached.map((a, i) => `${i + 1}. ${a.label} for the ${a.kind}${a.pieces.length ? `: ${a.pieces.join(', ')}` : ''}`), needs ? `The list is ${attached.length} things now, which is ${TIER_LABEL[needs].toLowerCase()} (${PHOTOS[needs]} photos). Confirm the bigger day with the owner before shooting.` : ''].filter(Boolean).join('\n')
   await admin.from('creative_requests').update({ brief, team_note: note }).eq('id', requestId)
 }
 
-export async function bookShoot(admin: Admin, o: { clientId: string; userId: string; tier: ShootTier; date: string | null; note?: string }): Promise<{ ok: true; shoot: Shoot; needsPayment: boolean; orderCents: number | null } | { ok: false; error: string; status: number }> {
-  const { clientId, userId, tier, date } = o
-  const note = clean(o.note, 300)
+export async function bookShoot(admin: Admin, o: { clientId: string; userId: string; tier?: ShootTier; items?: { label: string; kind?: string; planId?: string | null; pieces?: string[] }[]; date: string | null; note?: string }): Promise<{ ok: true; shoot: Shoot; needsPayment: boolean; orderCents: number | null } | { ok: false; error: string; status: number }> {
+  const { clientId, userId, date } = o
+  const items = (o.items ?? []).map((i) => ({ label: clean(i.label, 80), kind: clean(i.kind, 20) || 'shot', planId: i.planId ?? null, pieces: (i.pieces ?? []).map((p) => clean(p, 30)).filter(Boolean), at: new Date().toISOString() })).filter((i) => i.label)
+  /* the size follows the list; a caller may still name one, never smaller than the list needs */
+  const tier: ShootTier = o.tier && SPOTS[o.tier] >= items.length ? o.tier : tierFor(Math.max(1, items.length))
+  const note = clean(o.note, 300) || items.map((i, n) => `${n + 1}. ${i.label}`).join('; ')
   const r = await createCreativeRequest({ clientId, userId, type: 'photos', order: true, due_date: date, answers: { ...TIER_ANSWERS[tier], dishes: note || 'Shot list to follow from the plans attached to this day', notes: 'A shoot day. Plans attach to it from Create; the shot list on this request is kept in step.' } })
   if (!r.ok) return { ok: false, error: r.error, status: r.status }
   const href = `/dashboard/requests/${r.row.id}`
   const plan: Line[] = [
-    { key: 'book', label: r.needsPayment ? 'The day is held. Pay to book it' : 'The day is booked', detail: `${TIER_LABEL[tier]}: ${TIER_SMALL[tier]}`, date: dayIso(new Date()), cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: r.row.id, href }, why: 'One day feeds every plan you put on it' },
+    { key: 'book', label: r.needsPayment ? 'The day is held. Pay to book it' : 'The day is booked', detail: `${TIER_LABEL[tier]}, about ${PHOTOS[tier]} photos${items.length ? `. On the list: ${items.map((i) => i.label).join(', ')}` : ''}`, date: dayIso(new Date()), cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: r.row.id, href }, why: 'Add to the list until the day. The price follows the list' },
     { key: 'date', label: date ? 'Shoot day' : 'Pick the day', detail: date ? 'The photographer confirms the hour in your thread' : 'The team offers two dates in your thread', date, cost: null, status: 'later', ref: { kind: 'request', id: r.row.id, href } },
     { key: 'delivered', label: 'Photos and clips in your library', detail: 'Tagged with the day, for every plan on it and the next ones', date: date ? dayIso(new Date(Date.parse(date) + 3 * 86400000)) : null, cost: null, status: 'later', ref: { kind: 'request', id: r.row.id, href } },
   ]
-  const { data: row, error } = await admin.from('announcements').insert({ client_id: clientId, kind: 'shoot', status: 'in_progress', answers: { what: 'A shoot day', tier: TIER_LABEL[tier] }, picture: { tier, attached: [] }, places: { requestId: r.row.id }, timing: { date }, plan, total_cents: r.orderCents ?? 0, created_by: userId }).select('*').single()
+  const { data: row, error } = await admin.from('announcements').insert({ client_id: clientId, kind: 'shoot', status: 'in_progress', answers: { what: 'A shoot day', tier: TIER_LABEL[tier] }, picture: { tier, attached: items }, places: { requestId: r.row.id }, timing: { date }, plan, total_cents: r.orderCents ?? 0, created_by: userId }).select('*').single()
   if (error || !row) return { ok: false, error: 'The day was ordered but could not be saved as a shoot. The team has the order.', status: 500 }
   return { ok: true, shoot: shapeShoot(row as Record<string, unknown>), needsPayment: r.needsPayment, orderCents: r.orderCents }
 }
@@ -112,10 +124,10 @@ export async function attachToShoot(admin: Admin, clientId: string, shootId: str
   const pic = { ...((row.picture as Record<string, unknown>) ?? {}), attached }
   const next = shapeShoot({ ...(row as Record<string, unknown>), picture: pic })
   const plan = ((Array.isArray(row.plan) ? row.plan : []) as Line[]).filter((l) => l.key !== 'upgrade' && l.key !== 'onit')
-  if (attached.length) plan.splice(1, 0, { key: 'onit', label: `${attached.length} on the day`, detail: attached.map((a) => a.label).join(', '), date: cur.date, cost: null, status: 'later', ref: null })
+  if (attached.length) plan.splice(1, 0, { key: 'onit', label: `The shot list, ${attached.length} thing${attached.length === 1 ? '' : 's'}`, detail: attached.map((a) => a.label).join(', '), date: cur.date, cost: null, status: 'later', ref: null })
   if (next.needs) {
-    plan.push({ key: 'upgrade', label: `Needs ${TIER_LABEL[next.needs]} now`, detail: `${attached.length} on the day is more than ${TIER_LABEL[cur.tier]} holds. ${next.upgradeCents != null ? `+$${Math.round(next.upgradeCents / 100)}, ` : ''}the team confirms before the day`, date: cur.date, cost: next.upgradeCents, status: 'with_team', ref: cur.requestId ? { kind: 'request', id: cur.requestId, href: `/dashboard/requests/${cur.requestId}` } : null, why: 'Nothing is charged until you and the team agree the bigger day' })
-    if (!cur.needs || cur.needs !== next.needs) notifyStaffForClient(clientId, ['strategist', 'designer'], { kind: 'client_request', title: `Shoot day now needs ${TIER_LABEL[next.needs]}`, body: `${attached.length} plans attached. Confirm the tier with the owner.`, link: '/admin/requests' }).catch(() => {})
+    plan.push({ key: 'upgrade', label: `That makes it ${TIER_LABEL[next.needs].toLowerCase()}`, detail: `${attached.length} things is more than ${TIER_LABEL[cur.tier].toLowerCase()} covers. About ${PHOTOS[next.needs]} photos${next.upgradeCents != null ? `, +$${Math.round(next.upgradeCents / 100)}` : ''}. The team confirms with you before the day`, date: cur.date, cost: next.upgradeCents, status: 'with_team', ref: cur.requestId ? { kind: 'request', id: cur.requestId, href: `/dashboard/requests/${cur.requestId}` } : null, why: 'Nothing is charged until you agree the bigger day' })
+    if (!cur.needs || cur.needs !== next.needs) notifyStaffForClient(clientId, ['strategist', 'designer'], { kind: 'client_request', title: `Shoot day is ${TIER_LABEL[next.needs].toLowerCase()} now`, body: `${attached.length} things on the shot list. Confirm the bigger day with the owner.`, link: '/admin/requests' }).catch(() => {})
   }
   await admin.from('announcements').update({ picture: pic, plan, updated_at: new Date().toISOString() }).eq('id', shootId)
   await syncShotList(admin, cur.requestId, attached, next.needs)

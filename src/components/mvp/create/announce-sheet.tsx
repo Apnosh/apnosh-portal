@@ -166,9 +166,11 @@ const PLAT: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebo
 
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
-interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; spots: number; used: number; left: number; attached: { label: string; kind: string; pieces: string[] }[]; needs: Tier | null; upgradeCents: number | null; href: string | null }
+interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: { label: string; kind: string; pieces: string[] }[]; needs: Tier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
 interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
-const TIERS: { id: Tier; label: string; small: string }[] = [{ id: 'standard', label: 'One focus', small: '1 spot · 15 photos' }, { id: 'full', label: 'Full house', small: '3 spots · 25 photos' }, { id: 'works', label: 'The works', small: '5 spots · 40 photos · senior' }]
+/* a shoot day is a visit with a shot list; the size follows the list */
+const TIERS: { id: Tier; label: string; photos: number; upto: number }[] = [{ id: 'standard', label: 'A quick visit', photos: 15, upto: 2 }, { id: 'full', label: 'Half a day', photos: 25, upto: 4 }, { id: 'works', label: 'A full day', photos: 40, upto: 6 }]
+const tierFor = (n: number): Tier => (n <= 2 ? 'standard' : n <= 4 ? 'full' : 'works')
 interface PlanLine { key: string; label: string; detail: string; date: string | null; cost: number | null; status: 'scheduled' | 'with_team' | 'needs_payment' | 'done' | 'later'; ref: { kind: string; id: string | null; href?: string } | null; why?: string }
 type Goal = 10 | 25 | 50 | 999
 const GOALS: { id: Goal; label: string }[] = [{ id: 10, label: '+10 people' }, { id: 25, label: '+25' }, { id: 50, label: '+50' }, { id: 999, label: 'Full house' }]
@@ -224,7 +226,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [src, setSrc] = useState<Src>('words')
   const [pieces, setPieces] = useState<Set<Piece>>(new Set())
-  const [tier, setTier] = useState<Tier>('standard')
+  const [alsoShoot, setAlsoShoot] = useState('')
   const [shootDate, setShootDate] = useState('')
   const [priceOn, setPriceOn] = useState(true)
   const [brandKit, setBrandKit] = useState(true)
@@ -350,8 +352,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const onShoot = src === 'shoot' || src === 'newshoot'
   const madeLater = pieces.size > 0 || onShoot
   /* the open shoot: the one on file, or a photos order booked at the desk that becomes one */
-  const openShoot = ctx?.shoot ?? (ctx?.nextShoot ? { id: '', requestId: ctx.nextShoot.id, date: ctx.nextShoot.date, tier: 'standard' as Tier, tierLabel: 'One focus', spots: 1, used: 0, left: 1, attached: [], needs: null, upgradeCents: null, href: null } : null)
+  const openShoot = ctx?.shoot ?? (ctx?.nextShoot ? { id: '', requestId: ctx.nextShoot.id, date: ctx.nextShoot.date, tier: 'standard' as Tier, tierLabel: 'A quick visit', photos: 15, spots: 2, used: 0, left: 2, attached: [], needs: null, needsLabel: null, upgradeCents: null, href: null } : null)
   const tierCents = (t: Tier) => ctx?.prices.tiers?.[t] ?? ctx?.prices.shoot ?? null
+  /* the shot list of a new day: this plan plus whatever else they typed */
+  const alsoItems = alsoShoot.split(/[,\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 5)
+  const listN = 1 + alsoItems.length
+  const tier: Tier = tierFor(listN)
+  const sizeOf = (n: number) => { const t = TIERS.find((x) => x.id === tierFor(n))!; return `${n} thing${n === 1 ? '' : 's'} · about ${t.photos} photos · ${dollars(tierCents(t.id)) || ''}` }
   /* the day the pieces come back: three days after the shoot, or the desk's own lead time */
   const shootLead = src === 'newshoot' ? (shootDate || plusDays(todayIso(), 7)) : openShoot?.date ?? plusDays(todayIso(), 7)
   const channels = useMemo(() => [...(google ? ['google'] : []), ...platforms], [google, platforms])
@@ -520,8 +527,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const lead = leadDefault()
     const today = todayIso()
     const pieceDue = readyBy || plusDays(shootLead, 3)
-    if (src === 'newshoot') line('shootday', 'Book the shoot day', `${TIERS.find((t) => t.id === tier)?.label ?? ''}, ${ctx?.prices.spots?.[tier] ?? 1} ${(ctx?.prices.spots?.[tier] ?? 1) === 1 ? 'spot' : 'spots'}. Pay to book it. Put other plans on it too`, shootDate || null, tierCents(tier), 'needs_payment', 'One day feeds every plan you put on it')
-    if (src === 'shoot' && openShoot) { line('shootday', `On the ${openShoot.date ? niceDate(openShoot.date) : 'booked'} shoot`, `${openShoot.used + 1} of ${openShoot.spots} ${openShoot.spots === 1 ? 'spot' : 'spots'} used. Already booked`, openShoot.date, null, 'with_team', 'No new day to pay for'); if (openShoot.used + 1 > openShoot.spots) { const nt: Tier | null = openShoot.used + 1 <= 3 ? 'full' : openShoot.used + 1 <= 5 ? 'works' : null; const up = nt && tierCents(nt) != null && tierCents(openShoot.tier) != null ? (tierCents(nt) as number) - (tierCents(openShoot.tier) as number) : null; line('upgrade', `The day needs ${nt ? TIERS.find((t) => t.id === nt)?.label : 'a bigger crew'} now`, `${openShoot.used + 1} on it is more than ${openShoot.tierLabel} holds. The team confirms before the day`, openShoot.date, up, 'with_team', 'Nothing is charged until you agree the bigger day') } }
+    if (src === 'newshoot') line('shootday', 'Book the shoot day', `${TIERS.find((t) => t.id === tier)?.label ?? ''}: ${sizeOf(listN)}. Pay to book it`, shootDate || null, tierCents(tier), 'needs_payment', 'Add to the list until the day. The price follows the list')
+    if (src === 'shoot' && openShoot) { const n = openShoot.used + 1; line('shootday', `On the ${openShoot.date ? niceDate(openShoot.date) : 'booked'} shoot`, `Yours makes ${n} thing${n === 1 ? '' : 's'} on the list. Already booked`, openShoot.date, null, 'with_team', 'No new day to pay for'); if (n > openShoot.spots) { const nt = tierFor(n); const up = tierCents(nt) != null && tierCents(openShoot.tier) != null ? (tierCents(nt) as number) - (tierCents(openShoot.tier) as number) : null; line('upgrade', `That makes it ${TIERS.find((t) => t.id === nt)?.label.toLowerCase()}`, `${n} things is more than ${openShoot.tierLabel.toLowerCase()} covers. About ${TIERS.find((t) => t.id === nt)?.photos} photos. The team confirms with you before the day`, openShoot.date, up, 'with_team', 'Nothing is charged until you agree the bigger day') } }
     if (pieces.has('graphic')) line('graphic', onShoot ? 'The graphic, from the shoot' : 'We start the graphic', onShoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', onShoot ? pieceDue : today, ctx?.prices.graphic ?? null, 'with_team', isEvent ? 'A night needs the date on the picture' : a.price ? 'A price on the picture is what people remember' : undefined)
     if (pieces.has('reel')) line('video', onShoot ? 'The Reel, from the shoot' : 'The video', onShoot ? 'Cut from the clips we film that day' : 'Pay to start. Then the team takes it', pieceDue, ctx?.prices.video ?? null, onShoot ? 'with_team' : 'needs_payment', 'Reels reach further than photos')
     if (pieces.has('photos') && onShoot) line('photos', 'Photos in your library', `${a.what || 'It'}, edited, tagged with the day`, pieceDue, null, 'later')
@@ -560,7 +567,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (weekly && (isDeal || isEvent) && (rawDates().from || rawDates().when)) line('checkin', 'The check-in', `${DAYS[isDeal ? dealDay() : new Date(rawDates().when + 'T12:00:00').getDay()]} sales against the four before${isDeal && a.code?.trim() ? `, and how many said ${a.code.trim()}` : ''}`, plusDays(rawDates().from || rawDates().when, 28), null, 'later', 'Keep it, change it, or stop it, with the numbers')
     else line('results', 'How it did', isEvent ? 'Views, RSVPs and mentions, in Insights' : 'Views, saves and mentions, in Insights', plusDays((isEvent && rawDates().when) || postDay, 7), null, 'later')
     return L
-  }, [kind, src, pieces, tier, shootDate, openShoot, shootLead, onShoot, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched, night, part, slowWords, tables, fromSlow]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, src, pieces, tier, listN, alsoShoot, shootDate, openShoot, shootLead, onShoot, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched, night, part, slowWords, tables, fromSlow]) // eslint-disable-line react-hooks/exhaustive-deps
   const previewTotal = preview.reduce((s, l) => s + (l.cost ?? 0), 0)
 
   const commit = async () => {
@@ -570,7 +577,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     try {
       const r = await fetch('/api/dashboard/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         clientId, kind: kind.id, answers: factsOut(),
-        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, tier, shootDate: shootDate || undefined },
+        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, tier, alsoShoot: alsoItems, shootDate: shootDate || undefined },
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
@@ -793,8 +800,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {([
                 { m: 'own' as Src, label: 'My photos', small: media.length ? `${media.length} added` : 'Tap to add one', scene: 'photos' as Scene, hue: '#2e9a78' },
-                ...(openShoot ? [{ m: 'shoot' as Src, label: `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, small: openShoot.left > 0 ? `${openShoot.left} ${openShoot.left === 1 ? 'spot' : 'spots'} left` : 'Full. Adding needs a bigger day', scene: 'calendar' as Scene, hue: '#3b6fd4' }] : []),
-                { m: 'newshoot' as Src, label: openShoot ? 'Another shoot day' : 'Book a shoot day', small: `from ${dollars(tierCents('standard')) || '$350'} · holds up to 5 plans`, scene: 'creator' as Scene, hue: '#6a39de' },
+                ...(openShoot ? [{ m: 'shoot' as Src, label: `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, small: openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} on the list. Add this` : 'Nothing on the list yet. Add this', scene: 'calendar' as Scene, hue: '#3b6fd4' }] : []),
+                { m: 'newshoot' as Src, label: openShoot ? 'Another shoot day' : 'Book a shoot day', small: `from ${dollars(tierCents('standard')) || '$385'} · one visit, a shot list`, scene: 'creator' as Scene, hue: '#6a39de' },
                 { m: 'team' as Src, label: 'Our photos', small: 'The team designs from stock', scene: 'graphic' as Scene, hue: '#d99a1e' },
                 { m: 'words' as Src, label: 'Words only', small: 'Google and Facebook', scene: 'google' as Scene, hue: '#8a928e' },
               ]).map((o) => (
@@ -808,19 +815,20 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
             {src === 'newshoot' && (
               <>
-                <div style={h3}>The day</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                  {TIERS.map((t) => <button key={t.id} type="button" onClick={() => setTier(t.id)} style={{ border: `1.5px solid ${tier === t.id ? C.ink : C.line}`, boxShadow: tier === t.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 14, padding: '10px 8px', background: '#fff', cursor: 'pointer', font: 'inherit', color: C.ink, textAlign: 'left' }}><b style={{ display: 'block', fontSize: 13 }}>{t.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 11, marginTop: 2 }}>{t.small}</small><b style={{ display: 'block', fontSize: 12.5, marginTop: 4 }}>{dollars(tierCents(t.id)) || ''}</b></button>)}
-                </div>
+                <div style={h3}>The shot list</div>
+                <div style={rowS}><span>1. {a.what?.trim() || kind.label}<small style={sub}>This plan</small></span></div>
+                <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginTop: 12 }}>Anything else to shoot that day?<span style={{ fontWeight: 500, color: C.mute, marginLeft: 4 }}>optional</span></label>
+                <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="The patio, the team, the tiramisu" style={input} />
+                <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 10 }}>{TIERS.find((t) => t.id === tier)?.label}: {sizeOf(listN)}</div>
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>One or two things is a quick visit. Three or four is half a day. Five or six is a full day. The price follows the list, and you can add to it until the day.</div>
                 <div style={rowS}><span>Shoot day<small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>
-                <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>Other plans can ride on this day. Each one takes a spot.</div>
               </>
             )}
             {src === 'shoot' && openShoot && (
               <div style={{ marginTop: 12, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 12.5 }}>
-                <b style={{ display: 'block', fontSize: 13 }}>{openShoot.tierLabel} · {openShoot.spots} {openShoot.spots === 1 ? 'spot' : 'spots'}</b>
-                {openShoot.attached.length ? <div style={{ color: C.mute, marginTop: 3 }}>On it: {openShoot.attached.map((x) => x.label).join(', ')}</div> : <div style={{ color: C.mute, marginTop: 3 }}>Nothing on it yet. This is the first</div>}
-                {openShoot.left <= 0 && <div style={{ color: '#8a5a0c', fontWeight: 600, marginTop: 4 }}>Adding this makes it a bigger day. The team confirms the price before shooting.</div>}
+                <b style={{ display: 'block', fontSize: 13 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. Already booked</b>
+                <div style={{ color: C.mute, marginTop: 3 }}>{openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}</div>
+                {openShoot.used + 1 > openShoot.spots && <div style={{ color: '#8a5a0c', fontWeight: 600, marginTop: 4, lineHeight: 1.4 }}>That makes it {TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you before shooting. Nothing is charged until you agree.</div>}
               </div>
             )}
 

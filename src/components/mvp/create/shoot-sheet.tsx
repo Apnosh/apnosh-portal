@@ -2,11 +2,11 @@
 /**
  * THE SHOOT DAY (owner 2026-09-17): "a shoot would include multiple campaigns".
  * =============================================================================
- * Behind the Photos tile. One day, booked once, filled over the week. It shows what is on the
- * day, the spots left, the price, and the upcoming plans that could ride on it. Booking a day
- * is the photos order at the desk; the room comes from the desk's own tiers. Each plan on the
- * day takes a spot. Past the room, the day says which tier it needs now and the team confirms
- * before shooting. Nothing is charged twice.
+ * Behind the Photos tile. A shoot day is a visit with a shot list. You write the list, the
+ * price follows its length, nobody picks a size: one or two things is a quick visit, three or
+ * four is half a day, five or six is a full day. Booked once, the list grows until the day.
+ * When it outgrows the day, the sheet says so and the team confirms the bigger day before
+ * shooting. Nothing is charged twice.
  */
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -17,8 +17,8 @@ import type { AnnounceKind } from './announce-sheet'
 
 type Tier = 'standard' | 'full' | 'works'
 interface Attached { label: string; kind: string; planId: string | null; pieces: string[]; at: string }
-interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; spots: number; used: number; left: number; attached: Attached[]; cents: number | null; status: string; needs: Tier | null; upgradeCents: number | null; href: string | null }
-interface Read { shoot: Shoot | null; suggest: { id: string; kind: string; label: string; date: string | null }[]; tiers: { id: Tier; label: string; small: string; spots: number; cents: number | null }[] }
+interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: Attached[]; cents: number | null; status: string; needs: Tier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
+interface Read { shoot: Shoot | null; suggest: { id: string; kind: string; label: string; date: string | null }[]; tiers: { id: Tier; label: string; small: string; spots: number; photos: number; cents: number | null }[] }
 const KIND_WORD: Record<string, string> = { dish: 'new dish', deal: 'deal', event: 'event', hours: 'hours', hiring: 'hiring', open: 'opening', holiday: 'holiday', else: 'news', post: 'post', update: 'update' }
 const niceDate = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso.slice(0, 10) + 'T12:00:00'); return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }
 const dollars = (c: number | null) => (c == null ? '' : `$${Math.round(c / 100).toLocaleString()}`)
@@ -45,9 +45,11 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
   const [data, setData] = useState<Read | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [tier, setTier] = useState<Tier>('standard')
   const [date, setDate] = useState('')
-  const [note, setNote] = useState('')
+  const [items, setItems] = useState<string[]>([])
+  const [draft, setDraft] = useState('')
+  const [adding, setAdding] = useState('')
+  const addItem = () => { const v = draft.trim(); if (!v) return; setItems((x) => [...x, v].slice(0, 6)); setDraft('') }
   const load = () => fetch(`/api/dashboard/shoot?clientId=${clientId}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not read your shoot'); setData(j as Read) }).catch((e) => setErr(e instanceof Error ? e.message : 'Could not read your shoot'))
   useEffect(() => { load() }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -66,6 +68,8 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
   const hue = '#6a39de'
   const shoot = data?.shoot ?? null
   const tiers = data?.tiers ?? []
+  const tierFor = (n: number) => tiers.find((t) => n <= t.spots) ?? tiers[tiers.length - 1] ?? null
+  const size = tierFor(Math.max(1, items.length))
   const cta: React.CSSProperties = { marginTop: 18, width: '100%', height: 50, borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 15, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', textDecoration: 'none' }
   const h2: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', margin: '4px 2px 12px', lineHeight: 1.15 }
   const h3: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 0 8px' }
@@ -93,15 +97,15 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
               <div>
                 <div style={{ ...h2, margin: 0 }}>{shoot.date ? niceDate(shoot.date) : 'Day to be picked'}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                  {pill(`${shoot.tierLabel} · ${shoot.spots} ${shoot.spots === 1 ? 'spot' : 'spots'}`, 'mute')}
-                  {shoot.needs ? pill(`Needs ${data.tiers.find((t) => t.id === shoot.needs)?.label ?? 'a bigger day'}`, 'warn') : pill(shoot.left > 0 ? `${shoot.left} left` : 'Full', shoot.left > 0 ? 'ok' : 'mute')}
+                  {pill(`${shoot.tierLabel} · about ${shoot.photos} photos`, 'mute')}
+                  {shoot.needs ? pill(`${shoot.needsLabel} now`, 'warn') : pill(`${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list`, 'ok')}
                   {shoot.status === 'awaiting_payment' || shoot.cents == null ? null : pill(dollars(shoot.cents), 'mute')}
                 </div>
               </div>
             </div>
 
-            <div style={h3}>On the day</div>
-            {shoot.attached.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '6px 0 4px' }}>Nothing yet. Add a plan below, or start one from Announce and pick this day as the source.</div>}
+            <div style={h3}>The shot list</div>
+            {shoot.attached.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '6px 0 4px' }}>Nothing on it yet. Add something below.</div>}
             {shoot.attached.map((x, i) => (
               <div key={i} style={rowS}>
                 <span style={{ width: 24, height: 24, borderRadius: 99, background: '#f2f2f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flex: 'none' }}>{i + 1}</span>
@@ -109,7 +113,8 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
                 <button type="button" aria-label="Take it off the day" disabled={busy != null} onClick={() => post({ action: 'detach', shootId: shoot.id, index: i }, `d${i}`)} style={{ width: 28, height: 28, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute }}>{busy === `d${i}` ? <Loader2 size={12} className="mvp-spin" /> : <X size={12} />}</button>
               </div>
             ))}
-            {shoot.needs && <div style={{ marginTop: 10, fontSize: 12.5, color: '#8a5a0c', lineHeight: 1.45 }}><b>{shoot.used} on the day is more than {shoot.tierLabel} holds.</b> It needs {data.tiers.find((t) => t.id === shoot.needs)?.label}{shoot.upgradeCents != null ? `, +${dollars(shoot.upgradeCents)}` : ''}. The team confirms with you before the day. Nothing is charged until you agree.</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}><input value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && adding.trim()) { post({ action: 'attach', shootId: shoot.id, label: adding.trim(), kind: 'shot', pieces: ['photos'] }, 'add'); setAdding('') } }} placeholder="The patio, the tiramisu, the team" style={{ ...input, flex: 1, width: 'auto', marginTop: 0, padding: '10px 12px', fontWeight: 500 }} /><button type="button" disabled={busy != null || !adding.trim()} onClick={() => { post({ action: 'attach', shootId: shoot.id, label: adding.trim(), kind: 'shot', pieces: ['photos'] }, 'add'); setAdding('') }} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', cursor: 'pointer', font: 'inherit', opacity: adding.trim() ? 1 : .5 }}>{busy === 'add' ? <Loader2 size={12} className="mvp-spin" /> : 'Add'}</button></div>
+            {shoot.needs ? <div style={{ marginTop: 10, fontSize: 12.5, color: '#8a5a0c', lineHeight: 1.45 }}><b>{shoot.used} things makes it {shoot.needsLabel?.toLowerCase()}.</b> About {data.tiers.find((t) => t.id === shoot.needs)?.photos} photos{shoot.upgradeCents != null ? `, +${dollars(shoot.upgradeCents)}` : ''}. The team confirms with you before the day. Nothing is charged until you agree.</div> : <div style={{ marginTop: 10, fontSize: 12, color: C.mute, lineHeight: 1.45 }}>{shoot.tierLabel} covers up to {shoot.spots} things. Add more and it becomes a bigger day; the team confirms the price with you first.</div>}
 
             {data.suggest.length > 0 && (
               <>
@@ -123,11 +128,11 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
               </>
             )}
 
-            <div style={h3}>Something new for the day</div>
+            <div style={h3}>Announce something with it</div>
+            <div style={{ fontSize: 12, color: C.mute, marginBottom: 8, lineHeight: 1.45 }}>Start a plan and pick this day as where the picture comes from. It joins the list.</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {([['dish', 'A new dish'], ['deal', 'A deal'], ['event', 'An event'], ['else', 'Something else']] as [AnnounceKind, string][]).map(([k, l]) => <button key={k} type="button" onClick={() => onAnnounce(k)} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit' }}>{l}</button>)}
             </div>
-            <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Pick the day as the source on the first screen and it lands here.</div>
 
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             {shoot.href && <a href={shoot.href} style={cta}>{shoot.status === 'awaiting_payment' ? 'Pay to book the day' : 'Open the order'}</a>}
@@ -141,16 +146,15 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
               <span style={{ width: 72, flex: 'none' }}><Drawing spec={{ scene: 'creator' }} name="" rating="" t={(s) => s} /></span>
               <div style={h2}>Book a shoot day</div>
             </div>
-            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginTop: -4 }}>One day, several plans. A new dish, the deal, the event: each takes a spot, and every photo lands in your library for the next ones too.</div>
-            <div style={h3}>How big a day</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              {tiers.map((t) => <button key={t.id} type="button" onClick={() => setTier(t.id)} style={{ border: `1.5px solid ${tier === t.id ? C.ink : C.line}`, boxShadow: tier === t.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 14, padding: '10px 8px', background: '#fff', cursor: 'pointer', font: 'inherit', color: C.ink, textAlign: 'left' }}><b style={{ display: 'block', fontSize: 13 }}>{t.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{t.small}</small><b style={{ display: 'block', fontSize: 12.5, marginTop: 4 }}>{dollars(t.cents)}</b></button>)}
-            </div>
+            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginTop: -4 }}>A photographer comes once. Write the list of what to shoot. The longer the list, the bigger the day, and every photo lands in your library.</div>
+            <div style={h3}>What should we shoot?</div>
+            {items.map((it, i) => <div key={i} style={rowS}><span style={{ width: 24, height: 24, borderRadius: 99, background: '#f2f2f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flex: 'none' }}>{i + 1}</span><span style={{ flex: 1 }}>{it}</span><button type="button" aria-label="Remove" onClick={() => setItems((x) => x.filter((_, j) => j !== i))} style={{ width: 28, height: 28, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute }}><X size={12} /></button></div>)}
+            {items.length < 6 && <div style={{ display: 'flex', gap: 8, marginTop: 10 }}><input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addItem() }} placeholder={items.length ? 'Anything else?' : 'The new ramen, the patio, the team'} style={{ ...input, flex: 1, width: 'auto', marginTop: 0, padding: '10px 12px', fontWeight: 500 }} /><button type="button" onClick={addItem} disabled={!draft.trim()} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', cursor: 'pointer', font: 'inherit', opacity: draft.trim() ? 1 : .5 }}>Add</button></div>}
+            {size && <div style={{ marginTop: 14, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px' }}><b style={{ display: 'block', fontSize: 14 }}>{size.label}: {Math.max(1, items.length)} thing{items.length === 1 || items.length === 0 ? '' : 's'} · about {size.photos} photos · {dollars(size.cents)}</b><small style={sub}>One or two things is a quick visit. Three or four is half a day. Five or six is a full day. The price follows the list, and you can add to it until the day.</small></div>}
             <div style={rowS}><span>The day<small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(3)} value={date} onChange={(e) => setDate(e.target.value)} style={input} /></div>
-            <div style={rowS}><span style={{ flex: 1 }}>What to shoot first<input value={note} onChange={(e) => setNote(e.target.value)} placeholder="The new ramen, the patio, the team" style={{ ...input, display: 'block', width: '100%', marginTop: 6, boxSizing: 'border-box', fontWeight: 500 }} /></span></div>
-            {data.suggest.length > 0 && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 10 }}>{data.suggest.length} plan{data.suggest.length === 1 ? '' : 's'} on Coming up could ride on this day. Add them once it is booked.</div>}
+            {data.suggest.length > 0 && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 10 }}>{data.suggest.length} plan{data.suggest.length === 1 ? '' : 's'} on Coming up could join the list once it is booked.</div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" disabled={busy != null} onClick={() => post({ action: 'book', tier, date: date || undefined, note }, 'book')} style={{ ...cta, opacity: busy ? .6 : 1 }}>{busy === 'book' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} Book the day, {dollars(tiers.find((t) => t.id === tier)?.cents ?? null)}</button>
+            <button type="button" disabled={busy != null || !items.length} onClick={() => post({ action: 'book', items, date: date || undefined }, 'book')} style={{ ...cta, opacity: busy || !items.length ? .6 : 1 }}>{busy === 'book' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} {items.length ? `Book the day, ${dollars(size?.cents ?? null)}` : 'Add something to shoot first'}</button>
             <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Paid before the day. The order opens next with a Pay link.</div>
           </>
         )}
