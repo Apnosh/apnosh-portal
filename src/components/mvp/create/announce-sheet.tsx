@@ -786,7 +786,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <div style={{ margin: '4px 0 6px' }}>
                 {media.length === 0 ? (
                   <button type="button" onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 118, borderRadius: 18, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer', font: 'inherit', color: C.ink }}>
-                    {uploading ? <Loader2 size={22} className="mvp-spin" color={hue} /> : <><span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span><span style={{ textAlign: 'left' }}><b style={{ fontSize: 14 }}>Add a photo or video</b><small style={sub}>Optional. We can make one next.</small></span></>}
+                    {uploading ? <Loader2 size={22} className="mvp-spin" color={hue} /> : <><span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span><span style={{ textAlign: 'left' }}><b style={{ fontSize: 14 }}>Add a photo or video</b><small style={sub}>Optional. Every plan can make one.</small></span></>}
                   </button>
                 ) : (
                   <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
