@@ -685,9 +685,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const steps: Step[] = ['picture', 'facts', 'where', 'words', 'plan']
   /* the simple road: facts, three cards, done. The old screens stay reachable from What is inside */
   const simple = !!kind && !isSlow && !kind.hidden
-  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
-  const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('facts'); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
+  const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('plans'); return } if (simple && step === 'plans' && openItem) { setOpenItem(null); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(visible[i + 1]) }
   /* ONE TAP (owner 2026-09-18): Make it happen from the facts screen. The words are written on the
      way if they are not yet, then everything is made. */
@@ -798,7 +798,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
         {step === 'facts' && kind && (
           <div style={hv(hue)}>
-            {!openItem && <div style={h2}>Tell us about it</div>}
+            {!openItem && <div style={h2}>{kind.id === 'dish' ? 'What is new?' : 'Tell us about it'}</div>}
             {!openItem && <>
             {kind.photo && (!kind.picture || simple) && (
               <div style={{ margin: '4px 0 6px' }}>
@@ -814,12 +814,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </div>
             )}
-            {kind.fields.filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim()))).map((f) => (
+            {kind.fields.filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && ((f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim())) || (f.optional && f.key !== 'price')))).map((f) => (
               <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
                 {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
                 {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />
                   : f.kind === 'long' ? <textarea rows={3} value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={{ ...input, resize: 'none', lineHeight: 1.45 }} />
-                  : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />}
+                  : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={f.key === 'what' && simple ? { ...input, fontSize: 20, fontWeight: 600, padding: '14px 14px', borderRadius: 16 } : input} />}
               </label>
             ))}
             {isEvent && (
@@ -881,16 +881,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             </>}
-            {simple && (
-              <>
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
-                {!openItem && items.length > 0 && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
-                  <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick inside it.</span>
-                  <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 74, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
-                  <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
-                </div>}
-              </>
-            )}
+            {simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>See my plan</button>}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}
@@ -1072,6 +1063,19 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <button type="button" onClick={() => write()} disabled={writing} style={{ ...cta_, marginTop: 0, flex: '0 0 auto', width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : 'Again'}</button>
               <button type="button" onClick={next} disabled={writing || (!social.trim() && !gtext.trim())} style={{ ...cta_, marginTop: 0, flex: 1 }}>{inside ? 'Done' : 'Next'}</button>
             </div>
+          </div>
+        )}
+
+        {step === 'plans' && kind && (
+          <div style={hv(hue)}>
+            {!openItem && <div style={h2}>{a.what?.trim() ? a.what.trim() : 'Your plan'}</div>}
+            {!openItem && <div style={{ fontSize: 13, color: C.mute, marginTop: -6, marginBottom: 4, lineHeight: 1.45 }}>Picked for a {kind.label.toLowerCase()}{me?.budgetCents != null ? `, inside your $${Math.round(me.budgetCents / 100)}` : ''}. Change anything.</div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
+                {!openItem && items.length > 0 && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
+                  <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick inside it.</span>
+                  <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 74, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
+                  <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
+                </div>}
           </div>
         )}
 

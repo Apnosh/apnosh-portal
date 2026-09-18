@@ -8,7 +8,7 @@
  * bar is the cart: how many things, how many people, the total.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Plus } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { MULTI, newUid, type ItemId, type ItemPick } from '@/lib/plan/suggest'
@@ -271,11 +271,12 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   const AddRow = ({ it }: { it: ItemPick }) => { const m = META[it.id]; const cents = it.on ? itemCents(it, prices, profile) : minOf(it); const free = m.free || cents === 0; return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
       <Thumb it={it} size={44} />
-      <button type="button" onClick={() => (MULTI.includes(it.id) && it.on ? addNew(it.id) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on && !MULTI.includes(it.id) ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>
+      <button type="button" onClick={() => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>
       </button>
       <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions && !it.on ? 'from ' : ''}${dollars(cents)}`}</b>
-      <button type="button" onClick={() => (MULTI.includes(it.id) && it.on ? addNew(it.id) : it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ fontSize: 12, fontWeight: 800, padding: '6px 12px', borderRadius: 99, border: `1.5px solid ${it.on && !MULTI.includes(it.id) ? C.ink : C.ink}`, background: it.on && !MULTI.includes(it.id) ? C.ink : '#fff', color: it.on && !MULTI.includes(it.id) ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit', flex: 'none' }}>{it.on ? (MULTI.includes(it.id) ? '＋ Another' : 'Added') : 'Add'}</button>
+      {MULTI.includes(it.id) && it.on && <button type="button" onClick={() => addNew(it.id)} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>＋ Another</button>}
+      {(() => { const added = it.on; const act = () => (it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid)); return <button type="button" onClick={act} aria-label={added ? 'Added, tap to remove' : 'Add'} style={{ width: 34, height: 34, borderRadius: 99, border: `1.5px solid ${added ? C.greenDk : C.ink}`, background: added ? C.greenDk : '#fff', color: added ? '#fff' : C.ink, cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none' }}>{added ? <Check size={16} strokeWidth={3} /> : <Plus size={16} strokeWidth={2.5} />}</button> })()}
     </div>
   ) }
 
