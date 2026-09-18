@@ -26,6 +26,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents } from '@/lib/requests/create'
 import { openShoot, bookShoot, attachToShoot, adoptShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
+import { bookInfluencer } from '@/lib/influencers/book'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
 import { createPost, listPostTargets } from '@/lib/channels/adapters/zernio'
@@ -57,7 +58,7 @@ export interface PlanLine {
   /** cents, only when it costs money */
   cost: number | null
   status: 'scheduled' | 'with_team' | 'needs_payment' | 'done' | 'later'
-  ref: { kind: 'post' | 'draft' | 'request' | 'gbp' | 'page'; id: string | null; href?: string } | null
+  ref: { kind: 'post' | 'draft' | 'request' | 'gbp' | 'page' | 'booking'; id: string | null; href?: string } | null
   /** one short reason, the sheet's, carried through so the done screen reads like the plan did */
   why?: string
 }
@@ -71,6 +72,8 @@ interface Body {
   timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
   whys?: Record<string, unknown>
+  /* the menu: every item with its options (announce-menu.tsx) */
+  items?: Record<string, { on?: boolean; options?: Record<string, unknown>; why?: string; cents?: number }>
   words?: { social?: string; google?: string; cta?: Cta; languages?: unknown; card?: string }
   /** the date answers as ISO days, beside the spelled-out ones in `answers` */
   dates?: Record<string, unknown>
@@ -209,6 +212,8 @@ export async function POST(req: NextRequest) {
   const boostCents = Number.isFinite(Number(body.timing?.boostCents)) ? Math.max(0, Math.min(50000, Math.round(Number(body.timing?.boostCents)))) : 2000
   const whys: Record<string, string> = {}
   for (const [k, v] of Object.entries(body.whys ?? {})) if (typeof v === 'string' && v.trim()) whys[k] = clean(v, 140)
+  const items = body.items && typeof body.items === 'object' ? body.items : null
+  const item = (id: string) => (items && items[id] && items[id].on ? items[id] : null)
   const social = clean(body.words?.social, 2200)
   const gtext = clean(body.words?.google, 1500).replace(/https?:\/\/\S+/g, '').trim()
   const cta: Cta = (['order', 'visit', 'reserve', 'message'] as Cta[]).includes(body.words?.cta as Cta) ? (body.words!.cta as Cta) : 'visit'
@@ -296,7 +301,7 @@ export async function POST(req: NextRequest) {
   if (pieces.includes('reel')) {
     const r = await createCreativeRequest({
       clientId, userId, type: 'video', order: true, due_date: pieceDue, attachments,
-      answers: { what: `${name}: ${a.line || 'the dish, plated'}`, filming: onShoot ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place', count: 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''}`.replace(/\s+/g, ' ').trim() },
+      answers: { what: `${name}: ${a.line || 'the dish, plated'}`, filming: (() => { const f = item('video')?.options?.filmed; return f === 'visit' ? 'Come film at my place' : f === 'clips' ? 'Use clips and photos I have' : onShoot || f === 'creator' || f === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place' })(), count: 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${(() => { const o = item('video')?.options ?? {}; return [o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ') })()}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
@@ -481,13 +486,30 @@ export async function POST(req: NextRequest) {
     else errors.push(`The email did not send to the team: ${r.error}`)
   }
   if (also.includes('print')) {
-    const thing = PRINT[kind] ?? 'Flyer'
+    const pk = item('print')?.options?.kind ?? ((item('graphic')?.options?.where as string[] | undefined)?.includes('poster') ? 'poster' : undefined)
+    const thing = pk === 'poster' ? 'Window poster' : pk === 'tent' ? 'Table tent' : PRINT[kind] ?? 'Flyer'
     const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
     if (r.ok) plan.push({ key: 'print', label: thing, detail: 'The team quotes it, printed or a file', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     else errors.push(`The table tent did not send: ${r.error}`)
   }
-  if (also.includes('team') && card) {
-    const r = await notifyClientOwners(clientId, { kind: 'client_request', title: `Team card: ${name}`, body: card.slice(0, 1000), link: '/dashboard/notifications' }).catch(() => ({ notified: 0 }))
+  /* ── the menu's own items: in the restaurant, and a creator booked for real ── */
+  const teamExtra: string[] = []
+  const codeWord = `${clean(a.what, 12).replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6) || 'NEW'}10`
+  if (item('taste')) { plan.push({ key: 'taste', label: 'A taste at the counter', detail: 'Free bites all week. On the team card', date: postDay, cost: null, status: 'later', ref: null, why: item('taste')?.why }); teamExtra.push(`Offer a free taste of ${name} at the counter all week.`) }
+  if (item('review')) { plan.push({ key: 'reviewask', label: 'Ask for a review', detail: 'With the check, two weeks. The card is in Get reviews', date: postDay, cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/reviews/card' }, why: item('review')?.why }); teamExtra.push(`For two weeks: if they liked ${name}, ask for a Google review with the check.`) }
+  if (item('sign')) { const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `Guest photo sign for ${name}: post it, tag us, dessert is on us`, printing: 'A file to print', when: whenWord(postDay), notes: `A small counter sign with a QR to the Instagram. ${facts}` } }); if (r.ok) plan.push({ key: 'sign', label: 'Guest photo sign', detail: 'Post it, tag us, dessert is on us. A file to print', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: item('sign')?.why }) }
+  if (item('offer')) { const txt = clean(item('offer')?.options?.text, 120) || `Free drink with ${name} this week`; plan.push({ key: 'offer', label: 'Launch offer', detail: `${txt}${item('offer')?.options?.code !== false ? `. Code ${codeWord}, the team counts it` : ''}`, date: postDay, cost: null, status: 'later', ref: null, why: item('offer')?.why }); teamExtra.push(`Launch offer: ${txt}${item('offer')?.options?.code !== false ? ` (code ${codeWord}, count it)` : ''}.`) }
+  if (item('apps')) plan.push({ key: 'apps', label: 'Feature it on DoorDash', detail: 'The team sets a two-week promo on the item', date: postDay, cost: null, status: 'with_team', ref: null, why: item('apps')?.why })
+  const cr = item('creator')
+  if (cr && typeof cr.options?.slug === 'string') {
+    const o = cr.options
+    const r = await bookInfluencer(admin, { clientId, userId, slug: String(o.slug), listingSlug: '', tierName: typeof o.tierName === 'string' ? o.tierName : null, date: typeof o.date === 'string' ? o.date : null, start: typeof o.start === 'string' ? o.start : null, brief: { try: `${name}${a.line ? `, ${a.line}` : ''}${a.price ? `, ${a.price}` : ''}`, know: facts.slice(0, 380), party: 2, tag: true, repost: o.repost !== false, whitelist: o.whitelist === true, code: o.code !== false }, restaurant: { name: ctx.name } })
+    if (r.ok) { total += r.total; for (const l of r.plan) plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `cr-${l.key}`, why: l.key === 'ask' ? cr.why ?? l.why : l.why }); teamExtra.push(`A creator is coming: see the ask in Bookings.`) }
+    else errors.push(`The creator ask did not send: ${r.error}`)
+  }
+  const cardFull = [card, ...teamExtra].filter(Boolean).join('\n')
+  if ((also.includes('team') || teamExtra.length) && cardFull) {
+    const r = await notifyClientOwners(clientId, { kind: 'client_request', title: `Team card: ${name}`, body: cardFull.slice(0, 1000), link: '/dashboard/notifications' }).catch(() => ({ notified: 0 }))
     plan.push({ key: 'team', label: 'Team card', detail: r.notified > 1 ? `Sent to ${r.notified} people on the portal. Copy it for the rest` : 'Copy it for the team', date: day(new Date().toISOString()), cost: null, status: 'done', ref: null })
   }
   if (boost) plan.push({ key: 'boost', label: 'Boost it', detail: `$${Math.round(boostCents / 100)}, about ${(Math.round(boostCents / 100) * 150).toLocaleString()} people nearby. Open Boost once it has posted`, date: postDay, cost: boostCents, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/boost' }, why: whys.boost })

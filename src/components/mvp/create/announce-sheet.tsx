@@ -23,6 +23,8 @@ import { createPortal } from 'react-dom'
 import { ArrowLeft, Check, Loader2, X, Plus, Copy } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
+import AnnounceMenu, { itemCents, type MenuMe, type MenuPrices } from './announce-menu'
+import type { ItemId, ItemPick } from '@/lib/plan/suggest'
 import { BrandOrMark } from '../mvp-insights'
 
 export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'open' | 'holiday' | 'else' | 'slow' | 'post' | 'update'
@@ -270,20 +272,17 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [writing, setWriting] = useState(false)
   /* THREE PLANS (owner 2026-09-18, "as simple as possible"): after the facts, three priced cards.
      Picking one sets every default below; What is inside opens the old screens to change them. */
-  /* TWO ROWS (owner 2026-09-18): the picture (where it comes from) and the push (how far it
-     goes) are separate choices; the price is the sum, so $0 is a real path and so is a shoot
-     with words only. Never more than three or four in a row. */
-  type PlanId = 'post' | 'boost' | 'reach'
+  /* THE MENU (owner 2026-09-18): items with options, picked by the server rules, edited freely.
+     The items drive the same state the old screens read (src, pieces, boost, also), so every
+     rail underneath stays the same. */
   type Pic = 'own' | 'graphic' | 'shoot' | 'booked' | 'words'
-  const [planId, setPlanId] = useState<PlanId>('boost')
-  const [pic, setPic] = useState<Pic>('graphic')
+  const [items, setItems] = useState<ItemPick[]>([])
+  const [me, setMe] = useState<MenuMe | null>(null)
+  const [openItem, setOpenItem] = useState<ItemId | null>(null)
+  const [suggested, setSuggested] = useState<string | null>(null)
   const [withReel, setWithReel] = useState(false)
   const [budget, setBudget] = useState('')
-  const [customBoost, setCustomBoost] = useState(false)
-  const [creatorFit, setCreatorFit] = useState<{ slug: string; name: string; fromCents: number | null; nearby: number | null } | null>(null)
-  useEffect(() => {
-    fetch(`/api/dashboard/influencers?clientId=${clientId}&fit=1`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); const f = (j.fit ?? [])[0]; if (f?.card) { const a = f.card.audience; setCreatorFit({ slug: f.slug, name: f.card.name, fromCents: f.card.fromCents ?? null, nearby: a?.avgViews && a?.localPct != null ? Math.round(a.avgViews * a.localPct / 100) : a?.followers ?? null }) } }).catch(() => {})
-  }, [clientId])
+  const [pic, setPic] = useState<Pic>('graphic')
   const [social, setSocial] = useState('')
   const [gtext, setGtext] = useState('')
   const [card, setCard] = useState('')
@@ -602,6 +601,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
+        items: simple ? Object.fromEntries(items.map((x) => [x.id, { on: x.on, options: x.options, why: x.why, cents: itemCents(x, prices) }])) : undefined,
         words: { social: wS.trim(), google: wG.trim(), cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') ? wC.trim() : '' },
         dates: rawDates(),
         hours: hoursOn ? { oneDay: true, closed, open: openAt, close: closeAt } : undefined,
@@ -615,13 +615,54 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }
 
   /* hooks that need the plan helpers below run through a ref, so they sit above the early return */
-  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; applyPlan: (id: 'post' | 'boost' | 'reach', pic?: 'own' | 'graphic' | 'shoot' | 'booked' | 'words', reel?: boolean) => void } | null>(null)
   const simpleKind = !!kind && !isSlow && !kind.hidden
+  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; suggest: (budgetCents?: number | null) => Promise<void> } | null>(null)
   useEffect(() => { if (step === 'words' && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
-  /* the first time the cards show, the usual pick is applied so the plan underneath matches the card */
-  useEffect(() => { if (step === 'facts' && simpleKind && kind) helpers.current?.applyPlan(kind.id === 'hours' || kind.id === 'holiday' ? 'post' : 'boost', kind.id === 'hours' || kind.id === 'holiday' ? 'words' : media.length ? 'own' : 'graphic') }, [step === 'facts' ? kind?.id : null, creatorFit?.slug])
-  /* a photo added on this screen becomes the picture */
-  useEffect(() => { if (simpleKind && step === 'facts' && media.length && pic !== 'own' && pic !== 'shoot') helpers.current?.applyPlan(planId, 'own') }, [media.length]) // eslint-disable-line react-hooks/exhaustive-deps // eslint-disable-line react-hooks/exhaustive-deps
+  /* the picker runs when the kind opens, and again when a photo lands */
+  useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}`) void helpers.current?.suggest() }, [step, kind?.id, media.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* ── the menu ── */
+  const usual = ctx?.usualReach ?? null
+  const prices: MenuPrices = { graphic: ctx?.prices.graphic ?? 23100, video: ctx?.prices.video ?? 27500, print: 2500, shootFor: (n) => tierCents(tierFor(n)) ?? ctx?.prices.shoot ?? 38500, shootLabel: (n) => `${TIERS.find((t) => t.id === tierFor(n))?.label}: ${sizeOf(n)}` }
+  const it = (id: ItemId) => items.find((x) => x.id === id)
+  const onIt = (id: ItemId) => !!it(id)?.on
+  const total = items.filter((x) => x.on).reduce((s, x) => s + itemCents(x, prices), 0)
+  const reachEst = useMemo((): number | null => {
+    const base = usual?.median ?? null
+    let r = base == null ? 0 : onIt('video') ? base * 2 : base
+    if (onIt('boost')) r += Math.round((Number(it('boost')?.options.cents) || 2000) / 100) * REACH_PER_DOLLAR
+    if (onIt('creator') && me?.creator?.nearby) r += me.creator.nearby
+    return r || null
+  }, [items, usual, me]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* the items set the same state the rails read */
+  useEffect(() => {
+    if (!items.length || !kind) return
+    const g = it('graphic'), v = it('video'), ph = it('photos'), b = it('boost')
+    const p = new Set<Piece>()
+    if (g?.on) p.add('graphic'); if (v?.on) p.add('reel')
+    let nextSrc: Src = media.length ? 'own' : 'words'
+    if (ph?.on || v?.on && v.options.filmed === 'shoot' || g?.on && g.options.from === 'shoot') { nextSrc = openShoot ? 'shoot' : 'newshoot'; p.add('photos'); setAlsoShoot(((ph?.options.list as string[]) ?? []).join(', ')); setShootDate(String(ph?.options.date ?? '')) }
+    else if (g?.on) nextSrc = g.options.from === 'own' && media.length ? 'own' : 'team'
+    setSrc(nextSrc); setPieces(p); settle(nextSrc, p); setWithReel(!!v?.on)
+    setPic(nextSrc === 'newshoot' ? 'shoot' : nextSrc === 'shoot' ? 'booked' : nextSrc === 'team' ? 'graphic' : nextSrc === 'own' ? 'own' : 'words')
+    setPriceOn(g?.options.priceOn !== false); setBrandKit(g?.options.brandKit !== false); setSpanish(!!g?.options.spanish)
+    setBoost(!!b?.on); if (b?.on) setBoostCents(Number(b.options.cents) || 2000); setAgain(!!b?.on && kind.id !== 'hours' && kind.id !== 'holiday')
+    const alsoSet = new Set<Also>(kind.also.filter((k) => ALSO[k].on(ctx)))
+    if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu')
+    if (it('print')?.on || (g?.on && ((g.options.where as string[]) ?? []).some((w) => w === 'tent' || w === 'poster'))) alsoSet.add('print')
+    if (it('apps')?.on) alsoSet.add('apps')
+    setAlso(alsoSet); setStory(nextSrc !== 'words')
+  }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
+  const suggest = async (budgetCents?: number | null) => {
+    if (!kind) return
+    setSuggested(`${kind.id}:${media.length}`)
+    try {
+      const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok && Array.isArray(j.items)) { setItems(j.items); setMe(j.me ?? null) }
+    } catch { /* the menu still works by hand */ }
+  }
+  const pickForBudget = () => { const cents = Math.round(Number(budget.replace(/[^0-9.]/g, '')) * 100); if (Number.isFinite(cents) && cents >= 0) void suggest(cents) }
+  helpers.current = { write, suggest }
   if (!mounted) return null
   const hue = kind?.hue ?? '#2e9a78'
   const hv = (h: string): React.CSSProperties => ({ ['--c1' as string]: h, ['--c2' as string]: h, ['--t1' as string]: hexa(h, 0.14) } as React.CSSProperties)
@@ -656,87 +697,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     await commit(fresh)
   }
 
-  /* ── the three cards ── */
-  interface Card { id: PlanId; tag?: string; name: string; cost: number; lines: string[]; reach: number | null; note: string }
-  const usual = ctx?.usualReach ?? null
-  const round2 = (n: number) => { const m = Math.pow(10, Math.max(0, String(Math.round(n)).length - 2)); return Math.round(n / m) * m }
-  const cards = ((): Card[] => {
-    if (!kind) return []
-    const g = ctx?.prices.graphic ?? 23100; const v = ctx?.prices.video ?? 27500; const sh = ctx?.prices.tiers?.standard ?? ctx?.prices.shoot ?? 38500
-    const base = usual?.median ?? null
-    const plat = platforms.length ? platforms.map((p) => PLAT[p] ?? p).join(', ') : 'Instagram, Facebook'
-    const goog = google ? ' and Google' : ''
-    const usualNote = usual ? `Your usual. Your last ${usual.n} post${usual.n === 1 ? '' : 's'} reached ${usual.min.toLocaleString()} to ${usual.max.toLocaleString()}.` : 'No post history yet, so no number to promise.'
-    const b1 = isDeal || isEvent ? 4000 : 2000; const b2 = isDeal || isEvent ? 10000 : 4000
-    const boostPeople = (c: number) => Math.round(c / 100) * REACH_PER_DOLLAR
-    const cr = creatorFit
-    const b3 = 10000
-    const cn = cr && cr.nearby ? cr : null
-    const menus = kind.id === 'dish' ? 'Menus updated' : isDeal ? 'A Google offer, a table tent' : isEvent ? 'A Google event, reminders' : kind.id === 'hours' || kind.id === 'holiday' ? 'Hours set everywhere' : kind.id === 'hiring' ? 'A page on your site' : 'The team told'
-    const shootCost = tierCents(tier) ?? sh
-    const picCost = pic === 'graphic' ? g : pic === 'shoot' ? shootCost + (withReel ? v : 0) : pic === 'booked' ? (withReel ? v : 0) : 0
-    const bAmt = planId === 'boost' && boostCents > 0 ? boostCents : b1
-    const picBase = base == null ? null : (pic === 'shoot' || pic === 'booked') && withReel ? base * 2 : base
-    const picWord = pic === 'own' ? (media[0]?.video ? 'your video' : 'your photo') : pic === 'graphic' ? 'the graphic' : pic === 'shoot' || pic === 'booked' ? (withReel ? 'the shoot photos and the Reel' : 'the shoot photos') : 'words only'
-    const post: Card = { id: 'post', name: 'Post it', cost: picCost, lines: [`${picWord[0].toUpperCase()}${picWord.slice(1)} on ${pic === 'words' ? 'Facebook and Google' : `${plat}${goog}`}${hasIgFb && pic !== 'words' ? ', a Story too' : ''}`, menus, 'Tell the team', `At ${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}, your best hour`], reach: picBase != null ? round2(picBase) : null, note: usualNote }
-    const boostC: Card = { id: 'boost', tag: 'The usual pick', name: 'Boost it', cost: picCost + bAmt, lines: ['Everything in Post it', `Boost $${bAmt / 100}, about ${boostPeople(bAmt).toLocaleString()} people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2((picBase ?? 0) + boostPeople(bAmt)) || null, note: usual ? `Your posts usually reach about ${usual.median.toLocaleString()}. Boost adds the rest.` : 'No post history yet, so this is the Boost alone.' }
-    const reach: Card = { id: 'reach', tag: 'Most reach', name: 'Reach new people', cost: picCost + (cn ? b1 + (cn.fromCents ?? 0) : b3), lines: ['Everything in Boost it', ...(cn ? [`${cn.name} visits and posts to about ${cn.nearby!.toLocaleString()} people nearby`, 'A code for their followers, the team counts it'] : [`Boost $${b3 / 100} instead of $${b1 / 100}, about ${boostPeople(b3).toLocaleString()} people nearby`])], reach: round2((picBase ?? 0) + (cn ? boostPeople(b1) + (cn.nearby ?? 0) : boostPeople(b3))) || null, note: cn ? `${cn.name.split(' ')[0]}'s post alone reaches about ${cn.nearby!.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]} is nearby but their reach is not connected yet, so the money goes to Boost.` : 'No local creator fits yet, so the money goes to Boost.' }
-    return kind.id === 'hours' || kind.id === 'holiday' ? [post, boostC] : [post, boostC, reach]
-  })()
-  const PICS: { id: Pic; label: string; small: string; cost: number | null }[] = [
-    { id: 'own', label: media.length ? `Your ${media[0]?.video ? 'video' : 'photo'}` : 'Your photo', small: media.length ? `${media.length} added` : 'Add one', cost: 0 },
-    { id: 'graphic', label: 'A graphic', small: '2 days', cost: ctx?.prices.graphic ?? null },
-    ...(openShoot ? [{ id: 'booked' as Pic, label: `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, small: openShoot.used ? `${openShoot.used} on the list` : 'nothing on it yet', cost: 0 }] : [{ id: 'shoot' as Pic, label: 'A shoot', small: 'a visit', cost: ctx?.prices.tiers?.standard ?? ctx?.prices.shoot ?? null }]),
-    { id: 'words', label: 'Words only', small: 'no picture', cost: 0 },
-  ]
-  const applyPlan = (id: PlanId, nextPic: Pic = pic, reel: boolean = withReel) => {
-    setPlanId(id); setPic(nextPic); setWithReel(reel)
-    if (!kind) return
-    const b1 = isDeal || isEvent ? 4000 : 2000
-    const alsoSet = new Set<Also>(kind.also.filter((k) => ALSO[k].on(ctx)))
-    if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); if (kind.also.includes('print') && isDeal) alsoSet.add('print')
-    /* the picture */
-    if (nextPic === 'own') choose(media.length ? 'own' : 'words')
-    else if (nextPic === 'words') choose('words')
-    else if (nextPic === 'graphic') { const from: Src = media.length ? 'own' : 'team'; setSrc(from); const p = new Set<Piece>(['graphic']); setPieces(p); settle(from, p) }
-    else if (nextPic === 'booked') { setSrc('shoot'); const p = new Set<Piece>(reel ? ['photos', 'reel'] : ['photos']); setPieces(p); settle('shoot', p) }
-    else { setSrc('newshoot'); const p = new Set<Piece>(reel ? ['photos', 'reel'] : ['photos']); setPieces(p); settle('newshoot', p) }
-    /* the push */
-    const cn = creatorFit && creatorFit.nearby ? creatorFit : null
-    if (id === 'post') { setBoost(false); setAgain(false) }
-    if (id === 'boost') { setBoost(true); setBoostCents(b1); setAgain(kind.id !== 'hours' && kind.id !== 'holiday') }
-    if (id === 'reach') { setBoost(true); setBoostCents(cn ? b1 : 10000); setAgain(true); if (cn && kind.also.includes('creators')) alsoSet.add('creators') }
-    setAlso(alsoSet); setStory(nextPic !== 'words')
-  }
-  /* the budget door: the most people for a number, from every picture × push we can price */
-  const pickForBudget = () => {
-    const cents = Math.round(Number(budget.replace(/[^0-9.]/g, '')) * 100)
-    if (!kind || !Number.isFinite(cents) || cents < 0) return
-    const g = ctx?.prices.graphic ?? 23100; const v = ctx?.prices.video ?? 27500; const sh = tierCents(tier) ?? ctx?.prices.shoot ?? 38500
-    const base = usual?.median ?? 0
-    const b1 = isDeal || isEvent ? 4000 : 2000
-    const cn = creatorFit && creatorFit.nearby ? creatorFit : null
-    const pics: { id: Pic; reel: boolean; cost: number; base: number }[] = [
-      ...(media.length ? [{ id: 'own' as Pic, reel: false, cost: 0, base }] : [{ id: 'words' as Pic, reel: false, cost: 0, base: base * 0.7 }]),
-      { id: 'graphic', reel: false, cost: g, base: base * 1.2 },
-      ...(openShoot ? [{ id: 'booked' as Pic, reel: false, cost: 0, base: base * 1.2 }, { id: 'booked' as Pic, reel: true, cost: v, base: base * 2 }] : [{ id: 'shoot' as Pic, reel: false, cost: sh, base: base * 1.2 }, { id: 'shoot' as Pic, reel: true, cost: sh + v, base: base * 2 }]),
-    ]
-    let best: { id: PlanId; pic: Pic; reel: boolean; boost: number; reach: number; cost: number } | null = null
-    for (const pc of pics) {
-      const left = cents - pc.cost
-      if (left < 0) continue
-      const tryOne = (id: PlanId, boost: number, extra: number, reach: number) => { const cost = pc.cost + boost + extra; if (cost <= cents && (!best || reach > best.reach || (reach === best.reach && cost < best.cost))) best = { id, pic: pc.id, reel: pc.reel, boost, reach, cost } }
-      tryOne('post', 0, 0, pc.base)
-      /* boost stops at $100 here: past that the money does more in the picture (a graphic, a Reel) */
-      if (left >= 1000) { const b = Math.min(left, 10000); const bb = Math.floor(b / 500) * 500; tryOne('boost', bb, 0, pc.base + Math.round(bb / 100) * REACH_PER_DOLLAR) }
-      if (cn && left >= b1 + (cn.fromCents ?? 0)) tryOne('reach', b1, cn.fromCents ?? 0, pc.base + Math.round(b1 / 100) * REACH_PER_DOLLAR + (cn.nearby ?? 0))
-    }
-    if (!best) return
-    const b = best as { id: PlanId; pic: Pic; reel: boolean; boost: number }
-    applyPlan(b.id, b.pic, b.reel)
-    if (b.id === 'boost') { setBoostCents(b.boost); setCustomBoost(true) }
-  }
-  helpers.current = { write, applyPlan }
   const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? 'Slow night' : kind?.id === 'post' ? 'A post' : kind?.id === 'update' ? 'Update' : fromSlow && step === 'facts' ? `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}` : (isEvent && a.what?.trim()) || kind?.label || ''
   const Line = ({ l }: { l: PlanLine }) => (
     <div style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, alignItems: 'flex-start' }}>
@@ -837,7 +797,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
         {step === 'facts' && kind && (
           <div style={hv(hue)}>
-            <div style={h2}>Tell us about it</div>
+            {!openItem && <div style={h2}>Tell us about it</div>}
+            {!openItem && <>
             {kind.photo && (!kind.picture || simple) && (
               <div style={{ margin: '4px 0 6px' }}>
                 {media.length === 0 ? (
@@ -918,64 +879,15 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               </label>
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
+            </>}
             {simple && (
               <>
-                <div style={h3}>The picture</div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PICS.length},1fr)`, gap: 8 }}>
-                  {PICS.map((o) => { const on = pic === o.id; const sc: Scene = o.id === 'own' ? 'photos' : o.id === 'graphic' ? 'graphic' : o.id === 'words' ? 'google' : 'creator'; const hu = o.id === 'own' ? '#2e9a78' : o.id === 'graphic' ? '#d99a1e' : o.id === 'words' ? '#8a928e' : '#6a39de'
-                    return <button key={o.id} type="button" onClick={() => { if (o.id === 'own' && !media.length) { fileRef.current?.click(); return } applyPlan(planId, o.id) }} style={{ ...hv(hu), border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: on ? hexa(hu, 0.08) : '#fff', borderRadius: 16, padding: '10px 4px 8px', textAlign: 'center', font: 'inherit', color: C.ink, cursor: 'pointer', transition: 'background .15s' }}>
-                      <span style={{ display: 'block', width: 40, margin: '0 auto 4px' }}>{media.length && o.id === 'own' && !media[0].video ? <span style={{ display: 'block', width: 40, height: 40, borderRadius: 10, background: `center/cover url(${media[0].preview})` }} /> : <Drawing spec={{ scene: sc }} name="" rating="" t={(s) => s} />}</span>
-                      <b style={{ display: 'block', fontSize: 12.5, lineHeight: 1.15 }}>{o.label}</b><small style={{ display: 'block', color: on ? C.ink : C.mute, fontSize: 11, marginTop: 2, fontWeight: 700 }}>{o.cost ? dollars(o.cost) : 'Free'}</small>
-                    </button> })}
-                </div>
-                {pic === 'booked' && openShoot && <div style={{ fontSize: 12, color: openShoot.used + 1 > openShoot.spots ? '#8a5a0c' : C.greenDk, fontWeight: 600, marginTop: 8, lineHeight: 1.4 }}>{openShoot.used + 1 > openShoot.spots ? `Yours makes ${openShoot.used + 1} on the list, more than ${openShoot.tierLabel.toLowerCase()} covers. The team confirms the bigger day with you first.` : `Already booked, ${openShoot.tierLabel.toLowerCase()}. Yours joins the list, nothing new to pay.`}</div>}
-                {(pic === 'shoot' || pic === 'booked') && <div style={{ ...rowS, padding: '8px 0' }}><span style={{ fontSize: 13 }}>Add a Reel from the day<small style={sub}>{dollars(ctx?.prices.video ?? null) || 'Priced'}. Reels reach about twice what a photo does</small></span><Switch on={withReel} set={(v) => applyPlan(planId, pic, v)} /></div>}
-                {pic === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 8 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
-                {pic === 'shoot' && (
-                  <div style={{ marginTop: 8 }}>
-                    <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Also shoot that day: the patio, the team, the tiramisu" style={{ ...input, marginTop: 0, fontSize: 13.5 }} />
-                    <div style={{ fontSize: 12, color: C.mute, marginTop: 6, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tier)?.label}: {sizeOf(listN)}. The longer the list, the bigger the day.</div>
-                  </div>
-                )}
-                {pic !== 'words' && pic !== 'own' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 12.5, color: C.mute }}>
-                    <span style={{ flex: 1 }}>Made by {pic === 'graphic' ? 'the Apnosh design desk' : 'a photographer the team picks, and the design desk'}</span>
-                    {pic !== 'graphic' && <a href={`/dashboard/marketplace?category=photographer&clientId=${clientId}`} style={{ fontWeight: 700, color: C.ink, whiteSpace: 'nowrap' }}>See who ›</a>}
-                  </div>
-                )}
-
-                <div style={h3}>How far should it go?</div>
-                {(() => { const maxReach = Math.max(1, ...cards.map((c) => c.reach ?? 0)); return cards.map((c) => { const on = planId === c.id; const sc: Scene = c.id === 'post' ? 'post' : c.id === 'boost' ? 'boost' : 'creator'; const hu = c.id === 'post' ? '#2e9a78' : c.id === 'boost' ? '#d99a1e' : '#6a39de'
-                  return <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ ...hv(hu), display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: on ? hexa(hu, 0.06) : '#fff', borderRadius: 20, padding: '12px 14px 12px 12px', marginTop: 8, font: 'inherit', color: C.ink, cursor: 'pointer', transition: 'background .15s' }}>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <span style={{ width: 44, flex: 'none' }}><Drawing spec={{ scene: sc }} name="" rating="" t={(s) => s} /></span>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <b style={{ display: 'block', fontSize: 16, letterSpacing: '-.01em', lineHeight: 1.15 }}>{c.name}{c.tag && <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 7px' }}>{c.tag}</span>}</b>
-                        {!on && <small style={{ display: 'block', color: C.mute, fontSize: 12, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lines.join(' · ')}</small>}
-                      </span>
-                      <b style={{ fontSize: 17, whiteSpace: 'nowrap', letterSpacing: '-.01em' }}>{c.cost ? dollars(c.cost) : 'Free'}</b>
-                    </div>
-                    {on && <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none' }}>{c.lines.map((l, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.5, paddingLeft: 14, position: 'relative' }}><span style={{ position: 'absolute', left: 0, top: 8, width: 5, height: 5, borderRadius: 99, background: hu }} />{l}</li>)}</ul>}
-                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ flex: 1, height: 6, borderRadius: 99, background: hexa(hu, 0.14), overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${Math.max(4, Math.round(((c.reach ?? 0) / maxReach) * 100))}%`, borderRadius: 99, background: hu, transition: 'width .25s' }} /></span>
-                      <b style={{ fontSize: 13, color: C.ink, whiteSpace: 'nowrap' }}>{c.reach != null ? `${c.reach.toLocaleString()} people` : 'No history yet'}</b>
-                    </div>
-                    {on && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.4, display: 'flex', justifyContent: 'space-between', gap: 8 }}><span>{c.note}</span><span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ fontWeight: 700, color: C.ink, whiteSpace: 'nowrap' }}>What is inside ›</span></div>}
-                    {on && c.id === 'boost' && (
-                      <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {[2000, 4000, 10000].map((v) => <span key={v} role="button" onClick={() => { setBoostCents(v); setCustomBoost(false) }} style={chip(!customBoost && boostCents === v)}>${v / 100}</span>)}
-                        <span role="button" onClick={() => setCustomBoost(true)} style={chip(customBoost)}>Other</span>
-                        {customBoost && <input type="number" min={5} max={500} value={Math.round(boostCents / 100)} onChange={(e) => setBoostCents(Math.max(500, Math.min(50000, Math.round(Number(e.target.value) || 0) * 100)))} style={{ ...input, width: 84, marginTop: 0, padding: '7px 10px', fontSize: 13 }} />}
-                      </div>
-                    )}
-                  </button> }) })()}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
-                  <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick the most people for it.</span>
+                {!openItem && items.length > 0 && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
+                  <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick inside it.</span>
                   <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 74, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
                   <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
-                </div>
-                <button type="button" onClick={go} disabled={!ready || posting || writing} style={{ ...cta_, opacity: ready && !posting ? 1 : .5 }}>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : writing ? 'Writing the words' : `Make it happen${(cards.find((c) => c.id === planId)?.cost ?? 0) > 0 ? ` · ${dollars(cards.find((c) => c.id === planId)?.cost ?? 0)}` : ''}`}</button>
-                <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
+                </div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
               </>
             )}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
