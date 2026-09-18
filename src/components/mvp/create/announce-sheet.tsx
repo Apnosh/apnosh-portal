@@ -227,6 +227,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [src, setSrc] = useState<Src>('words')
   const [pieces, setPieces] = useState<Set<Piece>>(new Set())
   const [alsoShoot, setAlsoShoot] = useState('')
+  const [moreOpen, setMoreOpen] = useState(false)
   const [shootDate, setShootDate] = useState('')
   const [priceOn, setPriceOn] = useState(true)
   const [brandKit, setBrandKit] = useState(true)
@@ -269,7 +270,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [writing, setWriting] = useState(false)
   /* THREE PLANS (owner 2026-09-18, "as simple as possible"): after the facts, three priced cards.
      Picking one sets every default below; What is inside opens the old screens to change them. */
-  type PlanId = 'just' | 'good' | 'big'
+  type PlanId = 'just' | 'good' | 'reach' | 'big'
   const [planId, setPlanId] = useState<PlanId>('good')
   const [creatorFit, setCreatorFit] = useState<{ slug: string; name: string; fromCents: number | null; nearby: number | null } | null>(null)
   useEffect(() => {
@@ -514,8 +515,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (kind?.id === 'hiring' && again) { const d = new Date((postAt ?? new Date()).getTime() + 14 * 86400e3); out.push({ key: 'again2', label: 'Posted a third time', detail: 'Two weeks on, until it is filled', at: d.toISOString(), text: social.trim() }) }
     return out
   }
-  const write = async (stay = false) => {
-    if (!kind) return
+  const write = async (stay = false): Promise<{ social: string; google: string; card: string } | null> => {
+    if (!kind) return null
     setWriting(true); if (!stay) setErr(null)
     try {
       const r = await fetch('/api/dashboard/announce-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, answers: factsOut(), channels, cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team'), reminderWhen: reminderWhen()?.phrase ?? '', tonight: (isEvent && tonight) || (isDeal && weekly), after: isEvent && after, ctaText: isEvent ? GETIN.find((x) => x.id === getin)?.cta : isDeal && a.code?.trim() ? `Say ${a.code.trim()} at the counter` : '' }) })
@@ -523,8 +524,11 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
       if (!r.ok) throw new Error(j.error || 'Could not write it')
       setSocial(String(j.social ?? '')); setGtext(String(j.google ?? '')); setCard(String(j.card ?? '')); setReminderText(String(j.reminder ?? '')); setTonightText(String(j.tonight ?? '')); setAfterText(String(j.after ?? '')); setSocialEs(String(j.socialEs ?? ''))
       if (!stay) setStep('words')
+      setWriting(false)
+      return { social: String(j.social ?? ''), google: String(j.google ?? ''), card: String(j.card ?? '') }
     } catch (e) { if (!stay) setErr(e instanceof Error ? e.message : 'Could not write it') }
     setWriting(false)
+    return null
   }
 
   /* the plan as the owner will read it, before anything is made; the server sends back the real one */
@@ -578,8 +582,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }, [kind, src, pieces, tier, listN, alsoShoot, shootDate, openShoot, shootLead, onShoot, media, priceOn, a, ctx, readyBy, postAt, platforms, igChosen, madeLater, postNow, bests, story, hasIgFb, again, postDay, google, also, boost, boostCents, goal, spanish, socialEs, reminder, reminderText, oneDay, closed, openAt, closeAt, ekind, weekly, getin, link, price, where, address, tonight, after, tonightText, afterText, timing, postByTouched, night, part, slowWords, tables, fromSlow]) // eslint-disable-line react-hooks/exhaustive-deps
   const previewTotal = preview.reduce((s, l) => s + (l.cost ?? 0), 0)
 
-  const commit = async () => {
+  const commit = async (fresh?: { social: string; google: string; card: string } | null) => {
     if (posting || !kind) return
+    const wS = fresh?.social ?? social, wG = fresh?.google ?? gtext, wC = fresh?.card ?? card
     setPosting(true); setErr(null)
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
     try {
@@ -589,7 +594,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
-        words: { social: social.trim(), google: gtext.trim(), cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') ? card.trim() : '' },
+        words: { social: wS.trim(), google: wG.trim(), cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') ? wC.trim() : '' },
         dates: rawDates(),
         hours: hoursOn ? { oneDay: true, closed, open: openAt, close: closeAt } : undefined,
       }) })
@@ -602,11 +607,11 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }
 
   /* hooks that need the plan helpers below run through a ref, so they sit above the early return */
-  const helpers = useRef<{ write: (stay?: boolean) => Promise<void>; applyPlan: (id: 'just' | 'good' | 'big') => void } | null>(null)
+  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; applyPlan: (id: 'just' | 'good' | 'reach' | 'big') => void } | null>(null)
   const simpleKind = !!kind && !isSlow && !kind.hidden
   useEffect(() => { if (step === 'words' && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the first time the cards show, the usual pick is applied so the plan underneath matches the card */
-  useEffect(() => { if (step === 'plans' && kind) helpers.current?.applyPlan(planId) }, [step === 'plans' ? kind?.id : null]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (step === 'facts' && simpleKind && kind) helpers.current?.applyPlan(planId) }, [step === 'facts' ? kind?.id : null, creatorFit?.slug]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!mounted) return null
   const hue = kind?.hue ?? '#2e9a78'
   const hv = (h: string): React.CSSProperties => ({ ['--c1' as string]: h, ['--c2' as string]: h, ['--t1' as string]: hexa(h, 0.14) } as React.CSSProperties)
@@ -628,10 +633,18 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const steps: Step[] = ['picture', 'facts', 'where', 'words', 'plan']
   /* the simple road: facts, three cards, done. The old screens stay reachable from What is inside */
   const simple = !!kind && !isSlow && !kind.hidden
-  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', 'plans', 'plan'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
-  const back = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
-  const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); if (visible[i] === 'facts' && simple) { void write(true) } setStep(visible[i + 1]) }
+  const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('facts'); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
+  const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(visible[i + 1]) }
+  /* ONE TAP (owner 2026-09-18): Make it happen from the facts screen. The words are written on the
+     way if they are not yet, then everything is made. */
+  const go = async () => {
+    if (posting || writing) return
+    const fresh = social.trim() ? null : await write(true)
+    if (!social.trim() && !fresh) { setErr('Could not write the words. Open What is inside and write them'); return }
+    await commit(fresh)
+  }
 
   /* ── the three cards ── */
   interface Card { id: PlanId; tag?: string; name: string; cost: number; lines: string[]; reach: number | null; note: string }
@@ -647,10 +660,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const b1 = isDeal || isEvent ? 4000 : 2000; const b2 = isDeal || isEvent ? 10000 : 4000
     const boostPeople = (c: number) => Math.round(c / 100) * REACH_PER_DOLLAR
     const cr = creatorFit
-    const just: Card = { id: 'just', name: 'Just post it', cost: 0, lines: [media.length ? `Your ${media[0]?.video ? 'video' : 'photo'} on ${plat}${goog}` : `A post on ${plat}${goog}, from your words`, ...(isDeal ? ['A Google offer with the dates'] : isEvent ? ['A Google event and a Facebook event'] : kind.id === 'hours' || kind.id === 'holiday' ? ['Google hours set'] : []), hasIgFb ? `A Story ${isEvent || isDeal ? 'the morning of' : 'the same day'}` : '', `Posted at ${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}, your best hour`].filter(Boolean), reach: base != null ? round2(base) : null, note: usualNote }
-    const good: Card = { id: 'good', tag: 'The usual pick', name: 'Make it look good', cost: g + b1, lines: [`A designed graphic${a.price ? ', price on it' : isEvent || isDeal ? ' with the dates' : ''}, 2 days`, 'The same posts and Story', ...(kind.id === 'dish' ? ['Google menu and website updated'] : isDeal ? ['Table tent for the counter'] : isEvent ? ['Reminders the week and the day before'] : kind.id === 'hours' || kind.id === 'holiday' ? ['Website and the delivery apps updated'] : kind.id === 'hiring' ? ['A page on your site, Google updated'] : ['Tell the team']), `Boost $${b1 / 100} to people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2(base != null ? base + boostPeople(b1) : boostPeople(b1)), note: `A designed post, and $${b1 / 100} reaches about ${boostPeople(b1).toLocaleString()} nearby.` }
-    const big: Card = { id: 'big', tag: 'Most reach', name: 'Go big', cost: sh + v + g + b2 + (cr?.fromCents ?? 0), lines: ['A photographer visit, about 15 photos, yours to keep', 'A Reel cut from the day', 'The graphic, the posts, the Story', `Boost $${b2 / 100}`, cr ? `${cr.name}, a local creator, visits and posts` : 'A local creator visits and posts, when one fits'], reach: round2((base != null ? base * 2 : 0) + boostPeople(b2) + (cr?.nearby ?? 0)) || null, note: cr?.nearby ? `${cr.name.split(' ')[0]}'s post alone reaches about ${cr.nearby.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]}'s reach is not connected yet, so it is not counted.` : 'A Reel and a shoot day. A creator is added when one fits.' }
-    return kind.id === 'hours' || kind.id === 'holiday' ? [just, good] : [just, good, big]
+    const b3 = 10000
+    const menus = kind.id === 'dish' ? 'menus updated' : isDeal ? 'a Google offer, a table tent' : isEvent ? 'a Google event, reminders' : kind.id === 'hours' || kind.id === 'holiday' ? 'hours set everywhere' : kind.id === 'hiring' ? 'a page on your site' : 'the team told'
+    const free: Card = { id: 'just', name: 'Everywhere, free', cost: 0, lines: [`Google hours set, ${plat}${goog} told`, 'The website and the delivery apps updated', 'Tell the team'], reach: base != null ? round2(base) : null, note: usualNote }
+    const good: Card = { id: 'good', tag: 'The usual pick', name: 'Look good', cost: g + b1, lines: [`A designed graphic${a.price ? ' with the price' : isEvent || isDeal ? ' with the dates' : ''}, ready in 2 days`, `Posted on ${plat}${goog}, a Story too`, `${menus[0].toUpperCase()}${menus.slice(1)}`, `Boost $${b1 / 100}, about ${boostPeople(b1).toLocaleString()} people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2(base != null ? base + boostPeople(b1) : boostPeople(b1)), note: usual ? `Your posts usually reach about ${usual.median.toLocaleString()}. Boost adds the rest.` : 'No post history yet, so this is the Boost alone.' }
+    const cn = cr && cr.nearby ? cr : null
+    const reach: Card = { id: 'reach', tag: 'Most for the money', name: 'Reach new people', cost: g + (cn ? b1 + (cn.fromCents ?? 0) : b3), lines: ['Everything in Look good', ...(cn ? [`${cn.name} visits and posts to about ${cn.nearby!.toLocaleString()} people nearby`, 'A code for their followers, the team counts it'] : [`Boost $${b3 / 100} instead of $${b1 / 100}, about ${boostPeople(b3).toLocaleString()} people nearby`])], reach: round2((base ?? 0) + (cn ? boostPeople(b1) + (cn.nearby ?? 0) : boostPeople(b3))) || null, note: cn ? `${cn.name.split(' ')[0]}'s post alone reaches about ${cn.nearby!.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]} is nearby but their reach is not connected yet, so the money goes to Boost.` : 'No local creator fits yet, so the money goes to Boost.' }
+    const big: Card = { id: 'big', tag: 'Most reach', name: 'All out', cost: sh + v + g + b3 + (cr?.fromCents ?? 0), lines: ['A photographer visit, about 15 photos, yours to keep', 'A Reel cut from the day, and the graphic', cr ? `${cr.name} visits and posts` : 'A local creator, when one fits', `Boost $${b3 / 100}`], reach: round2((base != null ? base * 2 : 0) + boostPeople(b3) + (cr?.nearby ?? 0)) || null, note: 'A Reel reaches about twice what a photo does, on average.' }
+    return kind.id === 'hours' || kind.id === 'holiday' ? [free, good] : [good, reach, big]
   })()
   const applyPlan = (id: PlanId) => {
     setPlanId(id)
@@ -659,6 +676,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const alsoSet = new Set<Also>(kind.also.filter((k) => ALSO[k].on(ctx)))
     if (id === 'just') { choose(media.length ? 'own' : 'words'); setBoost(false); setAgain(false); setAlso(alsoSet) }
     if (id === 'good') { setSrc(media.length ? 'own' : 'team'); const p = new Set<Piece>(['graphic']); setPieces(p); settle(media.length ? 'own' : 'team', p); setBoost(true); setBoostCents(b1); setAgain(kind.id !== 'hours' && kind.id !== 'holiday'); if (kind.also.includes('print') && isDeal) alsoSet.add('print'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); setAlso(alsoSet) }
+    if (id === 'reach') { const cn = creatorFit && creatorFit.nearby ? creatorFit : null; setSrc(media.length ? 'own' : 'team'); const p = new Set<Piece>(['graphic']); setPieces(p); settle(media.length ? 'own' : 'team', p); setBoost(true); setBoostCents(cn ? b1 : 10000); setAgain(true); if (cn && kind.also.includes('creators')) alsoSet.add('creators'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); setAlso(alsoSet) }
     if (id === 'big') { setSrc('newshoot'); const p = new Set<Piece>(['photos', 'reel', 'graphic']); setPieces(p); settle('newshoot', p); setBoost(true); setBoostCents(b2); setAgain(true); if (kind.also.includes('creators')) alsoSet.add('creators'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); setAlso(alsoSet) }
     setStory(true)
   }
@@ -688,7 +706,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           <span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</span>
           <button type="button" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
         </div>
-        {step !== 'kind' && step !== 'done' && <div style={{ display: 'flex', gap: 4, margin: '0 0 14px' }}>{visible.map((s) => <i key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: visible.indexOf(s) <= visible.indexOf(step) ? C.ink : C.line }} />)}</div>}
+        {step !== 'kind' && step !== 'done' && visible.length > 1 && <div style={{ display: 'flex', gap: 4, margin: '0 0 14px' }}>{visible.map((s) => <i key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: visible.indexOf(s) <= visible.indexOf(step) ? C.ink : C.line }} />)}</div>}
         <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
 
         {step === 'kind' && (
@@ -764,7 +782,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         {step === 'facts' && kind && (
           <div style={hv(hue)}>
             <div style={h2}>Tell us about it</div>
-            {kind.photo && !kind.picture && (
+            {kind.photo && (!kind.picture || simple) && (
               <div style={{ margin: '4px 0 6px' }}>
                 {media.length === 0 ? (
                   <button type="button" onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 118, borderRadius: 18, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer', font: 'inherit', color: C.ink }}>
@@ -778,7 +796,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </div>
             )}
-            {kind.fields.filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).map((f) => (
+            {kind.fields.filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim()))).map((f) => (
               <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
                 {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
                 {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />
@@ -824,13 +842,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </>
             )}
-            {kind.limited && (
+            {simple && !moreOpen && (kind.limited || kind.tags || kind.fields.some((f) => ['from', 'until', 'deadline'].includes(f.key))) && <button type="button" onClick={() => setMoreOpen(true)} style={{ display: 'block', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, padding: '10px 0 0', cursor: 'pointer' }}>More details ›</button>}
+            {kind.limited && (!simple || moreOpen) && (
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>For a limited time</span><Switch on={limited} set={setLimited} /></div>
                 {limited && <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 10 }}>Until when<input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={input} /></label>}
               </>
             )}
-            {kind.tags && (
+            {kind.tags && (!simple || moreOpen) && (
               <>
                 <div style={h3}>Good to know</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setTags((s) => { const n = new Set(s); if (n.has(t)) n.delete(t); else n.add(t); return n })} style={chip(tags.has(t))}>{t}</button>)}</div>
@@ -838,7 +857,24 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               </>
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>{simple ? 'See the plans' : 'Next'}</button>
+            {simple && (
+              <>
+                <div style={h3}>How far should it go?</div>
+                {cards.map((c) => (
+                  <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${planId === c.id ? C.ink : C.line}`, boxShadow: planId === c.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 14px', marginTop: 8, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}><b style={{ fontSize: 15.5, letterSpacing: '-.01em' }}>{c.name}{c.tag && <small style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginLeft: 8 }}>{c.tag}</small>}</b><b style={{ fontSize: 15.5, whiteSpace: 'nowrap' }}>{c.cost ? dollars(c.cost) : 'Free'}</b></div>
+                    {planId === c.id
+                      ? <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none' }}>{c.lines.map((l, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.45, paddingLeft: 14, position: 'relative' }}><span style={{ position: 'absolute', left: 0, top: 8, width: 5, height: 5, borderRadius: 99, background: C.ink }} />{l}</li>)}</ul>
+                      : <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lines.join(' · ')}</div>}
+                    <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: C.greenDk, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span>{c.reach != null ? `About ${c.reach.toLocaleString()} people` : 'Reach: no history yet'}</span>{planId === c.id && <span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ fontSize: 12, fontWeight: 700, color: C.mute }}>What is inside ›</span>}</div>
+                    {planId === c.id && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>{c.note}</div>}
+                  </button>
+                ))}
+                <button type="button" onClick={go} disabled={!ready || posting || writing} style={{ ...cta_, opacity: ready && !posting ? 1 : .5 }}>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : writing ? 'Writing the words' : 'Make it happen'}</button>
+                <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
+              </>
+            )}
+            {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}
 
@@ -1022,24 +1058,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           </div>
         )}
 
-        {step === 'plans' && kind && (
-          <div style={hv(hue)}>
-            <div style={h2}>Pick a plan</div>
-            {cards.map((c) => (
-              <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${planId === c.id ? C.ink : C.line}`, boxShadow: planId === c.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 20, padding: '14px 14px 12px', marginTop: 10, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                {c.tag && <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 4 }}>{c.tag}</div>}
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}><b style={{ fontSize: 17, letterSpacing: '-.01em' }}>{c.name}</b><b style={{ fontSize: 17 }}>{c.cost ? dollars(c.cost) : '$0'}</b></div>
-                <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none' }}>{c.lines.map((l, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.45, paddingLeft: 16, position: 'relative' }}><span style={{ position: 'absolute', left: 2, top: 8, width: 6, height: 6, borderRadius: 99, background: C.ink }} />{l}</li>)}</ul>
-                <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: C.greenDk }}>{c.reach != null ? `About ${c.reach.toLocaleString()} people` : 'Reach: no history yet'}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 2 }}>{c.note}</small></div>
-                {planId === c.id && <span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ display: 'block', marginTop: 10, fontSize: 12.5, fontWeight: 700, color: C.mute }}>What is inside ›</span>}
-              </button>
-            ))}
-            {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={() => setStep('plan')} style={cta_}>Next</button>
-            <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Nothing posts without your okay. Everything lands in Coming up.</div>
-          </div>
-        )}
-
         {step === 'plan' && kind && (
           <div style={hv(hue)}>
             <div style={h2}>{simple ? 'What is inside' : 'Here is the plan'}</div>
@@ -1057,8 +1075,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div>{preview.map((l) => <Line key={l.key} l={l} />)}</div>
             {previewTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '12px 0 0' }}><span>Total</span><span>{dollars(previewTotal)}</span></div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={commit} disabled={posting} style={{ ...cta_, opacity: posting ? .6 : 1 }}>{posting ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : 'Make it happen'}</button>
-            <button type="button" onClick={back} style={{ ...cta_, marginTop: 8, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{simple ? 'Back to the plans' : 'Change something'}</button>
+            <button type="button" onClick={() => (simple ? go() : commit())} disabled={posting} style={{ ...cta_, opacity: posting ? .6 : 1 }}>{posting ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : 'Make it happen'}</button>
+            <button type="button" onClick={back} style={{ ...cta_, marginTop: 8, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{simple ? 'Back' : 'Change something'}</button>
             <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Everything lands in Coming up. Nothing that costs money starts without your okay.</div>
           </div>
         )}
