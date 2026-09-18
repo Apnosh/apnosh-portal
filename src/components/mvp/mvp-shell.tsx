@@ -70,6 +70,9 @@ const SHELL_CSS = `
 .mvp-btn:not(:disabled):active{transform:scale(.975)}
 @keyframes mvpspin{to{transform:rotate(360deg)}}
 .mvp-input{transition:border-color .12s ease}
+/* iOS zooms the page when a focused field's text is under 16px. On phones every field is 16px,
+   so typing never zooms; the page keeps pinch zoom (WCAG 1.4.10). */
+@media (max-width:640px){input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea,select{font-size:16px!important}}
 .mvp-input:focus{border-color:#4abd98}
 `
 
