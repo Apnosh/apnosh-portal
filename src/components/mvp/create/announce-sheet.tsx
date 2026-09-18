@@ -921,12 +921,16 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             {simple && (
               <>
                 <div style={h3}>The picture</div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PICS.length},1fr)`, gap: 6 }}>
-                  {PICS.map((o) => <button key={o.id} type="button" onClick={() => { if (o.id === 'own' && !media.length) { fileRef.current?.click(); return } applyPlan(planId, o.id) }} style={{ border: `1.5px solid ${pic === o.id ? C.ink : C.line}`, boxShadow: pic === o.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 14, padding: '9px 4px', textAlign: 'center', background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}><b style={{ display: 'block', fontSize: 12.5, lineHeight: 1.15 }}>{o.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 10.5, marginTop: 2 }}>{o.cost ? dollars(o.cost) : 'Free'}</small></button>)}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PICS.length},1fr)`, gap: 8 }}>
+                  {PICS.map((o) => { const on = pic === o.id; const sc: Scene = o.id === 'own' ? 'photos' : o.id === 'graphic' ? 'graphic' : o.id === 'words' ? 'google' : 'creator'; const hu = o.id === 'own' ? '#2e9a78' : o.id === 'graphic' ? '#d99a1e' : o.id === 'words' ? '#8a928e' : '#6a39de'
+                    return <button key={o.id} type="button" onClick={() => { if (o.id === 'own' && !media.length) { fileRef.current?.click(); return } applyPlan(planId, o.id) }} style={{ ...hv(hu), border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: on ? hexa(hu, 0.08) : '#fff', borderRadius: 16, padding: '10px 4px 8px', textAlign: 'center', font: 'inherit', color: C.ink, cursor: 'pointer', transition: 'background .15s' }}>
+                      <span style={{ display: 'block', width: 40, margin: '0 auto 4px' }}>{media.length && o.id === 'own' && !media[0].video ? <span style={{ display: 'block', width: 40, height: 40, borderRadius: 10, background: `center/cover url(${media[0].preview})` }} /> : <Drawing spec={{ scene: sc }} name="" rating="" t={(s) => s} />}</span>
+                      <b style={{ display: 'block', fontSize: 12.5, lineHeight: 1.15 }}>{o.label}</b><small style={{ display: 'block', color: on ? C.ink : C.mute, fontSize: 11, marginTop: 2, fontWeight: 700 }}>{o.cost ? dollars(o.cost) : 'Free'}</small>
+                    </button> })}
                 </div>
-                {pic === 'booked' && openShoot && <div style={{ fontSize: 12, color: openShoot.used + 1 > openShoot.spots ? '#8a5a0c' : C.greenDk, fontWeight: 600, marginTop: 6, lineHeight: 1.4 }}>{openShoot.used + 1 > openShoot.spots ? `Yours makes ${openShoot.used + 1} on the list, more than ${openShoot.tierLabel.toLowerCase()} covers. The team confirms the bigger day with you first.` : `Already booked, ${openShoot.tierLabel.toLowerCase()}. Yours joins the list, nothing new to pay.`}</div>}
+                {pic === 'booked' && openShoot && <div style={{ fontSize: 12, color: openShoot.used + 1 > openShoot.spots ? '#8a5a0c' : C.greenDk, fontWeight: 600, marginTop: 8, lineHeight: 1.4 }}>{openShoot.used + 1 > openShoot.spots ? `Yours makes ${openShoot.used + 1} on the list, more than ${openShoot.tierLabel.toLowerCase()} covers. The team confirms the bigger day with you first.` : `Already booked, ${openShoot.tierLabel.toLowerCase()}. Yours joins the list, nothing new to pay.`}</div>}
                 {(pic === 'shoot' || pic === 'booked') && <div style={{ ...rowS, padding: '8px 0' }}><span style={{ fontSize: 13 }}>Add a Reel from the day<small style={sub}>{dollars(ctx?.prices.video ?? null) || 'Priced'}. Reels reach about twice what a photo does</small></span><Switch on={withReel} set={(v) => applyPlan(planId, pic, v)} /></div>}
-                {pic === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 6 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
+                {pic === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 8 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
                 {pic === 'shoot' && (
                   <div style={{ marginTop: 8 }}>
                     <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Also shoot that day: the patio, the team, the tiramisu" style={{ ...input, marginTop: 0, fontSize: 13.5 }} />
@@ -939,30 +943,38 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {pic !== 'graphic' && <a href={`/dashboard/marketplace?category=photographer&clientId=${clientId}`} style={{ fontWeight: 700, color: C.ink, whiteSpace: 'nowrap' }}>See who ›</a>}
                   </div>
                 )}
+
                 <div style={h3}>How far should it go?</div>
-                {cards.map((c) => (
-                  <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${planId === c.id ? C.ink : C.line}`, boxShadow: planId === c.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 14px', marginTop: 8, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}><b style={{ fontSize: 15.5, letterSpacing: '-.01em' }}>{c.name}{c.tag && <small style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginLeft: 8 }}>{c.tag}</small>}</b><b style={{ fontSize: 15.5, whiteSpace: 'nowrap' }}>{c.cost ? dollars(c.cost) : 'Free'}</b></div>
-                    {planId === c.id
-                      ? <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none' }}>{c.lines.map((l, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.45, paddingLeft: 14, position: 'relative' }}><span style={{ position: 'absolute', left: 0, top: 8, width: 5, height: 5, borderRadius: 99, background: C.ink }} />{l}</li>)}</ul>
-                      : <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lines.join(' · ')}</div>}
-                    <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: C.greenDk, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span>{c.reach != null ? `About ${c.reach.toLocaleString()} people` : 'Reach: no history yet'}</span>{planId === c.id && <span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ fontSize: 12, fontWeight: 700, color: C.mute }}>What is inside ›</span>}</div>
-                    {planId === c.id && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>{c.note}</div>}
-                    {planId === c.id && c.id === 'boost' && (
+                {(() => { const maxReach = Math.max(1, ...cards.map((c) => c.reach ?? 0)); return cards.map((c) => { const on = planId === c.id; const sc: Scene = c.id === 'post' ? 'post' : c.id === 'boost' ? 'boost' : 'creator'; const hu = c.id === 'post' ? '#2e9a78' : c.id === 'boost' ? '#d99a1e' : '#6a39de'
+                  return <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ ...hv(hu), display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: on ? hexa(hu, 0.06) : '#fff', borderRadius: 20, padding: '12px 14px 12px 12px', marginTop: 8, font: 'inherit', color: C.ink, cursor: 'pointer', transition: 'background .15s' }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <span style={{ width: 44, flex: 'none' }}><Drawing spec={{ scene: sc }} name="" rating="" t={(s) => s} /></span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <b style={{ display: 'block', fontSize: 16, letterSpacing: '-.01em', lineHeight: 1.15 }}>{c.name}{c.tag && <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 7px' }}>{c.tag}</span>}</b>
+                        {!on && <small style={{ display: 'block', color: C.mute, fontSize: 12, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.lines.join(' · ')}</small>}
+                      </span>
+                      <b style={{ fontSize: 17, whiteSpace: 'nowrap', letterSpacing: '-.01em' }}>{c.cost ? dollars(c.cost) : 'Free'}</b>
+                    </div>
+                    {on && <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none' }}>{c.lines.map((l, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.5, paddingLeft: 14, position: 'relative' }}><span style={{ position: 'absolute', left: 0, top: 8, width: 5, height: 5, borderRadius: 99, background: hu }} />{l}</li>)}</ul>}
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ flex: 1, height: 6, borderRadius: 99, background: hexa(hu, 0.14), overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${Math.max(4, Math.round(((c.reach ?? 0) / maxReach) * 100))}%`, borderRadius: 99, background: hu, transition: 'width .25s' }} /></span>
+                      <b style={{ fontSize: 13, color: C.ink, whiteSpace: 'nowrap' }}>{c.reach != null ? `${c.reach.toLocaleString()} people` : 'No history yet'}</b>
+                    </div>
+                    {on && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.4, display: 'flex', justifyContent: 'space-between', gap: 8 }}><span>{c.note}</span><span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ fontWeight: 700, color: C.ink, whiteSpace: 'nowrap' }}>What is inside ›</span></div>}
+                    {on && c.id === 'boost' && (
                       <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                         {[2000, 4000, 10000].map((v) => <span key={v} role="button" onClick={() => { setBoostCents(v); setCustomBoost(false) }} style={chip(!customBoost && boostCents === v)}>${v / 100}</span>)}
                         <span role="button" onClick={() => setCustomBoost(true)} style={chip(customBoost)}>Other</span>
                         {customBoost && <input type="number" min={5} max={500} value={Math.round(boostCents / 100)} onChange={(e) => setBoostCents(Math.max(500, Math.min(50000, Math.round(Number(e.target.value) || 0) * 100)))} style={{ ...input, width: 84, marginTop: 0, padding: '7px 10px', fontSize: 13 }} />}
                       </div>
                     )}
-                  </button>
-                ))}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+                  </button> }) })()}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
                   <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick the most people for it.</span>
-                  <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 78, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
+                  <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 74, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
                   <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
                 </div>
-                <button type="button" onClick={go} disabled={!ready || posting || writing} style={{ ...cta_, opacity: ready && !posting ? 1 : .5 }}>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : writing ? 'Writing the words' : 'Make it happen'}</button>
+                <button type="button" onClick={go} disabled={!ready || posting || writing} style={{ ...cta_, opacity: ready && !posting ? 1 : .5 }}>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : writing ? 'Writing the words' : `Make it happen${(cards.find((c) => c.id === planId)?.cost ?? 0) > 0 ? ` · ${dollars(cards.find((c) => c.id === planId)?.cost ?? 0)}` : ''}`}</button>
                 <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
               </>
             )}
