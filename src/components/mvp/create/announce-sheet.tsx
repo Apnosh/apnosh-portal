@@ -270,8 +270,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [writing, setWriting] = useState(false)
   /* THREE PLANS (owner 2026-09-18, "as simple as possible"): after the facts, three priced cards.
      Picking one sets every default below; What is inside opens the old screens to change them. */
-  type PlanId = 'just' | 'good' | 'reach' | 'big'
-  const [planId, setPlanId] = useState<PlanId>('good')
+  /* TWO ROWS (owner 2026-09-18): the picture (where it comes from) and the push (how far it
+     goes) are separate choices; the price is the sum, so $0 is a real path and so is a shoot
+     with words only. Never more than three or four in a row. */
+  type PlanId = 'post' | 'boost' | 'reach'
+  type Pic = 'own' | 'graphic' | 'shoot' | 'words'
+  const [planId, setPlanId] = useState<PlanId>('boost')
+  const [pic, setPic] = useState<Pic>('graphic')
+  const [withReel, setWithReel] = useState(false)
   const [creatorFit, setCreatorFit] = useState<{ slug: string; name: string; fromCents: number | null; nearby: number | null } | null>(null)
   useEffect(() => {
     fetch(`/api/dashboard/influencers?clientId=${clientId}&fit=1`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); const f = (j.fit ?? [])[0]; if (f?.card) { const a = f.card.audience; setCreatorFit({ slug: f.slug, name: f.card.name, fromCents: f.card.fromCents ?? null, nearby: a?.avgViews && a?.localPct != null ? Math.round(a.avgViews * a.localPct / 100) : a?.followers ?? null }) } }).catch(() => {})
@@ -607,11 +613,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }
 
   /* hooks that need the plan helpers below run through a ref, so they sit above the early return */
-  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; applyPlan: (id: 'just' | 'good' | 'reach' | 'big') => void } | null>(null)
+  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; applyPlan: (id: 'post' | 'boost' | 'reach', pic?: 'own' | 'graphic' | 'shoot' | 'words', reel?: boolean) => void } | null>(null)
   const simpleKind = !!kind && !isSlow && !kind.hidden
   useEffect(() => { if (step === 'words' && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the first time the cards show, the usual pick is applied so the plan underneath matches the card */
-  useEffect(() => { if (step === 'facts' && simpleKind && kind) helpers.current?.applyPlan(planId) }, [step === 'facts' ? kind?.id : null, creatorFit?.slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (step === 'facts' && simpleKind && kind) helpers.current?.applyPlan(kind.id === 'hours' || kind.id === 'holiday' ? 'post' : 'boost', kind.id === 'hours' || kind.id === 'holiday' ? 'words' : media.length ? 'own' : 'graphic') }, [step === 'facts' ? kind?.id : null, creatorFit?.slug])
+  /* a photo added on this screen becomes the picture */
+  useEffect(() => { if (simpleKind && step === 'facts' && media.length && pic !== 'own' && pic !== 'shoot') helpers.current?.applyPlan(planId, 'own') }, [media.length]) // eslint-disable-line react-hooks/exhaustive-deps // eslint-disable-line react-hooks/exhaustive-deps
   if (!mounted) return null
   const hue = kind?.hue ?? '#2e9a78'
   const hv = (h: string): React.CSSProperties => ({ ['--c1' as string]: h, ['--c2' as string]: h, ['--t1' as string]: hexa(h, 0.14) } as React.CSSProperties)
@@ -661,24 +669,39 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const boostPeople = (c: number) => Math.round(c / 100) * REACH_PER_DOLLAR
     const cr = creatorFit
     const b3 = 10000
-    const menus = kind.id === 'dish' ? 'menus updated' : isDeal ? 'a Google offer, a table tent' : isEvent ? 'a Google event, reminders' : kind.id === 'hours' || kind.id === 'holiday' ? 'hours set everywhere' : kind.id === 'hiring' ? 'a page on your site' : 'the team told'
-    const free: Card = { id: 'just', name: 'Everywhere, free', cost: 0, lines: [`Google hours set, ${plat}${goog} told`, 'The website and the delivery apps updated', 'Tell the team'], reach: base != null ? round2(base) : null, note: usualNote }
-    const good: Card = { id: 'good', tag: 'The usual pick', name: 'Look good', cost: g + b1, lines: [`A designed graphic${a.price ? ' with the price' : isEvent || isDeal ? ' with the dates' : ''}, ready in 2 days`, `Posted on ${plat}${goog}, a Story too`, `${menus[0].toUpperCase()}${menus.slice(1)}`, `Boost $${b1 / 100}, about ${boostPeople(b1).toLocaleString()} people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2(base != null ? base + boostPeople(b1) : boostPeople(b1)), note: usual ? `Your posts usually reach about ${usual.median.toLocaleString()}. Boost adds the rest.` : 'No post history yet, so this is the Boost alone.' }
     const cn = cr && cr.nearby ? cr : null
-    const reach: Card = { id: 'reach', tag: 'Most for the money', name: 'Reach new people', cost: g + (cn ? b1 + (cn.fromCents ?? 0) : b3), lines: ['Everything in Look good', ...(cn ? [`${cn.name} visits and posts to about ${cn.nearby!.toLocaleString()} people nearby`, 'A code for their followers, the team counts it'] : [`Boost $${b3 / 100} instead of $${b1 / 100}, about ${boostPeople(b3).toLocaleString()} people nearby`])], reach: round2((base ?? 0) + (cn ? boostPeople(b1) + (cn.nearby ?? 0) : boostPeople(b3))) || null, note: cn ? `${cn.name.split(' ')[0]}'s post alone reaches about ${cn.nearby!.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]} is nearby but their reach is not connected yet, so the money goes to Boost.` : 'No local creator fits yet, so the money goes to Boost.' }
-    const big: Card = { id: 'big', tag: 'Most reach', name: 'All out', cost: sh + v + g + b3 + (cr?.fromCents ?? 0), lines: ['A photographer visit, about 15 photos, yours to keep', 'A Reel cut from the day, and the graphic', cr ? `${cr.name} visits and posts` : 'A local creator, when one fits', `Boost $${b3 / 100}`], reach: round2((base != null ? base * 2 : 0) + boostPeople(b3) + (cr?.nearby ?? 0)) || null, note: 'A Reel reaches about twice what a photo does, on average.' }
-    return kind.id === 'hours' || kind.id === 'holiday' ? [free, good] : [good, reach, big]
+    const menus = kind.id === 'dish' ? 'Menus updated' : isDeal ? 'A Google offer, a table tent' : isEvent ? 'A Google event, reminders' : kind.id === 'hours' || kind.id === 'holiday' ? 'Hours set everywhere' : kind.id === 'hiring' ? 'A page on your site' : 'The team told'
+    const picCost = pic === 'graphic' ? g : pic === 'shoot' ? sh + (withReel ? v : 0) : 0
+    const picBase = base == null ? null : pic === 'shoot' && withReel ? base * 2 : base
+    const picWord = pic === 'own' ? (media[0]?.video ? 'your video' : 'your photo') : pic === 'graphic' ? 'the graphic' : pic === 'shoot' ? (withReel ? 'the shoot photos and the Reel' : 'the shoot photos') : 'words only'
+    const post: Card = { id: 'post', name: 'Post it', cost: picCost, lines: [`${picWord[0].toUpperCase()}${picWord.slice(1)} on ${pic === 'words' ? 'Facebook and Google' : `${plat}${goog}`}${hasIgFb && pic !== 'words' ? ', a Story too' : ''}`, menus, 'Tell the team', `At ${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}, your best hour`], reach: picBase != null ? round2(picBase) : null, note: usualNote }
+    const boostC: Card = { id: 'boost', tag: 'The usual pick', name: 'Boost it', cost: picCost + b1, lines: ['Everything in Post it', `Boost $${b1 / 100}, about ${boostPeople(b1).toLocaleString()} people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2((picBase ?? 0) + boostPeople(b1)) || null, note: usual ? `Your posts usually reach about ${usual.median.toLocaleString()}. Boost adds the rest.` : 'No post history yet, so this is the Boost alone.' }
+    const reach: Card = { id: 'reach', tag: 'Most reach', name: 'Reach new people', cost: picCost + (cn ? b1 + (cn.fromCents ?? 0) : b3), lines: ['Everything in Boost it', ...(cn ? [`${cn.name} visits and posts to about ${cn.nearby!.toLocaleString()} people nearby`, 'A code for their followers, the team counts it'] : [`Boost $${b3 / 100} instead of $${b1 / 100}, about ${boostPeople(b3).toLocaleString()} people nearby`])], reach: round2((picBase ?? 0) + (cn ? boostPeople(b1) + (cn.nearby ?? 0) : boostPeople(b3))) || null, note: cn ? `${cn.name.split(' ')[0]}'s post alone reaches about ${cn.nearby!.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]} is nearby but their reach is not connected yet, so the money goes to Boost.` : 'No local creator fits yet, so the money goes to Boost.' }
+    return kind.id === 'hours' || kind.id === 'holiday' ? [post, boostC] : [post, boostC, reach]
   })()
-  const applyPlan = (id: PlanId) => {
-    setPlanId(id)
+  const PICS: { id: Pic; label: string; small: string; cost: number | null }[] = [
+    { id: 'own', label: media.length ? `Your ${media[0]?.video ? 'video' : 'photo'}` : 'Your photo', small: media.length ? `${media.length} added` : 'Add one', cost: 0 },
+    { id: 'graphic', label: 'A graphic', small: '2 days', cost: ctx?.prices.graphic ?? null },
+    { id: 'shoot', label: 'A shoot', small: 'a visit', cost: ctx?.prices.tiers?.standard ?? ctx?.prices.shoot ?? null },
+    { id: 'words', label: 'Words only', small: 'no picture', cost: 0 },
+  ]
+  const applyPlan = (id: PlanId, nextPic: Pic = pic, reel: boolean = withReel) => {
+    setPlanId(id); setPic(nextPic); setWithReel(reel)
     if (!kind) return
-    const b1 = isDeal || isEvent ? 4000 : 2000; const b2 = isDeal || isEvent ? 10000 : 4000
+    const b1 = isDeal || isEvent ? 4000 : 2000
     const alsoSet = new Set<Also>(kind.also.filter((k) => ALSO[k].on(ctx)))
-    if (id === 'just') { choose(media.length ? 'own' : 'words'); setBoost(false); setAgain(false); setAlso(alsoSet) }
-    if (id === 'good') { setSrc(media.length ? 'own' : 'team'); const p = new Set<Piece>(['graphic']); setPieces(p); settle(media.length ? 'own' : 'team', p); setBoost(true); setBoostCents(b1); setAgain(kind.id !== 'hours' && kind.id !== 'holiday'); if (kind.also.includes('print') && isDeal) alsoSet.add('print'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); setAlso(alsoSet) }
-    if (id === 'reach') { const cn = creatorFit && creatorFit.nearby ? creatorFit : null; setSrc(media.length ? 'own' : 'team'); const p = new Set<Piece>(['graphic']); setPieces(p); settle(media.length ? 'own' : 'team', p); setBoost(true); setBoostCents(cn ? b1 : 10000); setAgain(true); if (cn && kind.also.includes('creators')) alsoSet.add('creators'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); setAlso(alsoSet) }
-    if (id === 'big') { setSrc('newshoot'); const p = new Set<Piece>(['photos', 'reel', 'graphic']); setPieces(p); settle('newshoot', p); setBoost(true); setBoostCents(b2); setAgain(true); if (kind.also.includes('creators')) alsoSet.add('creators'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); setAlso(alsoSet) }
-    setStory(true)
+    if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); if (kind.also.includes('print') && isDeal) alsoSet.add('print')
+    /* the picture */
+    if (nextPic === 'own') choose(media.length ? 'own' : 'words')
+    else if (nextPic === 'words') choose('words')
+    else if (nextPic === 'graphic') { const from: Src = media.length ? 'own' : 'team'; setSrc(from); const p = new Set<Piece>(['graphic']); setPieces(p); settle(from, p) }
+    else { setSrc('newshoot'); const p = new Set<Piece>(reel ? ['photos', 'reel'] : ['photos']); setPieces(p); settle('newshoot', p) }
+    /* the push */
+    const cn = creatorFit && creatorFit.nearby ? creatorFit : null
+    if (id === 'post') { setBoost(false); setAgain(false) }
+    if (id === 'boost') { setBoost(true); setBoostCents(b1); setAgain(kind.id !== 'hours' && kind.id !== 'holiday') }
+    if (id === 'reach') { setBoost(true); setBoostCents(cn ? b1 : 10000); setAgain(true); if (cn && kind.also.includes('creators')) alsoSet.add('creators') }
+    setAlso(alsoSet); setStory(nextPic !== 'words')
   }
   helpers.current = { write, applyPlan }
   const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? 'Slow night' : kind?.id === 'post' ? 'A post' : kind?.id === 'update' ? 'Update' : fromSlow && step === 'facts' ? `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}` : (isEvent && a.what?.trim()) || kind?.label || ''
@@ -859,6 +882,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             {simple && (
               <>
+                <div style={h3}>The picture</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+                  {PICS.map((o) => <button key={o.id} type="button" onClick={() => { if (o.id === 'own' && !media.length) { fileRef.current?.click(); return } applyPlan(planId, o.id) }} style={{ border: `1.5px solid ${pic === o.id ? C.ink : C.line}`, boxShadow: pic === o.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 14, padding: '9px 4px', textAlign: 'center', background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}><b style={{ display: 'block', fontSize: 12.5, lineHeight: 1.15 }}>{o.label}</b><small style={{ display: 'block', color: C.mute, fontSize: 10.5, marginTop: 2 }}>{o.cost ? dollars(o.cost) : 'Free'}</small></button>)}
+                </div>
+                {pic === 'shoot' && <div style={{ ...rowS, padding: '8px 0' }}><span style={{ fontSize: 13 }}>Add a Reel from the day<small style={sub}>{dollars(ctx?.prices.video ?? null) || 'Priced'}. Reels reach about twice what a photo does</small></span><Switch on={withReel} set={(v) => applyPlan(planId, 'shoot', v)} /></div>}
+                {pic === 'words' && igChosen && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 6 }}>Instagram needs a picture. Words only goes to Facebook and Google.</div>}
                 <div style={h3}>How far should it go?</div>
                 {cards.map((c) => (
                   <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${planId === c.id ? C.ink : C.line}`, boxShadow: planId === c.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 18, padding: '12px 14px', marginTop: 8, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
