@@ -94,7 +94,7 @@ const whenWord = (due: string | null): string => {
 async function context(admin: ReturnType<typeof createAdminClient>, clientId: string) {
   const today = new Date().toISOString().slice(0, 10)
   const since = new Date(Date.now() - 56 * 86400000).toISOString().slice(0, 10)
-  const [client, site, guests, shoot, card, pos, open] = await Promise.all([
+  const [client, site, guests, shoot, card, pos, open, recent] = await Promise.all([
     admin.from('clients').select('name, tier, website').eq('id', clientId).maybeSingle(),
     admin.from('site_settings').select('order_online_url, reservation_url').eq('client_id', clientId).maybeSingle(),
     admin.from('guest_contacts').select('id', { count: 'exact', head: true }).eq('client_id', clientId).is('unsubscribed_at', null),
@@ -103,7 +103,10 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     getActiveRateCard().catch(() => null),
     admin.from('pos_daily_sales').select('day, gross_cents, orders, source').eq('client_id', clientId).gte('day', since).order('day', { ascending: true }).limit(400),
     openShoot(admin, clientId).catch(() => null),
+    admin.from('social_posts').select('reach').eq('client_id', clientId).order('posted_at', { ascending: false }).limit(12),
   ])
+  const reaches = ((recent.data ?? []) as { reach: number | null }[]).map((r) => Number(r.reach || 0)).filter((x) => x > 0).sort((x, y) => x - y)
+  const usualReach = reaches.length ? { median: reaches[Math.floor(reaches.length / 2)], min: reaches[0], max: reaches[reaches.length - 1], n: reaches.length } : null
   /* the register, by weekday: what each day does on average over the last eight weeks, so the
      slow night is a fact on the screen and not a question. Statement imports (an app's monthly
      sheet) are excluded: they are not day-true. */
@@ -128,6 +131,7 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     orderUrl: isHttps(s.order_online_url) ? s.order_online_url : null,
     reserveUrl: isHttps(s.reservation_url) ? s.reservation_url : null,
     guests: guests.count ?? 0,
+    usualReach,
     nextShoot: sh && sh.id !== open?.requestId ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
     shoot: open,
     prices: { graphic, video, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },

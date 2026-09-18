@@ -33,7 +33,7 @@ type Piece = 'graphic' | 'reel' | 'photos'
 type Tier = 'standard' | 'full' | 'works'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
-type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'picture' | 'where' | 'words' | 'plan' | 'done'
+type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'plans' | 'picture' | 'where' | 'words' | 'plan' | 'done'
 type GetIn = 'show' | 'rsvp' | 'tickets' | 'book'
 
 interface Field { key: string; label: string; hint?: string; optional?: boolean; kind?: 'text' | 'date' | 'long' | 'time' }
@@ -167,7 +167,7 @@ const PLAT: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebo
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
 interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: { label: string; kind: string; pieces: string[] }[]; needs: Tier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
-interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
+interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; usualReach?: { median: number; min: number; max: number; n: number } | null; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
 /* a shoot day is a visit with a shot list; the size follows the list */
 const TIERS: { id: Tier; label: string; photos: number; upto: number }[] = [{ id: 'standard', label: 'A quick visit', photos: 15, upto: 2 }, { id: 'full', label: 'Half a day', photos: 25, upto: 4 }, { id: 'works', label: 'A full day', photos: 40, upto: 6 }]
 const tierFor = (n: number): Tier => (n <= 2 ? 'standard' : n <= 4 ? 'full' : 'works')
@@ -267,6 +267,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [openAt, setOpenAt] = useState('10:00')
   const [closeAt, setCloseAt] = useState('14:00')
   const [writing, setWriting] = useState(false)
+  /* THREE PLANS (owner 2026-09-18, "as simple as possible"): after the facts, three priced cards.
+     Picking one sets every default below; What is inside opens the old screens to change them. */
+  type PlanId = 'just' | 'good' | 'big'
+  const [planId, setPlanId] = useState<PlanId>('good')
+  const [creatorFit, setCreatorFit] = useState<{ slug: string; name: string; fromCents: number | null; nearby: number | null } | null>(null)
+  useEffect(() => {
+    fetch(`/api/dashboard/influencers?clientId=${clientId}&fit=1`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); const f = (j.fit ?? [])[0]; if (f?.card) { const a = f.card.audience; setCreatorFit({ slug: f.slug, name: f.card.name, fromCents: f.card.fromCents ?? null, nearby: a?.avgViews && a?.localPct != null ? Math.round(a.avgViews * a.localPct / 100) : a?.followers ?? null }) } }).catch(() => {})
+  }, [clientId])
   const [social, setSocial] = useState('')
   const [gtext, setGtext] = useState('')
   const [card, setCard] = useState('')
@@ -307,7 +315,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (k.id === 'slow') { setNight(slowestDay(ctx) ?? 2); setPart('dinner') }
     if (k.id === 'post') setGoogle(false)
     if (k.id === 'update') setGoogle(hasGoogle)
-    setStep(k.id === 'event' ? 'ekind' : k.id === 'slow' ? 'night' : k.picture ? 'picture' : 'facts')
+    setStep(k.id === 'event' ? 'ekind' : k.id === 'slow' ? 'night' : k.picture && k.hidden ? 'picture' : 'facts')
   }
   const isSlow = kind?.id === 'slow'
   const isDeal = kind?.id === 'deal'
@@ -322,7 +330,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (to === 'deal') {
       const from = nextDay(night)
       setA({ what: '', when: `${DAYS[night]}s, ${p.runs}`, from, until: plusDays(from, 21), code: DAYS[night].toUpperCase(), line: '' })
-      setStep('picture')
+      setStep('facts')
     } else {
       setA({ what: '', when: nextDay(night), time: p.runs.replace(' to ', ' to ') + (part === 'late' ? '' : ' pm') })
       setGetin('show'); setEkind(null)
@@ -341,7 +349,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const pickEvent = (e: EventKind) => {
     setEkind(e); setWeekly(e.weekly || fromSlow); setGetin(e.getin)
     setA((x) => ({ ...x, what: x.what?.trim() ? x.what : e.label }))
-    setStep('picture')
+    setStep('facts')
   }
   const isEvent = kind?.id === 'event'
   const required = kind ? kind.fields.filter((f) => !f.optional) : []
@@ -506,16 +514,16 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (kind?.id === 'hiring' && again) { const d = new Date((postAt ?? new Date()).getTime() + 14 * 86400e3); out.push({ key: 'again2', label: 'Posted a third time', detail: 'Two weeks on, until it is filled', at: d.toISOString(), text: social.trim() }) }
     return out
   }
-  const write = async () => {
+  const write = async (stay = false) => {
     if (!kind) return
-    setWriting(true); setErr(null)
+    setWriting(true); if (!stay) setErr(null)
     try {
       const r = await fetch('/api/dashboard/announce-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, answers: factsOut(), channels, cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team'), reminderWhen: reminderWhen()?.phrase ?? '', tonight: (isEvent && tonight) || (isDeal && weekly), after: isEvent && after, ctaText: isEvent ? GETIN.find((x) => x.id === getin)?.cta : isDeal && a.code?.trim() ? `Say ${a.code.trim()} at the counter` : '' }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not write it')
       setSocial(String(j.social ?? '')); setGtext(String(j.google ?? '')); setCard(String(j.card ?? '')); setReminderText(String(j.reminder ?? '')); setTonightText(String(j.tonight ?? '')); setAfterText(String(j.after ?? '')); setSocialEs(String(j.socialEs ?? ''))
-      setStep('words')
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Could not write it') }
+      if (!stay) setStep('words')
+    } catch (e) { if (!stay) setErr(e instanceof Error ? e.message : 'Could not write it') }
     setWriting(false)
   }
 
@@ -593,6 +601,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     setPosting(false)
   }
 
+  /* hooks that need the plan helpers below run through a ref, so they sit above the early return */
+  const helpers = useRef<{ write: (stay?: boolean) => Promise<void>; applyPlan: (id: 'just' | 'good' | 'big') => void } | null>(null)
+  const simpleKind = !!kind && !isSlow && !kind.hidden
+  useEffect(() => { if (step === 'words' && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* the first time the cards show, the usual pick is applied so the plan underneath matches the card */
+  useEffect(() => { if (step === 'plans' && kind) helpers.current?.applyPlan(planId) }, [step === 'plans' ? kind?.id : null]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!mounted) return null
   const hue = kind?.hue ?? '#2e9a78'
   const hv = (h: string): React.CSSProperties => ({ ['--c1' as string]: h, ['--c2' as string]: h, ['--t1' as string]: hexa(h, 0.14) } as React.CSSProperties)
@@ -612,9 +626,43 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* HOW IT LOOKS COMES FIRST (owner 2026-09-17): choosing a photo, a graphic or a video is the
      first decision, and the photo lives on that screen, not on the facts. */
   const steps: Step[] = ['picture', 'facts', 'where', 'words', 'plan']
-  const visible: Step[] = isSlow ? ['night', 'play'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
-  const back = () => { const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
-  const next = () => { const i = visible.indexOf(step); setStep(visible[i + 1]) }
+  /* the simple road: facts, three cards, done. The old screens stay reachable from What is inside */
+  const simple = !!kind && !isSlow && !kind.hidden
+  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', 'plans', 'plan'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
+  const back = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
+  const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); if (visible[i] === 'facts' && simple) { void write(true) } setStep(visible[i + 1]) }
+
+  /* ── the three cards ── */
+  interface Card { id: PlanId; tag?: string; name: string; cost: number; lines: string[]; reach: number | null; note: string }
+  const usual = ctx?.usualReach ?? null
+  const round2 = (n: number) => { const m = Math.pow(10, Math.max(0, String(Math.round(n)).length - 2)); return Math.round(n / m) * m }
+  const cards = ((): Card[] => {
+    if (!kind) return []
+    const g = ctx?.prices.graphic ?? 23100; const v = ctx?.prices.video ?? 27500; const sh = ctx?.prices.tiers?.standard ?? ctx?.prices.shoot ?? 38500
+    const base = usual?.median ?? null
+    const plat = platforms.length ? platforms.map((p) => PLAT[p] ?? p).join(', ') : 'Instagram, Facebook'
+    const goog = google ? ' and Google' : ''
+    const usualNote = usual ? `Your usual. Your last ${usual.n} post${usual.n === 1 ? '' : 's'} reached ${usual.min.toLocaleString()} to ${usual.max.toLocaleString()}.` : 'No post history yet, so no number to promise.'
+    const b1 = isDeal || isEvent ? 4000 : 2000; const b2 = isDeal || isEvent ? 10000 : 4000
+    const boostPeople = (c: number) => Math.round(c / 100) * REACH_PER_DOLLAR
+    const cr = creatorFit
+    const just: Card = { id: 'just', name: 'Just post it', cost: 0, lines: [media.length ? `Your ${media[0]?.video ? 'video' : 'photo'} on ${plat}${goog}` : `A post on ${plat}${goog}, from your words`, ...(isDeal ? ['A Google offer with the dates'] : isEvent ? ['A Google event and a Facebook event'] : kind.id === 'hours' || kind.id === 'holiday' ? ['Google hours set'] : []), hasIgFb ? `A Story ${isEvent || isDeal ? 'the morning of' : 'the same day'}` : '', `Posted at ${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}, your best hour`].filter(Boolean), reach: base != null ? round2(base) : null, note: usualNote }
+    const good: Card = { id: 'good', tag: 'The usual pick', name: 'Make it look good', cost: g + b1, lines: [`A designed graphic${a.price ? ', price on it' : isEvent || isDeal ? ' with the dates' : ''}, 2 days`, 'The same posts and Story', ...(kind.id === 'dish' ? ['Google menu and website updated'] : isDeal ? ['Table tent for the counter'] : isEvent ? ['Reminders the week and the day before'] : kind.id === 'hours' || kind.id === 'holiday' ? ['Website and the delivery apps updated'] : kind.id === 'hiring' ? ['A page on your site, Google updated'] : ['Tell the team']), `Boost $${b1 / 100} to people nearby`, ...(kind.id === 'hours' || kind.id === 'holiday' ? [] : ['Posted again a week later'])], reach: round2(base != null ? base + boostPeople(b1) : boostPeople(b1)), note: `A designed post, and $${b1 / 100} reaches about ${boostPeople(b1).toLocaleString()} nearby.` }
+    const big: Card = { id: 'big', tag: 'Most reach', name: 'Go big', cost: sh + v + g + b2 + (cr?.fromCents ?? 0), lines: ['A photographer visit, about 15 photos, yours to keep', 'A Reel cut from the day', 'The graphic, the posts, the Story', `Boost $${b2 / 100}`, cr ? `${cr.name}, a local creator, visits and posts` : 'A local creator visits and posts, when one fits'], reach: round2((base != null ? base * 2 : 0) + boostPeople(b2) + (cr?.nearby ?? 0)) || null, note: cr?.nearby ? `${cr.name.split(' ')[0]}'s post alone reaches about ${cr.nearby.toLocaleString()} nearby.` : cr ? `${cr.name.split(' ')[0]}'s reach is not connected yet, so it is not counted.` : 'A Reel and a shoot day. A creator is added when one fits.' }
+    return kind.id === 'hours' || kind.id === 'holiday' ? [just, good] : [just, good, big]
+  })()
+  const applyPlan = (id: PlanId) => {
+    setPlanId(id)
+    if (!kind) return
+    const b1 = isDeal || isEvent ? 4000 : 2000; const b2 = isDeal || isEvent ? 10000 : 4000
+    const alsoSet = new Set<Also>(kind.also.filter((k) => ALSO[k].on(ctx)))
+    if (id === 'just') { choose(media.length ? 'own' : 'words'); setBoost(false); setAgain(false); setAlso(alsoSet) }
+    if (id === 'good') { setSrc(media.length ? 'own' : 'team'); const p = new Set<Piece>(['graphic']); setPieces(p); settle(media.length ? 'own' : 'team', p); setBoost(true); setBoostCents(b1); setAgain(kind.id !== 'hours' && kind.id !== 'holiday'); if (kind.also.includes('print') && isDeal) alsoSet.add('print'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu'); setAlso(alsoSet) }
+    if (id === 'big') { setSrc('newshoot'); const p = new Set<Piece>(['photos', 'reel', 'graphic']); setPieces(p); settle('newshoot', p); setBoost(true); setBoostCents(b2); setAgain(true); if (kind.also.includes('creators')) alsoSet.add('creators'); if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); setAlso(alsoSet) }
+    setStory(true)
+  }
+  helpers.current = { write, applyPlan }
   const title = step === 'kind' ? 'Announce something' : step === 'done' ? 'Done' : step === 'ekind' ? 'An event' : isSlow ? 'Slow night' : kind?.id === 'post' ? 'A post' : kind?.id === 'update' ? 'Update' : fromSlow && step === 'facts' ? `${DAYS[night]} ${(PARTS.find((p) => p.id === part)?.label ?? 'dinner').toLowerCase()}` : (isEvent && a.what?.trim()) || kind?.label || ''
   const Line = ({ l }: { l: PlanLine }) => (
     <div style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, alignItems: 'flex-start' }}>
@@ -790,7 +838,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               </>
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>
+            <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>{simple ? 'See the plans' : 'Next'}</button>
           </div>
         )}
 
@@ -859,7 +907,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             {src === 'own' && media[0]?.video && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 10 }}>A vertical video becomes a Reel on Instagram and Facebook.</div>}
             {src === 'own' && !pieces.size && !media.some((m) => m.video) && <div style={{ fontSize: 12, color: C.mute, marginTop: 10 }}>Got ten seconds of video? It becomes a Reel, and Reels reach further than photos.</div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={next} disabled={madeKind && !readyBy} style={{ ...cta_, opacity: madeKind && !readyBy ? .5 : 1 }}>Next</button>
+            <button type="button" onClick={next} disabled={madeKind && !readyBy} style={{ ...cta_, opacity: madeKind && !readyBy ? .5 : 1 }}>{inside ? 'Done' : 'Next'}</button>
           </div>
         )}
 
@@ -906,7 +954,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={{ ...rowS, borderBottom: boost ? 0 : undefined }}><span>{isDeal && weekly ? `Boost on ${DAYS[dealDay()]}s` : isEvent ? 'Boost the announcement' : 'Boost it'}<small style={sub}>{boost ? `$${Math.round(boostCents / 100)} reaches about ${(Math.round(boostCents / 100) * REACH_PER_DOLLAR).toLocaleString()} people nearby` : 'Reach more people nearby, after it posts'}</small></span><Switch on={boost} set={setBoost} /></div>
             {boost && <div style={{ display: 'flex', gap: 6, padding: '0 0 11px', borderBottom: `0.5px solid ${C.line}` }}>{[1000, 2000, 4000, 8000].map((c) => <button key={c} type="button" onClick={() => setBoostCents(c)} style={chip(boostCents === c)}>${c / 100}</button>)}</div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={write} disabled={writing || channels.length === 0 || (timing === 'at' && !postAt)} style={{ ...cta_, opacity: channels.length === 0 || (timing === 'at' && !postAt) ? .5 : 1 }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : null} {writing ? 'Writing' : 'Write it for me'}</button>
+            <button type="button" onClick={() => (inside ? (social.trim() ? next() : write()) : write())} disabled={writing || channels.length === 0 || (timing === 'at' && !postAt)} style={{ ...cta_, opacity: channels.length === 0 || (timing === 'at' && !postAt) ? .5 : 1 }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : null} {writing ? 'Writing' : inside && social.trim() ? 'Done' : 'Write it for me'}</button>
           </div>
         )}
 
@@ -968,20 +1016,49 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Tap any text to change it. We only use what you told us. No made-up prices or claims.</div>
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-              <button type="button" onClick={write} disabled={writing} style={{ ...cta_, marginTop: 0, flex: '0 0 auto', width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : 'Again'}</button>
-              <button type="button" onClick={next} disabled={writing || (!social.trim() && !gtext.trim())} style={{ ...cta_, marginTop: 0, flex: 1 }}>Next</button>
+              <button type="button" onClick={() => write()} disabled={writing} style={{ ...cta_, marginTop: 0, flex: '0 0 auto', width: 'auto', padding: '0 16px', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{writing ? <Loader2 size={16} className="mvp-spin" /> : 'Again'}</button>
+              <button type="button" onClick={next} disabled={writing || (!social.trim() && !gtext.trim())} style={{ ...cta_, marginTop: 0, flex: 1 }}>{inside ? 'Done' : 'Next'}</button>
             </div>
+          </div>
+        )}
+
+        {step === 'plans' && kind && (
+          <div style={hv(hue)}>
+            <div style={h2}>Pick a plan</div>
+            {cards.map((c) => (
+              <button key={c.id} type="button" onClick={() => applyPlan(c.id)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1.5px solid ${planId === c.id ? C.ink : C.line}`, boxShadow: planId === c.id ? `inset 0 0 0 1px ${C.ink}` : 'none', borderRadius: 20, padding: '14px 14px 12px', marginTop: 10, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                {c.tag && <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 4 }}>{c.tag}</div>}
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}><b style={{ fontSize: 17, letterSpacing: '-.01em' }}>{c.name}</b><b style={{ fontSize: 17 }}>{c.cost ? dollars(c.cost) : '$0'}</b></div>
+                <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none' }}>{c.lines.map((l, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.45, paddingLeft: 16, position: 'relative' }}><span style={{ position: 'absolute', left: 2, top: 8, width: 6, height: 6, borderRadius: 99, background: C.ink }} />{l}</li>)}</ul>
+                <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: C.greenDk }}>{c.reach != null ? `About ${c.reach.toLocaleString()} people` : 'Reach: no history yet'}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 2 }}>{c.note}</small></div>
+                {planId === c.id && <span onClick={(e) => { e.stopPropagation(); setStep('plan') }} style={{ display: 'block', marginTop: 10, fontSize: 12.5, fontWeight: 700, color: C.mute }}>What is inside ›</span>}
+              </button>
+            ))}
+            {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
+            <button type="button" onClick={() => setStep('plan')} style={cta_}>Next</button>
+            <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Nothing posts without your okay. Everything lands in Coming up.</div>
           </div>
         )}
 
         {step === 'plan' && kind && (
           <div style={hv(hue)}>
-            <div style={h2}>Here is the plan</div>
+            <div style={h2}>{simple ? 'What is inside' : 'Here is the plan'}</div>
+            {simple && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: C.mute, marginTop: -4, marginBottom: 6 }}>Every line is set for you. Tap one to change it.</div>
+                {([
+                  ['picture', 'The picture', src === 'own' ? `Your ${media[0]?.video ? 'video' : 'photo'}${pieces.has('graphic') ? ', a designed graphic from it' : ''}` : src === 'newshoot' ? `A shoot day, about ${TIERS.find((t) => t.id === tier)?.photos ?? 15} photos, ${Array.from(pieces).filter((p) => p !== 'photos').map((p) => p === 'reel' ? 'a Reel' : 'a graphic').join(' and ') || 'the photos'}` : src === 'team' ? 'A designed graphic from our own photos' : src === 'shoot' ? 'The booked shoot' : 'Words only'],
+                  ['where', 'Where and when', `${[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Nowhere yet'}${story && hasIgFb ? ', a Story' : ''}. ${postNow ? 'As soon as it is ready' : niceDate(postDay)}${boost ? `. Boost $${Math.round(boostCents / 100)}` : ''}${also.size ? `. ${Array.from(also).map((k) => ALSO[k].label).join(', ')}` : ''}`],
+                  ['words', 'The words', writing ? 'Writing them now' : social.trim() ? social.trim().slice(0, 110) + (social.trim().length > 110 ? '…' : '') : 'Not written yet. Tap to write'],
+                ] as [Step, string, string][]).map(([st, l, d]) => <button key={st} type="button" onClick={() => setStep(st)} style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'flex-start', textAlign: 'left', padding: '10px 0', borderTop: `0.5px solid ${C.line}`, borderBottom: 0, borderLeft: 0, borderRight: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}><span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14 }}>{l}</b><small style={sub}>{d}</small></span><span style={{ fontSize: 12.5, fontWeight: 700, color: C.mute, flex: 'none' }}>Change</span></button>)}
+                <div style={{ ...h3, marginTop: 14 }}>The plan</div>
+              </div>
+            )}
             <div>{preview.map((l) => <Line key={l.key} l={l} />)}</div>
             {previewTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '12px 0 0' }}><span>Total</span><span>{dollars(previewTotal)}</span></div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             <button type="button" onClick={commit} disabled={posting} style={{ ...cta_, opacity: posting ? .6 : 1 }}>{posting ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : 'Make it happen'}</button>
-            <button type="button" onClick={back} style={{ ...cta_, marginTop: 8, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>Change something</button>
+            <button type="button" onClick={back} style={{ ...cta_, marginTop: 8, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{simple ? 'Back to the plans' : 'Change something'}</button>
             <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Everything lands in Coming up. Nothing that costs money starts without your okay.</div>
           </div>
         )}
