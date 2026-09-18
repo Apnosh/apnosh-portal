@@ -39,12 +39,19 @@ export async function fillPlanResults(admin: Admin, opts: { clientId?: string } 
     const postIds = plan.map((l) => (l.ref?.kind === 'post' && l.ref.id ? l.ref.id : null)).filter((x): x is string => !!x)
     const draftIds = plan.map((l) => (l.ref?.kind === 'draft' && l.ref.id ? l.ref.id : null)).filter((x): x is string => !!x)
     const requestIds = plan.map((l) => (l.ref?.kind === 'request' && l.ref.id ? l.ref.id : null)).filter((x): x is string => !!x)
-    const [posts, drafts, requests, loc] = await Promise.all([
+    const bookingIds = Array.from(new Set(plan.map((l) => (l.ref?.kind === 'booking' && l.ref.id ? l.ref.id : null)).filter((x): x is string => !!x)))
+    const [posts, drafts, requests, loc, bks, cposts] = await Promise.all([
       postIds.length ? admin.from('social_posts').select('external_id, reach, likes, comments, total_interactions, posted_at').eq('client_id', clientId).in('external_id', postIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       draftIds.length ? admin.from('content_drafts').select('id, status, published_post_id').in('id', draftIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       requestIds.length ? admin.from('creative_requests').select('id, status').in('id', requestIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
       row.kind === 'reviews' ? admin.from('gbp_locations').select('place_rating_count, is_primary').eq('client_id', clientId) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      bookingIds.length ? admin.from('bookings').select('id, status, slot_date').in('id', bookingIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      bookingIds.length ? admin.from('creator_posts').select('booking_id, url, views, likes, saves, comments, posted_at').in('booking_id', bookingIds) : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     ])
+    const byBooking = new Map<string, Record<string, unknown>>()
+    for (const b of ((bks.data ?? []) as Record<string, unknown>[])) byBooking.set(String(b.id), b)
+    const collabPost = new Map<string, Record<string, unknown>>()
+    for (const c of ((cposts.data ?? []) as Record<string, unknown>[])) collabPost.set(String(c.booking_id), c)
     const byPost = new Map<string, Record<string, unknown>>()
     for (const p of (posts.data ?? []) as Record<string, unknown>[]) byPost.set(String(p.external_id), p)
     const byDraft = new Map<string, Record<string, unknown>>()
@@ -82,6 +89,15 @@ export async function fillPlanResults(admin: Admin, opts: { clientId?: string } 
         else if (st === 'awaiting_payment') out.status = 'needs_payment'
         else if (st === 'in_progress' || st === 'requested' || st === 'quoted' || st === 'accepted' || st === 'in_review') out.status = 'with_team'
         else if (st === 'declined') { out.status = 'done'; out.outcome = { text: 'Declined', at: now } }
+      } else if (l.ref?.kind === 'booking' && l.ref.id) {
+        /* a creator collab: the booking's own state, and the post once the creator files it */
+        const b = byBooking.get(l.ref.id); const cp = collabPost.get(l.ref.id)
+        const st = b ? String(b.status) : null
+        if (l.key === 'ask') { if (st === 'confirmed' || st === 'completed') { out.status = 'done'; out.outcome = { text: 'They said yes', at: now } } else if (st === 'cancelled') { out.status = 'done'; out.outcome = { text: 'Cancelled', at: now } } }
+        else if (l.key === 'visit') { if (st === 'completed' || (st === 'confirmed' && passed)) { out.status = 'done'; out.outcome = { text: 'Visited', at: now } } else if (st === 'cancelled') { out.status = 'done'; out.outcome = { text: 'Cancelled', at: now } } }
+        else if (l.key === 'post' && cp) { out.status = 'done'; out.outcome = { text: cp.views != null ? `Up. ${fmt(num(cp.views))} views · ${fmt(num(cp.likes))} likes · ${fmt(num(cp.saves))} saves` : 'Up. Numbers still counting', n: num(cp.views), at: now } }
+        else if (l.key === 'results' && cp && passed) { out.status = 'done'; out.outcome = { text: `${fmt(num(cp.views))} views · ${fmt(num(cp.likes))} likes · ${fmt(num(cp.saves))} saves · ${fmt(num(cp.comments))} comments on their post`, n: num(cp.views), at: now } }
+        else if (l.key === 'paid' && cp && passed) { out.status = 'done'; out.outcome = { text: 'Paid after the post', at: now } }
       } else if (l.key === 'checkin' && passed) {
         if (row.kind === 'reviews') {
           const rows_ = (loc.data ?? []) as { place_rating_count: number | null; is_primary?: boolean }[]

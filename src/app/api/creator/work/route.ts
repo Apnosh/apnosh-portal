@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const userId = await currentUserId()
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  const body = (await req.json().catch(() => ({}))) as { id?: string; status?: string; delivered_url?: string; note?: string; concept_status?: 'approved' | 'pending' | 'changes' }
+  const body = (await req.json().catch(() => ({}))) as { id?: string; status?: string; delivered_url?: string; note?: string; concept_status?: 'approved' | 'pending' | 'changes'; metrics?: { platform?: string; views?: number; likes?: number; saves?: number; comments?: number; posted_at?: string } }
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   if (body.status && !VALID.includes(body.status as WorkOrderStatus)) {
     return NextResponse.json({ error: 'bad status' }, { status: 400 })
@@ -96,6 +96,9 @@ export async function PATCH(req: NextRequest) {
       ...(body.note !== undefined ? { note: body.note } : {}),
       ...(body.concept_status ? { concept_status: body.concept_status } : {}),
     })
+    /* A creator collab (influencer marketplace): the delivered link IS the post. File it with
+       its numbers so the restaurant's profile of them, and the plan's results line, read it. */
+    if (body.delivered_url) await fileCollabPost(body.id, body.delivered_url, body.metrics).catch(() => null)
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof IllegalTransition) return NextResponse.json({ error: e.message }, { status: 409 })
@@ -138,4 +141,19 @@ async function handoverGuardForOrder(orderId: string): Promise<{ ok: true } | { 
   } catch {
     return { ok: true }
   }
+}
+
+async function fileCollabPost(orderId: string, url: string, m?: { platform?: string; views?: number; likes?: number; saves?: number; comments?: number; posted_at?: string }) {
+  const admin = createAdminClient()
+  const { data: o } = await admin.from('creator_work_orders').select('campaign_piece_key, vendor_id, creator_id, client_id').eq('id', orderId).maybeSingle()
+  const key = String(o?.campaign_piece_key ?? '')
+  if (!o || !key.startsWith('booking:')) return
+  const bookingId = key.slice('booking:'.length).split('#')[0]
+  const vendorId = (o.vendor_id as string | null) ?? (o.creator_id as string)
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null)
+  const platform = ['instagram', 'tiktok', 'youtube', 'facebook'].includes(String(m?.platform)) ? String(m!.platform) : /tiktok\.com/i.test(url) ? 'tiktok' : /youtu/i.test(url) ? 'youtube' : /facebook\.com/i.test(url) ? 'facebook' : 'instagram'
+  const row = { vendor_id: vendorId, client_id: o.client_id as string, booking_id: bookingId, kind: 'collab', platform, url, views: n(m?.views), likes: n(m?.likes), saves: n(m?.saves), comments: n(m?.comments), posted_at: typeof m?.posted_at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(m.posted_at) ? m.posted_at : new Date().toISOString().slice(0, 10), updated_at: new Date().toISOString() }
+  const { data: had } = await admin.from('creator_posts').select('id').eq('booking_id', bookingId).maybeSingle()
+  if (had) await admin.from('creator_posts').update(row).eq('id', had.id)
+  else await admin.from('creator_posts').insert(row)
 }

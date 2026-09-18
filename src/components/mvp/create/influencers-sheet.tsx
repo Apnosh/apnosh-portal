@@ -52,6 +52,16 @@ export default function InfluencersSheet({ clientId, onClose }: { clientId: stri
   const [posting, setPosting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [result, setResult] = useState<{ plan: Line[]; errors: string[] } | null>(null)
+  /* three that fit, from the real profiles; the team ask stays as the door when nobody fits */
+  interface Fit { slug: string; score: number; reasons: string[]; tag: string; card?: { name: string; avatarUrl: string | null; fromCents: number | null; audience: { localPct: number | null; avgViews: number | null; followers: number | null; city: string | null } | null } }
+  const [fits, setFits] = useState<Fit[] | null>(null)
+  useEffect(() => {
+    if (step !== 'ask') return
+    const goalKey = goal === 'Fill a slow night' ? 'slow' : goal === 'Launch a dish' ? 'dish' : goal === 'Show off the place' ? 'place' : 'faces'
+    const max = comp === 'A meal on us' ? 0 : comp === 'A meal plus $100' ? 10000 : comp === 'A meal plus $250' ? 25000 : ''
+    fetch(`/api/dashboard/influencers?clientId=${clientId}&fit=1&goal=${goalKey}${max !== '' ? `&max=${max}` : ''}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (r.ok) setFits((j.fit ?? []).filter((f: Fit) => f.card)) }).catch(() => {})
+  }, [step, goal, comp, clientId])
+  const initials = (n: string) => n.split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]?.toUpperCase()).join('')
 
   const preview = useMemo((): Line[] => {
     const today = new Date().toISOString().slice(0, 10)
@@ -116,7 +126,7 @@ export default function InfluencersSheet({ clientId, onClose }: { clientId: stri
                 <span style={{ display: 'block', width: 60, margin: '0 auto 8px' }}><Drawing spec={{ scene: 'dm' }} name="" rating="" t={(s) => s} /></span>
                 <b style={{ display: 'block', fontSize: 14 }}>Pick one for me</b><small style={{ display: 'block', color: C.mute, fontSize: 11.5, marginTop: 4, lineHeight: 1.35 }}>Say the goal and the comp. The team sends two picks with a reason each.</small>
               </button>
-              <Link href={`/dashboard/marketplace?category=food_influencer&clientId=${clientId}`} style={{ border: `1.5px solid ${C.line}`, borderRadius: 18, padding: '16px 12px', background: '#fff', font: 'inherit', color: C.ink, textAlign: 'center', textDecoration: 'none' }}>
+              <Link href={`/dashboard/influencers?clientId=${clientId}`} style={{ border: `1.5px solid ${C.line}`, borderRadius: 18, padding: '16px 12px', background: '#fff', font: 'inherit', color: C.ink, textAlign: 'center', textDecoration: 'none' }}>
                 <span style={{ display: 'block', width: 60, margin: '0 auto 8px' }}><Drawing spec={{ scene: 'grid' }} name="" rating="" t={(s) => s} /></span>
                 <b style={{ display: 'block', fontSize: 14 }}>Browse the marketplace</b><small style={{ display: 'block', color: C.mute, fontSize: 11.5, marginTop: 4, lineHeight: 1.35 }}>See who is listed, what they charge, and book a date yourself.</small>
               </Link>
@@ -137,8 +147,19 @@ export default function InfluencersSheet({ clientId, onClose }: { clientId: stri
             {win === 'A date I have in mind' && <input type="date" value={when} onChange={(e) => setWhen(e.target.value)} style={input} />}
             <div style={h3}>What they post</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{POSTS.map((p) => <button key={p} type="button" onClick={() => setPost(p)} style={chip(post === p)}>{p}</button>)}</div>
+            {fits && fits.length > 0 && (
+              <>
+                <div style={h3}>{fits.length === 1 ? 'One that fits' : `${fits.length} that fit`}</div>
+                {fits.map((f) => <Link key={f.slug} href={`/dashboard/influencers?clientId=${clientId}&slug=${f.slug}`} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, color: C.ink, textDecoration: 'none' }}>
+                  {f.card?.avatarUrl ? <img src={f.card.avatarUrl} alt="" style={{ width: 44, height: 44, borderRadius: 99, objectFit: 'cover', flex: 'none' }} /> : <span style={{ width: 44, height: 44, borderRadius: 99, flex: 'none', background: 'linear-gradient(135deg,#f6c1dc,#c2418f)', display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>{initials(f.card?.name ?? '')}</span>}
+                  <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14 }}>{f.card?.name}</b><small style={{ display: 'block', color: C.mute, fontSize: 12, marginTop: 2, lineHeight: 1.35 }}>{f.reasons.join('. ')}{f.card?.fromCents != null ? `. From $${Math.round(f.card.fromCents / 100)}` : ''}</small></span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: C.greenDk, whiteSpace: 'nowrap' }}>{f.tag || 'Book'}</span>
+                </Link>)}
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Ranked by who watches them, what they post about, price, and reviews. Tap one to see the whole profile and book. Or let the team pick below.</div>
+              </>
+            )}
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>Anyone you already like<span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span><input type="text" value={who} onChange={(e) => setWho(e.target.value)} placeholder="@seattlefoodie, or the kind of account" style={input} /></label>
-            <button type="button" onClick={() => setStep('plan')} style={cta}>Next</button>
+            <button type="button" onClick={() => setStep('plan')} style={fits && fits.length ? { ...cta, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` } : cta}>{fits && fits.length ? 'Ask the team instead' : 'Next'}</button>
           </>
         )}
 
