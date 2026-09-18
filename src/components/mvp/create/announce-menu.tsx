@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, Loader2 } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
-import type { ItemId, ItemPick } from '@/lib/plan/suggest'
+import { MULTI, newUid, type ItemId, type ItemPick } from '@/lib/plan/suggest'
 
 export interface MenuMe { usualReach: number | null; budgetCents: number | null; creator: { slug: string; name: string; fromCents: number | null; nearby: number | null; date?: string | null } | null }
 export interface MenuPrices { graphic: number; video: number; print: number; shootFor: (n: number) => number; shootLabel: (n: number) => string }
@@ -73,25 +73,37 @@ export function itemSummary(it: ItemPick, p: MenuPrices, profile?: CreatorProfil
   }
 }
 
+const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
+  graphic: { where: ['post'], priceOn: true, brandKit: true, from: 'ours' },
+  video: { count: 1, filmed: 'clips', style: 'dish', captions: true },
+  print: { kinds: ['tent'] },
+  creator: { code: true, repost: true },
+}
 export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
-  open: ItemId | null; setOpen: (id: ItemId | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
+  open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
-  const creatorItem = items.find((x) => x.id === 'creator')
+  const openIt = open ? items.find((x) => x.uid === open) ?? null : null
+  const creatorItem = (openIt?.id === 'creator' ? openIt : null) ?? items.find((x) => x.id === 'creator' && x.on) ?? items.find((x) => x.id === 'creator') ?? null
   const slug = (creatorItem?.options.slug as string | undefined) ?? me?.creator?.slug ?? null
   useEffect(() => {
     if (!slug) return
     fetch(`/api/dashboard/influencers?clientId=${clientId}&slug=${encodeURIComponent(slug)}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (r.ok) setProfile(j.profile) }).catch(() => {})
   }, [slug, clientId])
   useEffect(() => {
-    if (open !== 'creator' || fits.length) return
+    if (openIt?.id !== 'creator' || fits.length) return
     fetch(`/api/dashboard/influencers?clientId=${clientId}&fit=1`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (r.ok) setFits((j.fit ?? []).filter((f: Fit) => f.card)) }).catch(() => {})
   }, [open, clientId, fits.length])
-  const patch = (id: ItemId, f: (it: ItemPick) => Partial<ItemPick>) => setItems((xs) => xs.map((it) => (it.id === id ? { ...it, ...f(it) } : it)))
-  const setOpt = (id: ItemId, o: Record<string, unknown>) => patch(id, (it) => ({ options: { ...it.options, ...o } }))
-  const toggle = (id: ItemId) => patch(id, (it) => ({ on: !it.on }))
+  const patchU = (uid: string, f: (it: ItemPick) => Partial<ItemPick>) => setItems((xs) => xs.map((it) => (it.uid === uid ? { ...it, ...f(it) } : it)))
+  /* inside an open sheet, every option write goes to that line */
+  const setOpt = (_id: ItemId, o: Record<string, unknown>) => { if (open) patchU(open, (it) => ({ options: { ...it.options, ...o } })) }
+  const toggle = (uid: string) => patchU(uid, (it) => ({ on: !it.on }))
+  const remove = (uid: string) => setItems((xs) => xs.filter((x) => x.uid !== uid))
+  /* a fresh line of a multi type: made off, opened; dropped again if they back out without adding */
+  const addNew = (id: ItemId) => { const uid = newUid(id); const tmpl = items.find((x) => x.id === id); setItems((xs) => [...xs, { id, uid, on: false, why: '', options: { ...(FRESH[id] ?? {}), ...(id === 'creator' && tmpl ? { slug: tmpl.options.slug } : {}) }, cents: tmpl?.cents ?? 0 }]); setOpen(uid) }
+  const back = () => { if (openIt && !openIt.on && openIt.uid !== openIt.id) remove(openIt.uid); setOpen(null) }
 
   const h3: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 0 4px' }
   const sub: React.CSSProperties = { display: 'block', fontWeight: 500, color: C.mute, fontSize: 12, marginTop: 2, lineHeight: 1.35 }
@@ -111,20 +123,20 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   const Hero = ({ scene, hue }: { scene: Scene; hue: string }) => <div style={{ height: 110, borderRadius: 18, background: `${hue}1f`, display: 'flex', alignItems: 'center', justifyContent: 'center', ['--c2' as string]: hue }}><span style={{ width: 84 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></div>
 
   /* ── an item's options ── */
-  if (open) {
-    const it = items.find((x) => x.id === open)!
-    const m = META[open]
+  if (open && openIt) {
+    const it = openIt
+    const m = META[it.id]
     const o = it.options
     const cents = itemCents(it, prices, profile)
-    const done = () => { patch(open, () => ({ on: true })); setOpen(null) }
-    const head = <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}><button type="button" onClick={() => setOpen(null)} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button><span style={{ flex: 1, fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{m.name}</span><b style={{ fontSize: 17 }}>{cents ? dollars(cents) : 'Free'}</b></div>
+    const done = () => { patchU(open, () => ({ on: true })); setOpen(null) }
+    const head = <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}><button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button><span style={{ flex: 1, fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{m.name}</span><b style={{ fontSize: 17 }}>{cents ? dollars(cents) : 'Free'}</b></div>
     const foot = <button type="button" onClick={done} style={cta}><span>{it.on ? 'Done' : 'Add to the plan'}</span><span>{cents ? dollars(cents) : 'Free'}</span></button>
     const where = (o.where as string[] | undefined) ?? ['post']
     const tw = (k: string) => setOpt('graphic', { where: where.includes(k) ? where.filter((x) => x !== k) : [...where, k] })
     return (
       <div>
         {head}
-        {open === 'graphic' && <>
+        {it.id === 'graphic' && <>
           <Hero scene="graphic" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Designed by the desk, ready in 2 days. You approve it before it posts.</div>
           <div style={h3}>Where it goes</div>
           <Opt kind="cb" on={where.includes('post')} label="Post + Story" small="Instagram, Facebook, Google" price="included" onClick={() => tw('post')} />
@@ -141,7 +153,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>A note for the designer<span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span><input value={String(o.note ?? '')} onChange={(e) => setOpt('graphic', { note: e.target.value })} placeholder="Use the blue plates" style={input} /></label>
           {foot}
         </>}
-        {open === 'video' && <>
+        {it.id === 'video' && <>
           <Hero scene="reel" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>One Reel, about 15 seconds, cut for Instagram, Facebook and TikTok.</div>
           <div style={h3}>How many</div>
           <div style={{ display: 'flex', gap: 6 }}>{[1, 2, 3].map((n) => <button key={n} type="button" onClick={() => setOpt('video', { count: n })} style={chip((Number(o.count) || 1) === n)}>{n === 1 ? 'One Reel' : `${n} Reels`}</button>)}</div>
@@ -161,7 +173,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <Opt kind="cb" on={!!o.spanish} label="Spanish captions" price="+$25" onClick={() => setOpt('video', { spanish: !o.spanish })} />
           {foot}
         </>}
-        {open === 'photos' && <>
+        {it.id === 'photos' && <>
           <Hero scene="photos" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>A photographer comes once. The longer the list, the bigger the day, and every photo lands in your library.</div>
           <div style={h3}>The shot list</div>
           <div style={{ fontSize: 14, padding: '8px 0', borderBottom: `0.5px solid ${C.line}` }}>1. This announcement</div>
@@ -173,7 +185,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <input type="date" value={String(o.date ?? '')} onChange={(e) => setOpt('photos', { date: e.target.value })} style={{ ...input, width: 'auto', marginTop: 0 }} /><div style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>Leave it and the team offers two dates.</div>
           {foot}
         </>}
-        {open === 'boost' && <>
+        {it.id === 'boost' && <>
           <Hero scene="boost" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Your own ad money, to people nearby, after it posts. About 150 people a dollar.</div>
           <div style={h3}>How much</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[1000, 2000, 4000, 10000, 20000].map((v) => <button key={v} type="button" onClick={() => setOpt('boost', { cents: v })} style={chip(Number(o.cents) === v)}>${v / 100}</button>)}<input type="number" min={5} max={500} value={Math.round((Number(o.cents) || 2000) / 100)} onChange={(e) => setOpt('boost', { cents: Math.max(500, Math.min(50000, Math.round(Number(e.target.value) || 0) * 100)) })} style={{ ...input, width: 84, marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>
@@ -182,7 +194,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <div style={{ display: 'flex', gap: 6 }}>{[2, 3, 7].map((d) => <button key={d} type="button" onClick={() => setOpt('boost', { days: d })} style={chip((Number(o.days) || 3) === d)}>{d} days</button>)}</div>
           {foot}
         </>}
-        {open === 'creator' && <>
+        {it.id === 'creator' && <>
           <div style={h3}>Who</div><div style={{ fontSize: 12, color: C.mute, marginTop: -2, marginBottom: 4 }}>Ranked for you. Tap one.</div>
           {(fits.length ? fits : me?.creator ? [{ slug: me.creator.slug, tag: 'Best fit', reasons: [], card: { name: me.creator.name, avatarUrl: null, fromCents: me.creator.fromCents, audience: null } }] : []).map((f) => { const on = slug === f.slug; return <button key={f.slug} type="button" onClick={() => { setOpt('creator', { slug: f.slug, tierName: null, date: null, start: null }); setProfile(null) }} style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'center', padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, background: 'none', border: 0, borderBottomStyle: 'solid', font: 'inherit', color: C.ink, cursor: 'pointer', textAlign: 'left' }}>
             {f.card?.avatarUrl ? <img src={f.card.avatarUrl} alt="" style={{ width: 44, height: 44, borderRadius: 99, objectFit: 'cover', flex: 'none' }} /> : <span style={{ width: 44, height: 44, borderRadius: 99, flex: 'none', background: 'linear-gradient(135deg,#f6c1dc,#c2418f)', display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 14 }}>{initials(f.card?.name ?? '')}</span>}
@@ -211,7 +223,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           {slug && !profile && <div style={{ padding: 20, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /></div>}
           {foot}
         </>}
-        {open === 'print' && <>
+        {it.id === 'print' && <>
           <Hero scene="print" hue={m.hue} />
           <div style={h3}>What</div>
           {(() => { const ks = (o.kinds as string[] | undefined) ?? [o.kind === 'poster' ? 'poster' : 'tent']; const tg = (k: string) => setOpt('print', { kinds: ks.includes(k) ? (ks.length > 1 ? ks.filter((x) => x !== k) : ks) : [...ks, k] }); return <>
@@ -222,7 +234,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Printed, or a file to print yourself. The team quotes printing.</div>
           {foot}
         </>}
-        {open === 'offer' && <>
+        {it.id === 'offer' && <>
           <Hero scene="offer" hue={m.hue} />
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>The offer<input value={String(o.text ?? '')} onChange={(e) => setOpt('offer', { text: e.target.value })} placeholder="Free drink with it this week" style={input} /></label>
           <div style={h3}>How it is counted</div>
@@ -235,32 +247,47 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
 
   /* ── the menu ── */
   const onCount = items.filter((x) => x.on).length
+  const Row = ({ it, isLine }: { it: ItemPick; isLine: boolean }) => {
+    const m = META[it.id]; const minC = it.id === 'graphic' ? prices.graphic : it.id === 'video' ? prices.video : it.id === 'photos' ? prices.shootFor(1) : it.id === 'print' ? prices.print : it.id === 'boost' ? 2000 : it.id === 'creator' ? (profile?.offers[0]?.startingCents ?? me?.creator?.fromCents ?? it.cents) : 0; const cents = it.on ? itemCents(it, prices, profile) : minC; const free = m.free || cents === 0
+    const sum = itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })
+    const av = it.id === 'creator' ? (profile?.avatarUrl ?? null) : null
+    const name = it.id === 'creator' && profile && it.on ? `${profile.name.split(' ')[0]} posts it` : m.name
+    const openOrToggle = () => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))
+    return (
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: isLine ? '10px 0 10px 14px' : '12px 0', borderBottom: `0.5px solid ${C.line}`, borderLeft: isLine ? `2px solid ${m.hue}55` : 0, marginLeft: isLine ? 20 : 0 }}>
+        {!isLine && <button type="button" onClick={openOrToggle} aria-label={m.name} style={{ width: 64, height: 64, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: it.id === 'creator' && it.on ? 'linear-gradient(135deg,#f6c1dc,#c2418f)' : `${m.hue}1f`, border: 0, cursor: 'pointer', overflow: 'hidden', ['--c2' as string]: m.hue }}>
+          {av && it.on ? <img src={av} alt="" style={{ width: 64, height: 64, objectFit: 'cover' }} /> : it.id === 'creator' && it.on ? <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>{initials(profile?.name ?? me?.creator?.name ?? 'C')}</span> : <span style={{ width: 44 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(s) => s} /></span>}
+        </button>}
+        <button type="button" onClick={openOrToggle} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+          <b style={{ display: 'block', fontSize: isLine ? 13.5 : 14.5 }}>{name}</b>
+          {it.on ? <small style={{ ...sub, color: C.greenDk, fontWeight: 700 }}>✓ {sum}</small> : <small style={sub}>{m.line}</small>}
+          {it.why && <small style={{ ...sub, fontSize: 11.5, marginTop: 2 }}>{it.why}</small>}
+        </button>
+        <span style={{ marginLeft: 'auto', textAlign: 'right', flex: 'none' }}>
+          <b style={{ display: 'block', fontSize: 13.5, color: free ? C.greenDk : C.ink, whiteSpace: 'nowrap' }}>{free ? 'Free' : it.on || !m.hasOptions ? dollars(cents) : `from ${dollars(cents)}`}</b>
+          {isLine
+            ? <span style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}><button type="button" onClick={() => setOpen(it.uid)} style={{ fontSize: 12, fontWeight: 800, padding: '5px 10px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit' }}>Edit</button><button type="button" onClick={() => remove(it.uid)} style={{ fontSize: 12, fontWeight: 800, padding: '5px 10px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.mute, cursor: 'pointer', font: 'inherit' }}>Remove</button></span>
+            : <button type="button" onClick={() => (it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ marginTop: 6, fontSize: 12, fontWeight: 800, padding: '6px 12px', borderRadius: 99, border: `1.5px solid ${C.ink}`, background: it.on ? C.ink : '#fff', color: it.on ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit' }}>{it.on ? 'Added' : 'Add'}</button>}
+        </span>
+      </div>
+    )
+  }
   return (
     <div>
       {GROUPS.map((g) => (
         <div key={g.id}>
           <div style={h3}>{g.label}</div>
-          {items.filter((x) => META[x.id].group === g.id).map((it) => {
-            const m = META[it.id]; const minC = it.id === 'graphic' ? prices.graphic : it.id === 'video' ? prices.video : it.id === 'photos' ? prices.shootFor(1) : it.id === 'print' ? prices.print : it.id === 'boost' ? 2000 : it.id === 'creator' ? (profile?.offers[0]?.startingCents ?? me?.creator?.fromCents ?? it.cents) : 0; const cents = it.on ? itemCents(it, prices, profile) : minC; const free = m.free || cents === 0
-            const sum = itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })
-            const av = it.id === 'creator' ? (profile?.avatarUrl ?? null) : null
-            const name = it.id === 'creator' && profile && it.on ? `${profile.name.split(' ')[0]} posts it` : m.name
-            return (
-              <div key={it.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 0', borderBottom: `0.5px solid ${C.line}`, opacity: it.on || !it.why.startsWith('No ') ? 1 : .6 }}>
-                <button type="button" onClick={() => (m.hasOptions ? setOpen(it.id) : toggle(it.id))} aria-label={m.name} style={{ width: 64, height: 64, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: it.id === 'creator' && it.on ? 'linear-gradient(135deg,#f6c1dc,#c2418f)' : `${m.hue}1f`, border: 0, cursor: 'pointer', overflow: 'hidden', ['--c2' as string]: m.hue }}>
-                  {av && it.on ? <img src={av} alt="" style={{ width: 64, height: 64, objectFit: 'cover' }} /> : it.id === 'creator' && it.on ? <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>{initials(profile?.name ?? me?.creator?.name ?? 'C')}</span> : <span style={{ width: 44 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(s) => s} /></span>}
-                </button>
-                <button type="button" onClick={() => (m.hasOptions ? setOpen(it.id) : toggle(it.id))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                  <b style={{ display: 'block', fontSize: 14.5 }}>{name}</b>
-                  {it.on ? <small style={{ ...sub, color: C.greenDk, fontWeight: 700 }}>✓ {sum}</small> : <small style={sub}>{m.line}</small>}
-                  {it.why && <small style={{ ...sub, fontSize: 11.5, marginTop: 2 }}>{it.why}</small>}
-                </button>
-                <span style={{ marginLeft: 'auto', textAlign: 'right', flex: 'none' }}>
-                  <b style={{ display: 'block', fontSize: 13.5, color: free ? C.greenDk : C.ink, whiteSpace: 'nowrap' }}>{free ? 'Free' : it.on || !m.hasOptions ? dollars(cents) : `from ${dollars(cents)}`}</b>
-                  <button type="button" onClick={() => (it.on ? toggle(it.id) : m.hasOptions ? setOpen(it.id) : toggle(it.id))} style={{ marginTop: 6, fontSize: 12, fontWeight: 800, padding: '6px 12px', borderRadius: 99, border: `1.5px solid ${C.ink}`, background: it.on ? C.ink : '#fff', color: it.on ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit' }}>{it.on ? 'Added' : 'Add'}</button>
-                </span>
-              </div>
-            )
+          {(Object.keys(META) as ItemId[]).filter((id) => META[id].group === g.id).map((id) => {
+            const lines = items.filter((x) => x.id === id)
+            const first = lines.find((x) => x.uid === id) ?? lines[0]
+            if (!first) return null
+            if (!MULTI.includes(id)) return <Row key={id} it={first} isLine={false} />
+            const extra = lines.filter((x) => x.uid !== first.uid && x.on)
+            return <div key={id}>
+              <Row it={first} isLine={false} />
+              {extra.map((l) => <Row key={l.uid} it={l} isLine />)}
+              {first.on && <button type="button" onClick={() => addNew(id)} style={{ display: 'block', marginLeft: 76, padding: '8px 0', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>＋ Another {id === 'graphic' ? 'graphic' : id === 'video' ? 'video, a different kind' : id === 'print' ? 'print' : 'creator'}</button>}
+            </div>
           })}
         </div>
       ))}

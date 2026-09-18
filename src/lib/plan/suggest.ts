@@ -8,7 +8,10 @@
  * asks for a number.
  */
 export type ItemId = 'post' | 'graphic' | 'video' | 'photos' | 'boost' | 'creator' | 'print' | 'apps' | 'taste' | 'review' | 'sign' | 'offer'
-export interface ItemPick { id: ItemId; on: boolean; why: string; options: Record<string, unknown>; cents: number }
+export interface ItemPick { id: ItemId; uid: string; on: boolean; why: string; options: Record<string, unknown>; cents: number }
+/** things you can add more than once, each with its own options */
+export const MULTI: ItemId[] = ['graphic', 'video', 'print', 'creator']
+export const newUid = (id: ItemId) => `${id}-${Math.random().toString(36).slice(2, 8)}`
 export interface SuggestInput {
   kind: string
   facts: { price?: string | null; hasMedia: boolean; hasVideo: boolean; limited?: boolean; date?: string | null; what?: string | null }
@@ -27,7 +30,7 @@ export function suggestItems(i: SuggestInput): ItemPick[] {
   const isDeal = k === 'deal', isEvent = k === 'event', isDish = k === 'dish', isOpen = k === 'open', isHours = k === 'hours' || k === 'holiday'
   const b1 = isDeal || isEvent || isOpen ? 4000 : 2000
   const out: ItemPick[] = []
-  const add = (id: ItemId, on: boolean, why: string, options: Record<string, unknown>, cents: number) => out.push({ id, on, why, options, cents })
+  const add = (id: ItemId, on: boolean, why: string, options: Record<string, unknown>, cents: number) => out.push({ id, uid: id, on, why, options, cents })
 
   add('post', true, i.facts.hasMedia ? `Your ${i.facts.hasVideo ? 'video' : 'photo'} on your channels, a Story, the team told. Free` : 'Your channels, a Story, the team told. Free', { story: true }, 0)
   /* the graphic: when there is no photo, or when dates belong on the picture */

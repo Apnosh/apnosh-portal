@@ -278,7 +278,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   type Pic = 'own' | 'graphic' | 'shoot' | 'booked' | 'words'
   const [items, setItems] = useState<ItemPick[]>([])
   const [me, setMe] = useState<MenuMe | null>(null)
-  const [openItem, setOpenItem] = useState<ItemId | null>(null)
+  const [openItem, setOpenItem] = useState<string | null>(null)
   const [suggested, setSuggested] = useState<string | null>(null)
   const [withReel, setWithReel] = useState(false)
   const [budget, setBudget] = useState('')
@@ -601,7 +601,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
-        items: simple ? Object.fromEntries(items.map((x) => [x.id, { on: x.on, options: x.options, why: x.why, cents: itemCents(x, prices) }])) : undefined,
+        items: simple ? items.filter((x) => x.on).map((x) => ({ id: x.id, uid: x.uid, on: true, options: x.options, why: x.why, cents: itemCents(x, prices) })) : undefined,
         words: { social: wS.trim(), google: wG.trim(), cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') ? wC.trim() : '' },
         dates: rawDates(),
         hours: hoursOn ? { oneDay: true, closed, open: openAt, close: closeAt } : undefined,
@@ -623,8 +623,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* ── the menu ── */
   const usual = ctx?.usualReach ?? null
   const prices: MenuPrices = { graphic: ctx?.prices.graphic ?? 23100, video: ctx?.prices.video ?? 27500, print: 2500, shootFor: (n) => tierCents(tierFor(n)) ?? ctx?.prices.shoot ?? 38500, shootLabel: (n) => `${TIERS.find((t) => t.id === tierFor(n))?.label}: ${sizeOf(n)}` }
-  const it = (id: ItemId) => items.find((x) => x.id === id)
-  const onIt = (id: ItemId) => !!it(id)?.on
+  const it = (id: ItemId) => items.find((x) => x.id === id && x.on) ?? items.find((x) => x.id === id)
+  const onIt = (id: ItemId) => items.some((x) => x.id === id && x.on)
+  const linesOn = (id: ItemId) => items.filter((x) => x.id === id && x.on)
   const total = items.filter((x) => x.on).reduce((s, x) => s + itemCents(x, prices), 0)
   const reachEst = useMemo((): number | null => {
     const base = usual?.median ?? null
@@ -648,7 +649,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     setBoost(!!b?.on); if (b?.on) setBoostCents(Number(b.options.cents) || 2000); setAgain(!!b?.on && kind.id !== 'hours' && kind.id !== 'holiday')
     const alsoSet = new Set<Also>(kind.also.filter((k) => ALSO[k].on(ctx)))
     if (kind.also.includes('gmenu')) alsoSet.add('gmenu'); if (kind.also.includes('sitemenu') && ctx?.website) alsoSet.add('sitemenu')
-    if (it('print')?.on || (g?.on && ((g.options.where as string[]) ?? []).some((w) => w === 'tent' || w === 'poster'))) alsoSet.add('print')
+    if (onIt('print') || linesOn('graphic').some((x) => ((x.options.where as string[]) ?? []).some((w) => w === 'tent' || w === 'poster'))) alsoSet.add('print')
     if (it('apps')?.on) alsoSet.add('apps')
     setAlso(alsoSet); setStory(nextSrc !== 'words')
   }, [items]) // eslint-disable-line react-hooks/exhaustive-deps

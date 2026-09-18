@@ -73,7 +73,7 @@ interface Body {
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
   whys?: Record<string, unknown>
   /* the menu: every item with its options (announce-menu.tsx) */
-  items?: Record<string, { on?: boolean; options?: Record<string, unknown>; why?: string; cents?: number }>
+  items?: { id?: string; uid?: string; on?: boolean; options?: Record<string, unknown>; why?: string; cents?: number }[]
   words?: { social?: string; google?: string; cta?: Cta; languages?: unknown; card?: string }
   /** the date answers as ISO days, beside the spelled-out ones in `answers` */
   dates?: Record<string, unknown>
@@ -212,8 +212,10 @@ export async function POST(req: NextRequest) {
   const boostCents = Number.isFinite(Number(body.timing?.boostCents)) ? Math.max(0, Math.min(50000, Math.round(Number(body.timing?.boostCents)))) : 2000
   const whys: Record<string, string> = {}
   for (const [k, v] of Object.entries(body.whys ?? {})) if (typeof v === 'string' && v.trim()) whys[k] = clean(v, 140)
-  const items = body.items && typeof body.items === 'object' ? body.items : null
-  const item = (id: string) => (items && items[id] && items[id].on ? items[id] : null)
+  /* the menu's lines: a type can appear more than once, each line with its own options */
+  const lines_ = Array.isArray(body.items) ? body.items.filter((x) => x && x.on && typeof x.id === 'string') : []
+  const linesOf = (id: string) => lines_.filter((x) => x.id === id)
+  const item = (id: string) => linesOf(id)[0] ?? null
   const social = clean(body.words?.social, 2200)
   const gtext = clean(body.words?.google, 1500).replace(/https?:\/\/\S+/g, '').trim()
   const cta: Cta = (['order', 'visit', 'reserve', 'message'] as Cta[]).includes(body.words?.cta as Cta) ? (body.words!.cta as Cta) : 'visit'
@@ -278,6 +280,14 @@ export async function POST(req: NextRequest) {
   const pieceDue = readyBy ?? (shoot?.date ? day(addDays(new Date(shoot.date + 'T12:00:00'), 3).toISOString()) : null)
 
   /* the pieces, one request each, every one pointing at the same announcement (and shoot) */
+  for (const [gi, gl] of linesOf('graphic').slice(1).entries()) {
+    const o = (gl.options ?? {}) as Record<string, unknown>
+    const where = (Array.isArray(o.where) ? o.where : ['post']) as string[]
+    const dests = [...(where.includes('post') ? ['instagram-post', 'facebook-post'] : []), ...(where.includes('tent') ? ['table-tent'] : []), ...(where.includes('poster') ? ['poster'] : [])]
+    const r = await createCreativeRequest({ clientId, userId, type: 'graphic', order: true, due_date: pieceDue, attachments, answers: { what: `${name} announcement, another design`, where: where.join(', '), words: [name, o.priceOn !== false && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `A second graphic for ${name}. ${clean(o.note, 200)} ${o.spanish ? 'Spanish version too.' : ''} ${o.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() }, design: { destinations: dests.length ? dests : ['instagram-post'], tier: 2, photos: o.from === 'shoot' ? 'shoot' : o.from === 'own' && media.length ? 'own' : 'none', dueDateISO: pieceDue ?? undefined } })
+    if (r.ok) { total += r.orderCents ?? 0; plan.push({ key: `graphic-${gi + 2}`, label: `Another graphic${where.includes('poster') ? ', the poster' : where.includes('tent') ? ', the table tent' : ''}`, detail: where.map((w) => (w === 'post' ? 'post + Story' : w === 'tent' ? 'table tent' : w)).join(', '), date: pieceDue, cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: gl.why }) }
+    else errors.push(`A graphic did not start: ${r.error}`)
+  }
   if (pieces.includes('graphic')) {
     const dests: string[] = []
     const destLabels: string[] = []
@@ -298,14 +308,19 @@ export async function POST(req: NextRequest) {
       plan.push({ key: 'graphic', label: shoot ? 'The graphic, from the shoot' : 'We start the graphic', detail: shoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', date: shoot ? pieceDue : day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     } else errors.push(`The graphic did not start: ${r.error}`)
   }
-  if (pieces.includes('reel')) {
+  const videoLines = linesOf('video').length ? linesOf('video') : pieces.includes('reel') ? [null] : []
+  for (const [vi, vl] of videoLines.entries()) {
+    const o = (vl?.options ?? {}) as Record<string, unknown>
+    const n = Math.max(1, Math.min(3, Number(o.count) || 1))
+    const filming = o.filmed === 'visit' ? 'Come film at my place' : o.filmed === 'clips' ? 'Use clips and photos I have' : onShoot || o.filmed === 'creator' || o.filmed === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place'
+    const styleNote = [n === 2 ? 'TWO Reels, different angles or a second dish.' : '', o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : o.filmed === 'shoot' ? 'Film it on the shoot day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ')
     const r = await createCreativeRequest({
       clientId, userId, type: 'video', order: true, due_date: pieceDue, attachments,
-      answers: { what: `${name}: ${a.line || 'the dish, plated'}`, filming: (() => { const f = item('video')?.options?.filmed; return f === 'visit' ? 'Come film at my place' : f === 'clips' ? 'Use clips and photos I have' : onShoot || f === 'creator' || f === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place' })(), count: (Number(item('video')?.options?.count) || 1) >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `${(Number(item('video')?.options?.count) || 1) === 2 ? 'TWO Reels, different angles or a second dish. ' : ''}Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${(() => { const o = item('video')?.options ?? {}; return [o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ') })()}`.replace(/\s+/g, ' ').trim() },
+      answers: { what: `${name}: ${o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : a.line || 'the dish, plated'}`, filming, count: n >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${styleNote}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
-      plan.push({ key: 'video', label: shoot ? 'The Reel, from the shoot' : 'The video', detail: shoot ? 'Cut from the clips we film that day' : r.needsPayment ? 'Pay to start. Then the team takes it' : 'The team takes it', date: shoot ? pieceDue : pieceDue, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+      plan.push({ key: vi ? `video-${vi + 1}` : 'video', label: `${shoot ? 'The Reel, from the shoot' : n > 1 ? `${n} Reels` : 'The video'}${o.style === 'chef' ? ', the chef' : o.style === 'room' ? ', the room' : ''}`, detail: shoot ? 'Cut from the clips we film that day' : o.filmed === 'creator' ? 'Filmed when the creator visits' : r.needsPayment ? 'Pay to start. Then the team takes it' : 'The team takes it', date: pieceDue, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: vl?.why })
     } else errors.push(`The video did not start: ${r.error}`)
   }
   if (pieces.includes('photos') && shoot) {
@@ -487,7 +502,7 @@ export async function POST(req: NextRequest) {
   }
   if (also.includes('print')) {
     const gw = (item('graphic')?.options?.where as string[] | undefined) ?? []
-    const kinds: string[] = Array.isArray(item('print')?.options?.kinds) ? (item('print')!.options!.kinds as string[]) : item('print')?.options?.kind ? [String(item('print')!.options!.kind)] : [...(gw.includes('tent') ? ['tent'] : []), ...(gw.includes('poster') ? ['poster'] : [])]
+    const kinds: string[] = Array.from(new Set([...linesOf('print').flatMap((l) => (Array.isArray(l.options?.kinds) ? (l.options!.kinds as string[]) : l.options?.kind ? [String(l.options.kind)] : [])), ...(gw.includes('tent') ? ['tent'] : []), ...(gw.includes('poster') ? ['poster'] : [])]))
     const things = kinds.length ? kinds.map((k) => (k === 'poster' ? 'Window poster' : k === 'insert' ? 'Menu insert' : 'Table tent')) : [PRINT[kind] ?? 'Flyer']
     for (const thing of things) {
       const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
@@ -503,18 +518,19 @@ export async function POST(req: NextRequest) {
   if (item('sign')) { const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `Guest photo sign for ${name}: post it, tag us, dessert is on us`, printing: 'A file to print', when: whenWord(postDay), notes: `A small counter sign with a QR to the Instagram. ${facts}` } }); if (r.ok) plan.push({ key: 'sign', label: 'Guest photo sign', detail: 'Post it, tag us, dessert is on us. A file to print', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: item('sign')?.why }) }
   if (item('offer')) { const txt = clean(item('offer')?.options?.text, 120) || `Free drink with ${name} this week`; plan.push({ key: 'offer', label: 'Launch offer', detail: `${txt}${item('offer')?.options?.code !== false ? `. Code ${codeWord}, the team counts it` : ''}`, date: postDay, cost: null, status: 'later', ref: null, why: item('offer')?.why }); teamExtra.push(`Launch offer: ${txt}${item('offer')?.options?.code !== false ? ` (code ${codeWord}, count it)` : ''}.`) }
   if (item('apps')) plan.push({ key: 'apps', label: 'Feature it on DoorDash', detail: 'The team sets a two-week promo on the item', date: postDay, cost: null, status: 'with_team', ref: null, why: item('apps')?.why })
-  const cr = item('creator')
-  if (cr && typeof cr.options?.slug === 'string') {
+  for (const [ci, cr] of linesOf('creator').entries()) {
+    if (typeof cr.options?.slug !== 'string') continue
     const o = cr.options
+    const pre = ci ? `cr${ci + 1}` : 'cr'
     const r = await bookInfluencer(admin, { clientId, userId, slug: String(o.slug), listingSlug: '', tierName: typeof o.tierName === 'string' ? o.tierName : null, date: typeof o.date === 'string' ? o.date : null, start: typeof o.start === 'string' ? o.start : null, brief: { try: `${name}${a.line ? `, ${a.line}` : ''}${a.price ? `, ${a.price}` : ''}`, know: facts.slice(0, 380), party: 2, tag: true, repost: o.repost !== false, whitelist: o.whitelist === true, code: o.code !== false }, restaurant: { name: ctx.name } })
-    if (r.ok) { total += r.total; for (const l of r.plan) plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `cr-${l.key}`, why: l.key === 'ask' ? cr.why ?? l.why : l.why }); teamExtra.push(`A creator is coming: see the ask in Bookings.`) }
+    if (r.ok) { total += r.total; for (const l of r.plan) plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `${pre}-${l.key}`, why: l.key === 'ask' ? cr.why ?? l.why : l.why }); teamExtra.push(`A creator is coming: see the ask in Bookings.`) }
     else errors.push(`The creator ask did not send: ${r.error}`)
     /* a second and third creator get the same brief, their own date */
     const more = (Array.isArray(o.more) ? o.more : []) as { slug?: unknown }[]
     for (const [i, m] of more.slice(0, 2).entries()) {
       if (typeof m.slug !== 'string') continue
       const r2 = await bookInfluencer(admin, { clientId, userId, slug: m.slug, listingSlug: '', tierName: null, date: null, start: null, brief: { try: `${name}${a.line ? `, ${a.line}` : ''}${a.price ? `, ${a.price}` : ''}`, know: facts.slice(0, 380), party: 2, tag: true, repost: o.repost !== false, whitelist: false, code: o.code !== false }, restaurant: { name: ctx.name } })
-      if (r2.ok) { total += r2.total; for (const l of r2.plan) if (l.key === 'ask' || l.key === 'post' || l.key === 'results') plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `cr${i + 2}-${l.key}` }) }
+      if (r2.ok) { total += r2.total; for (const l of r2.plan) if (l.key === 'ask' || l.key === 'post' || l.key === 'results') plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `${pre}m${i + 1}-${l.key}` }) }
       else errors.push(`A creator ask did not send: ${r2.error}`)
     }
   }
