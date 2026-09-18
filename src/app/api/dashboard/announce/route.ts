@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
   if (pieces.includes('reel')) {
     const r = await createCreativeRequest({
       clientId, userId, type: 'video', order: true, due_date: pieceDue, attachments,
-      answers: { what: `${name}: ${a.line || 'the dish, plated'}`, filming: (() => { const f = item('video')?.options?.filmed; return f === 'visit' ? 'Come film at my place' : f === 'clips' ? 'Use clips and photos I have' : onShoot || f === 'creator' || f === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place' })(), count: 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${(() => { const o = item('video')?.options ?? {}; return [o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ') })()}`.replace(/\s+/g, ' ').trim() },
+      answers: { what: `${name}: ${a.line || 'the dish, plated'}`, filming: (() => { const f = item('video')?.options?.filmed; return f === 'visit' ? 'Come film at my place' : f === 'clips' ? 'Use clips and photos I have' : onShoot || f === 'creator' || f === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place' })(), count: (Number(item('video')?.options?.count) || 1) >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `${(Number(item('video')?.options?.count) || 1) === 2 ? 'TWO Reels, different angles or a second dish. ' : ''}Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${(() => { const o = item('video')?.options ?? {}; return [o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ') })()}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
@@ -486,11 +486,14 @@ export async function POST(req: NextRequest) {
     else errors.push(`The email did not send to the team: ${r.error}`)
   }
   if (also.includes('print')) {
-    const pk = item('print')?.options?.kind ?? ((item('graphic')?.options?.where as string[] | undefined)?.includes('poster') ? 'poster' : undefined)
-    const thing = pk === 'poster' ? 'Window poster' : pk === 'tent' ? 'Table tent' : PRINT[kind] ?? 'Flyer'
-    const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
-    if (r.ok) plan.push({ key: 'print', label: thing, detail: 'The team quotes it, printed or a file', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
-    else errors.push(`The table tent did not send: ${r.error}`)
+    const gw = (item('graphic')?.options?.where as string[] | undefined) ?? []
+    const kinds: string[] = Array.isArray(item('print')?.options?.kinds) ? (item('print')!.options!.kinds as string[]) : item('print')?.options?.kind ? [String(item('print')!.options!.kind)] : [...(gw.includes('tent') ? ['tent'] : []), ...(gw.includes('poster') ? ['poster'] : [])]
+    const things = kinds.length ? kinds.map((k) => (k === 'poster' ? 'Window poster' : k === 'insert' ? 'Menu insert' : 'Table tent')) : [PRINT[kind] ?? 'Flyer']
+    for (const thing of things) {
+      const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
+      if (r.ok) plan.push({ key: `print-${thing.toLowerCase().replace(/\s+/g, '-')}`, label: thing, detail: 'The team quotes it, printed or a file', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+      else errors.push(`${thing} did not send: ${r.error}`)
+    }
   }
   /* ── the menu's own items: in the restaurant, and a creator booked for real ── */
   const teamExtra: string[] = []
@@ -506,6 +509,14 @@ export async function POST(req: NextRequest) {
     const r = await bookInfluencer(admin, { clientId, userId, slug: String(o.slug), listingSlug: '', tierName: typeof o.tierName === 'string' ? o.tierName : null, date: typeof o.date === 'string' ? o.date : null, start: typeof o.start === 'string' ? o.start : null, brief: { try: `${name}${a.line ? `, ${a.line}` : ''}${a.price ? `, ${a.price}` : ''}`, know: facts.slice(0, 380), party: 2, tag: true, repost: o.repost !== false, whitelist: o.whitelist === true, code: o.code !== false }, restaurant: { name: ctx.name } })
     if (r.ok) { total += r.total; for (const l of r.plan) plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `cr-${l.key}`, why: l.key === 'ask' ? cr.why ?? l.why : l.why }); teamExtra.push(`A creator is coming: see the ask in Bookings.`) }
     else errors.push(`The creator ask did not send: ${r.error}`)
+    /* a second and third creator get the same brief, their own date */
+    const more = (Array.isArray(o.more) ? o.more : []) as { slug?: unknown }[]
+    for (const [i, m] of more.slice(0, 2).entries()) {
+      if (typeof m.slug !== 'string') continue
+      const r2 = await bookInfluencer(admin, { clientId, userId, slug: m.slug, listingSlug: '', tierName: null, date: null, start: null, brief: { try: `${name}${a.line ? `, ${a.line}` : ''}${a.price ? `, ${a.price}` : ''}`, know: facts.slice(0, 380), party: 2, tag: true, repost: o.repost !== false, whitelist: false, code: o.code !== false }, restaurant: { name: ctx.name } })
+      if (r2.ok) { total += r2.total; for (const l of r2.plan) if (l.key === 'ask' || l.key === 'post' || l.key === 'results') plan.push({ ...l, ref: l.ref ? { ...l.ref, kind: l.ref.kind as PlanLine['ref'] extends infer R ? (R extends { kind: infer K } ? K : never) : never } : null, key: `cr${i + 2}-${l.key}` }) }
+      else errors.push(`A creator ask did not send: ${r2.error}`)
+    }
   }
   const cardFull = [card, ...teamExtra].filter(Boolean).join('\n')
   if ((also.includes('team') || teamExtra.length) && cardFull) {
