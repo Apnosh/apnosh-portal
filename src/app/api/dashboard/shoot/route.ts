@@ -6,11 +6,12 @@
  *   POST { action: 'book', items: [{label}], date?, note? }     the list decides the size
  *   POST { action: 'attach', shootId, label, kind, planId?, pieces? }
  *   POST { action: 'detach', shootId, index }
+ *   POST { action: 'redate', shootId, date }
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { TIERS, TIER_LABEL, TIER_SMALL, SPOTS, PHOTOS, tierCents, asTier, openShoot, shootSuggestions, bookShoot, attachToShoot } from '@/lib/shoot/day'
+import { TIERS, TIER_LABEL, TIER_SMALL, SPOTS, PHOTOS, tierCents, asTier, openShoot, shootSuggestions, bookShoot, attachToShoot, redateShoot } from '@/lib/shoot/day'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,9 +22,11 @@ export async function GET(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   const admin = createAdminClient()
-  const shoot = await openShoot(admin, clientId)
+  const probe = await admin.from('announcements').select('id').limit(1)
+  const off = !!probe.error
+  const shoot = off ? null : await openShoot(admin, clientId)
   const tiers = TIERS.map((t) => ({ id: t, label: TIER_LABEL[t], small: TIER_SMALL[t], spots: SPOTS[t], photos: PHOTOS[t], cents: tierCents(t) }))
-  return NextResponse.json({ shoot, suggest: await shootSuggestions(admin, clientId, shoot?.attached ?? []), tiers }, { headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ shoot, off, suggest: off ? [] : await shootSuggestions(admin, clientId, shoot?.attached ?? []), tiers }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(req: NextRequest) {
@@ -40,6 +43,14 @@ export async function POST(req: NextRequest) {
     const r = await bookShoot(admin, { clientId, userId: access.userId, ...(body.tier ? { tier: asTier(body.tier) } : {}), items, date, note: body.note })
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
     return NextResponse.json({ ok: true, shoot: r.shoot, needsPayment: r.needsPayment })
+  }
+  if (body.action === 'redate') {
+    const shootId = typeof body.shootId === 'string' ? body.shootId : null
+    if (!shootId) return NextResponse.json({ error: 'shootId required' }, { status: 400 })
+    const date = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : null
+    const shoot = await redateShoot(admin, clientId, shootId, date)
+    if (!shoot) return NextResponse.json({ error: 'That shoot is not on file' }, { status: 404 })
+    return NextResponse.json({ ok: true, shoot })
   }
   if (body.action === 'attach' || body.action === 'detach') {
     const shootId = typeof body.shootId === 'string' ? body.shootId : null

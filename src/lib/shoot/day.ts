@@ -95,6 +95,9 @@ export async function bookShoot(admin: Admin, o: { clientId: string; userId: str
   /* the size follows the list; a caller may still name one, never smaller than the list needs */
   const tier: ShootTier = o.tier && SPOTS[o.tier] >= items.length ? o.tier : tierFor(Math.max(1, items.length))
   const note = clean(o.note, 300) || items.map((i, n) => `${n + 1}. ${i.label}`).join('; ')
+  /* the day is remembered on announcements; never mint the order when that table is not there yet */
+  const probe = await admin.from('announcements').select('id').limit(1)
+  if (probe.error) return { ok: false, error: 'Shoot days are not switched on yet. The team has to run one update first.', status: 503 }
   const r = await createCreativeRequest({ clientId, userId, type: 'photos', order: true, due_date: date, answers: { ...TIER_ANSWERS[tier], dishes: note || 'Shot list to follow from the plans attached to this day', notes: 'A shoot day. Plans attach to it from Create; the shot list on this request is kept in step.' } })
   if (!r.ok) return { ok: false, error: r.error, status: r.status }
   const href = `/dashboard/requests/${r.row.id}`
@@ -149,4 +152,18 @@ export async function adoptShoot(admin: Admin, clientId: string, userId: string,
   ]
   const { data: row } = await admin.from('announcements').insert({ client_id: clientId, kind: 'shoot', status: 'in_progress', answers: { what: 'A shoot day', tier: TIER_LABEL[tier] }, picture: { tier, attached: [] }, places: { requestId: r.id }, timing: { date }, plan, total_cents: typeof r.total_cents === 'number' ? r.total_cents : 0, created_by: userId }).select('*').single()
   return row ? shapeShoot(row as Record<string, unknown>) : null
+}
+
+/** move the day: the photos order's due date and the shoot's own date, plan lines re-dated */
+export async function redateShoot(admin: Admin, clientId: string, shootId: string, date: string | null): Promise<Shoot | null> {
+  const { data: row } = await admin.from('announcements').select('*').eq('id', shootId).eq('client_id', clientId).eq('kind', 'shoot').maybeSingle()
+  if (!row) return null
+  const cur = shapeShoot(row as Record<string, unknown>)
+  const plan = ((Array.isArray(row.plan) ? row.plan : []) as Line[]).map((l) => l.key === 'date' ? { ...l, label: date ? 'Shoot day' : 'Pick the day', detail: date ? 'The photographer confirms the hour in your thread' : 'The team offers two dates in your thread', date } : l.key === 'delivered' ? { ...l, date: date ? dayIso(new Date(Date.parse(date) + 3 * 86400000)) : null } : l.key === 'onit' || l.key === 'upgrade' ? { ...l, date } : l)
+  await admin.from('announcements').update({ timing: { ...((row.timing as Record<string, unknown>) ?? {}), date }, plan, updated_at: new Date().toISOString() }).eq('id', shootId)
+  if (cur.requestId) {
+    await admin.from('creative_requests').update({ due_date: date }).eq('id', cur.requestId)
+    notifyStaffForClient(clientId, ['strategist', 'designer'], { kind: 'client_request', title: date ? `Shoot day moved to ${date}` : 'Shoot day: date cleared', body: 'The owner changed the day from Create. Confirm the hour in the thread.', link: '/admin/requests' }).catch(() => {})
+  }
+  return shapeShoot({ ...(row as Record<string, unknown>), timing: { date }, plan })
 }

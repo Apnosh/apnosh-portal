@@ -18,7 +18,7 @@ import type { AnnounceKind } from './announce-sheet'
 type Tier = 'standard' | 'full' | 'works'
 interface Attached { label: string; kind: string; planId: string | null; pieces: string[]; at: string }
 interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: Attached[]; cents: number | null; status: string; needs: Tier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
-interface Read { shoot: Shoot | null; suggest: { id: string; kind: string; label: string; date: string | null }[]; tiers: { id: Tier; label: string; small: string; spots: number; photos: number; cents: number | null }[] }
+interface Read { shoot: Shoot | null; off?: boolean; suggest: { id: string; kind: string; label: string; date: string | null }[]; tiers: { id: Tier; label: string; small: string; spots: number; photos: number; cents: number | null }[] }
 const KIND_WORD: Record<string, string> = { dish: 'new dish', deal: 'deal', event: 'event', hours: 'hours', hiring: 'hiring', open: 'opening', holiday: 'holiday', else: 'news', post: 'post', update: 'update' }
 const niceDate = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso.slice(0, 10) + 'T12:00:00'); return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) }
 const dollars = (c: number | null) => (c == null ? '' : `$${Math.round(c / 100).toLocaleString()}`)
@@ -104,6 +104,7 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
               </div>
             </div>
 
+            <div style={{ ...rowS, marginTop: 6 }}><span>The day<small style={sub}>{shoot.date ? 'Change it and the team confirms the hour' : 'Leave it and the team offers two dates'}</small></span><input type="date" min={plusDays(3)} value={shoot.date ?? ''} onChange={(e) => post({ action: 'redate', shootId: shoot.id, date: e.target.value || undefined }, 'date')} style={input} /></div>
             <div style={h3}>The shot list</div>
             {shoot.attached.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '6px 0 4px' }}>Nothing on it yet. Add something below.</div>}
             {shoot.attached.map((x, i) => (
@@ -147,6 +148,7 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
               <div style={h2}>Book a shoot day</div>
             </div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginTop: -4 }}>A photographer comes once. Write the list of what to shoot. The longer the list, the bigger the day, and every photo lands in your library.</div>
+            {data.off && <div style={{ marginTop: 10, fontSize: 12.5, color: '#8a5a0c', fontWeight: 600, lineHeight: 1.45 }}>Shoot days are not switched on yet. The team has to run one update first. You can write the list; booking waits.</div>}
             <div style={h3}>What should we shoot?</div>
             {items.map((it, i) => <div key={i} style={rowS}><span style={{ width: 24, height: 24, borderRadius: 99, background: '#f2f2f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flex: 'none' }}>{i + 1}</span><span style={{ flex: 1 }}>{it}</span><button type="button" aria-label="Remove" onClick={() => setItems((x) => x.filter((_, j) => j !== i))} style={{ width: 28, height: 28, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute }}><X size={12} /></button></div>)}
             {items.length < 6 && <div style={{ display: 'flex', gap: 8, marginTop: 10 }}><input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addItem() }} placeholder={items.length ? 'Anything else?' : 'The new ramen, the patio, the team'} style={{ ...input, flex: 1, width: 'auto', marginTop: 0, padding: '10px 12px', fontWeight: 500 }} /><button type="button" onClick={addItem} disabled={!draft.trim()} style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', cursor: 'pointer', font: 'inherit', opacity: draft.trim() ? 1 : .5 }}>Add</button></div>}
@@ -154,7 +156,7 @@ export default function ShootSheet({ clientId, onClose, onAnnounce }: { clientId
             <div style={rowS}><span>The day<small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(3)} value={date} onChange={(e) => setDate(e.target.value)} style={input} /></div>
             {data.suggest.length > 0 && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 10 }}>{data.suggest.length} plan{data.suggest.length === 1 ? '' : 's'} on Coming up could join the list once it is booked.</div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" disabled={busy != null || !items.length} onClick={() => post({ action: 'book', items, date: date || undefined }, 'book')} style={{ ...cta, opacity: busy || !items.length ? .6 : 1 }}>{busy === 'book' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} {items.length ? `Book the day, ${dollars(size?.cents ?? null)}` : 'Add something to shoot first'}</button>
+            <button type="button" disabled={busy != null || !items.length || data.off} onClick={() => post({ action: 'book', items, date: date || undefined }, 'book')} style={{ ...cta, opacity: busy || !items.length || data.off ? .6 : 1 }}>{busy === 'book' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} {items.length ? `Book the day, ${dollars(size?.cents ?? null)}` : 'Add something to shoot first'}</button>
             <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Paid before the day. The order opens next with a Pay link.</div>
           </>
         )}
