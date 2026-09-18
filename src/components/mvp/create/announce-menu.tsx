@@ -85,6 +85,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
+  /* plan first: what is picked, short. Add more opens the whole menu */
+  const [mode, setMode] = useState<'plan' | 'add'>('plan')
   const openIt = open ? items.find((x) => x.uid === open) ?? null : null
   const creatorItem = (openIt?.id === 'creator' ? openIt : null) ?? items.find((x) => x.id === 'creator' && x.on) ?? items.find((x) => x.id === 'creator') ?? null
   const slug = (creatorItem?.options.slug as string | undefined) ?? me?.creator?.slug ?? null
@@ -128,7 +130,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     const m = META[it.id]
     const o = it.options
     const cents = itemCents(it, prices, profile)
-    const done = () => { patchU(open, () => ({ on: true })); setOpen(null) }
+    const done = () => { patchU(open, () => ({ on: true })); setOpen(null); setMode('plan') }
     const head = <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}><button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button><span style={{ flex: 1, fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{m.name}</span><b style={{ fontSize: 17 }}>{cents ? dollars(cents) : 'Free'}</b></div>
     const foot = <button type="button" onClick={done} style={cta}><span>{it.on ? 'Done' : 'Add to the plan'}</span><span>{cents ? dollars(cents) : 'Free'}</span></button>
     const where = (o.where as string[] | undefined) ?? ['post']
@@ -247,52 +249,58 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
 
   /* ── the menu ── */
   const onCount = items.filter((x) => x.on).length
-  const Row = ({ it, isLine }: { it: ItemPick; isLine: boolean }) => {
-    const m = META[it.id]; const minC = it.id === 'graphic' ? prices.graphic : it.id === 'video' ? prices.video : it.id === 'photos' ? prices.shootFor(1) : it.id === 'print' ? prices.print : it.id === 'boost' ? 2000 : it.id === 'creator' ? (profile?.offers[0]?.startingCents ?? me?.creator?.fromCents ?? it.cents) : 0; const cents = it.on ? itemCents(it, prices, profile) : minC; const free = m.free || cents === 0
-    const sum = itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })
-    const av = it.id === 'creator' ? (profile?.avatarUrl ?? null) : null
-    const name = it.id === 'creator' && profile && it.on ? `${profile.name.split(' ')[0]} posts it` : m.name
-    const openOrToggle = () => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))
-    return (
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: isLine ? '10px 0 10px 14px' : '12px 0', borderBottom: `0.5px solid ${C.line}`, borderLeft: isLine ? `2px solid ${m.hue}55` : 0, marginLeft: isLine ? 20 : 0 }}>
-        {!isLine && <button type="button" onClick={openOrToggle} aria-label={m.name} style={{ width: 64, height: 64, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: it.id === 'creator' && it.on ? 'linear-gradient(135deg,#f6c1dc,#c2418f)' : `${m.hue}1f`, border: 0, cursor: 'pointer', overflow: 'hidden', ['--c2' as string]: m.hue }}>
-          {av && it.on ? <img src={av} alt="" style={{ width: 64, height: 64, objectFit: 'cover' }} /> : it.id === 'creator' && it.on ? <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>{initials(profile?.name ?? me?.creator?.name ?? 'C')}</span> : <span style={{ width: 44 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(s) => s} /></span>}
-        </button>}
-        <button type="button" onClick={openOrToggle} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-          <b style={{ display: 'block', fontSize: isLine ? 13.5 : 14.5 }}>{name}</b>
-          {it.on ? <small style={{ ...sub, color: C.greenDk, fontWeight: 700 }}>✓ {sum}</small> : <small style={sub}>{m.line}</small>}
-          {it.why && <small style={{ ...sub, fontSize: 11.5, marginTop: 2 }}>{it.why}</small>}
-        </button>
-        <span style={{ marginLeft: 'auto', textAlign: 'right', flex: 'none' }}>
-          <b style={{ display: 'block', fontSize: 13.5, color: free ? C.greenDk : C.ink, whiteSpace: 'nowrap' }}>{free ? 'Free' : it.on || !m.hasOptions ? dollars(cents) : `from ${dollars(cents)}`}</b>
-          {isLine
-            ? <span style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}><button type="button" onClick={() => setOpen(it.uid)} style={{ fontSize: 12, fontWeight: 800, padding: '5px 10px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit' }}>Edit</button><button type="button" onClick={() => remove(it.uid)} style={{ fontSize: 12, fontWeight: 800, padding: '5px 10px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.mute, cursor: 'pointer', font: 'inherit' }}>Remove</button></span>
-            : <button type="button" onClick={() => (it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ marginTop: 6, fontSize: 12, fontWeight: 800, padding: '6px 12px', borderRadius: 99, border: `1.5px solid ${C.ink}`, background: it.on ? C.ink : '#fff', color: it.on ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit' }}>{it.on ? 'Added' : 'Add'}</button>}
-        </span>
-      </div>
-    )
-  }
+  const minOf = (it: ItemPick) => (it.id === 'graphic' ? prices.graphic : it.id === 'video' ? prices.video : it.id === 'photos' ? prices.shootFor(1) : it.id === 'print' ? prices.print : it.id === 'boost' ? 2000 : it.id === 'creator' ? (profile?.offers[0]?.startingCents ?? me?.creator?.fromCents ?? it.cents) : 0)
+  const nameOf = (it: ItemPick) => (it.id === 'creator' && profile && it.on ? `${profile.name.split(' ')[0]} posts it` : META[it.id].name)
+  const Thumb = ({ it, size }: { it: ItemPick; size: number }) => { const m = META[it.id]; const av = it.id === 'creator' ? (profile?.avatarUrl ?? null) : null; return <span style={{ width: size, height: size, borderRadius: Math.round(size * 0.22), flex: 'none', display: 'grid', placeItems: 'center', background: it.id === 'creator' && it.on ? 'linear-gradient(135deg,#f6c1dc,#c2418f)' : `${m.hue}1f`, overflow: 'hidden', ['--c2' as string]: m.hue }}>{av && it.on ? <img src={av} alt="" style={{ width: size, height: size, objectFit: 'cover' }} /> : it.id === 'creator' && it.on ? <span style={{ color: '#fff', fontWeight: 800, fontSize: size * 0.3 }}>{initials(profile?.name ?? me?.creator?.name ?? 'C')}</span> : <span style={{ width: Math.round(size * 0.7) }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(s) => s} /></span>}</span> }
+
+  /* PLAN MODE: one short row per picked line; the free in-restaurant things as one row */
+  const picked = items.filter((x) => x.on && META[x.id].group !== 'inside')
+  const insideOn = items.filter((x) => x.on && META[x.id].group === 'inside')
+  const PlanRow = ({ it }: { it: ItemPick }) => { const m = META[it.id]; const cents = itemCents(it, prices, profile); const sum = itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy }); return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
+      <Thumb it={it} size={44} />
+      <button type="button" onClick={() => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+        <b style={{ display: 'block', fontSize: 14 }}>{nameOf(it)}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sum}</small>{it.why && <small style={{ ...sub, fontSize: 11, color: C.faint }}>{it.why}</small>}
+      </button>
+      <b style={{ fontSize: 13.5, whiteSpace: 'nowrap', color: cents ? C.ink : C.greenDk }}>{cents ? dollars(cents) : 'Free'}</b>
+      <button type="button" aria-label="Remove" onClick={() => (it.uid === it.id ? toggle(it.uid) : remove(it.uid))} style={{ width: 26, height: 26, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 14, lineHeight: 1, flex: 'none' }}>×</button>
+    </div>
+  ) }
+
+  /* ADD MODE: the whole menu, grouped, rows one line each */
+  const AddRow = ({ it }: { it: ItemPick }) => { const m = META[it.id]; const cents = it.on ? itemCents(it, prices, profile) : minOf(it); const free = m.free || cents === 0; return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
+      <Thumb it={it} size={44} />
+      <button type="button" onClick={() => (MULTI.includes(it.id) && it.on ? addNew(it.id) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on && !MULTI.includes(it.id) ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>
+      </button>
+      <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions && !it.on ? 'from ' : ''}${dollars(cents)}`}</b>
+      <button type="button" onClick={() => (MULTI.includes(it.id) && it.on ? addNew(it.id) : it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ fontSize: 12, fontWeight: 800, padding: '6px 12px', borderRadius: 99, border: `1.5px solid ${it.on && !MULTI.includes(it.id) ? C.ink : C.ink}`, background: it.on && !MULTI.includes(it.id) ? C.ink : '#fff', color: it.on && !MULTI.includes(it.id) ? '#fff' : C.ink, cursor: 'pointer', font: 'inherit', flex: 'none' }}>{it.on ? (MULTI.includes(it.id) ? '＋ Another' : 'Added') : 'Add'}</button>
+    </div>
+  ) }
+
   return (
     <div>
-      {GROUPS.map((g) => (
-        <div key={g.id}>
-          <div style={h3}>{g.label}</div>
-          {(Object.keys(META) as ItemId[]).filter((id) => META[id].group === g.id).map((id) => {
-            const lines = items.filter((x) => x.id === id)
-            const first = lines.find((x) => x.uid === id) ?? lines[0]
-            if (!first) return null
-            if (!MULTI.includes(id)) return <Row key={id} it={first} isLine={false} />
-            const extra = lines.filter((x) => x.uid !== first.uid && x.on)
-            return <div key={id}>
-              <Row it={first} isLine={false} />
-              {extra.map((l) => <Row key={l.uid} it={l} isLine />)}
-              {first.on && <button type="button" onClick={() => addNew(id)} style={{ display: 'block', marginLeft: 76, padding: '8px 0', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>＋ Another {id === 'graphic' ? 'graphic' : id === 'video' ? 'video, a different kind' : id === 'print' ? 'print' : 'creator'}</button>}
-            </div>
-          })}
-        </div>
-      ))}
-      <div style={{ position: 'sticky', bottom: 0, background: '#fff', paddingTop: 10, marginTop: 6 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: C.mute, padding: '0 2px 2px' }}><span><b style={{ color: C.ink }}>{onCount} thing{onCount === 1 ? '' : 's'}</b>{reach != null ? ` · about ${round2(reach).toLocaleString()} people` : ''}</span><span>{me?.budgetCents != null ? `Inside your $${Math.round(me.budgetCents / 100)}` : 'Picked for you'}</span></div>
+      {mode === 'plan' ? <>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 4px' }}><span style={h3}>Your plan</span><span style={{ fontSize: 12, color: C.mute }}>{me?.budgetCents != null ? `Picked inside your $${Math.round(me.budgetCents / 100)}` : 'Picked for you'}</span></div>
+        {picked.map((it) => <PlanRow key={it.uid} it={it} />)}
+        {insideOn.length > 0 && <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
+          <span style={{ width: 44, height: 44, borderRadius: 10, flex: 'none', display: 'grid', placeItems: 'center', background: '#eaf7f3', ['--c2' as string]: '#2e9a78' }}><span style={{ width: 30 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span></span>
+          <button type="button" onClick={() => setMode('add')} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}><b style={{ display: 'block', fontSize: 14 }}>In the restaurant</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{insideOn.map((x) => META[x.id].name.toLowerCase()).join(', ')}</small></button>
+          <b style={{ fontSize: 13.5, color: C.greenDk }}>Free</b>
+        </div>}
+        <button type="button" onClick={() => setMode('add')} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, height: 44, borderRadius: 99, border: `1.5px dashed ${C.line}`, background: '#fff', font: 'inherit', fontSize: 13.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>＋ Add more</button>
+      </> : <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '18px 0 4px' }}><button type="button" onClick={() => setMode('plan')} aria-label="Back to the plan" style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={14} /></button><span style={{ ...h3, margin: 0 }}>Add more</span><button type="button" onClick={() => setMode('plan')} style={{ marginLeft: 'auto', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>Done</button></div>
+        {GROUPS.map((g) => (
+          <div key={g.id}>
+            <div style={{ ...h3, margin: '14px 0 2px', fontSize: 11 }}>{g.label}</div>
+            {(Object.keys(META) as ItemId[]).filter((id) => META[id].group === g.id).map((id) => { const lines = items.filter((x) => x.id === id); const first = lines.find((x) => x.uid === id) ?? lines[0]; return first ? <AddRow key={id} it={first} /> : null })}
+          </div>
+        ))}
+      </>}
+      <div style={{ paddingTop: 10, marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: C.mute, padding: '0 2px 2px' }}><span><b style={{ color: C.ink }}>{onCount} thing{onCount === 1 ? '' : 's'}</b>{reach != null ? ` · about ${round2(reach).toLocaleString()} people` : ''}</span><span>{onCount ? `${picked.length + (insideOn.length ? 1 : 0)} on the plan` : ''}</span></div>
         <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : 'Make it happen'}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
         <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
       </div>

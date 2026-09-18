@@ -883,12 +883,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             </>}
             {simple && (
               <>
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
                 {!openItem && items.length > 0 && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
                   <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick inside it.</span>
                   <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 74, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
                   <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
                 </div>}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
               </>
             )}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
