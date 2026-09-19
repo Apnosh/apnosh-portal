@@ -622,7 +622,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* hooks that need the plan helpers below run through a ref, so they sit above the early return */
   const simpleKind = !!kind && !isSlow && !kind.hidden
   const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; suggest: (budgetCents?: number | null) => Promise<void> } | null>(null)
-  useEffect(() => { if (step === 'words' && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if ((step === 'words' || step === 'plans') && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the picker runs when the kind opens, and again when a photo lands */
   useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}`) void helpers.current?.suggest() }, [step, kind?.id, media.length]) // eslint-disable-line react-hooks/exhaustive-deps
   /* ── the menu ── */
@@ -1075,14 +1075,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
         {step === 'plans' && kind && (
           <div style={hv(hue)}>
-            {!openItem && <div style={h2}>{a.what?.trim() ? a.what.trim() : 'Your plan'}</div>}
-            {!openItem && <div style={{ fontSize: 13, color: C.mute, marginTop: -6, marginBottom: 4, lineHeight: 1.45 }}>Picked for a {kind.label.toLowerCase()}{me?.budgetCents != null ? `, inside your $${Math.round(me.budgetCents / 100)}` : ''}. Change anything.</div>}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
-                {!openItem && items.length > 0 && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, background: '#f6f6f8', borderRadius: 16, padding: '10px 12px' }}>
-                  <span style={{ fontSize: 12.5, color: C.mute, flex: 1, lineHeight: 1.35 }}>Have a number in mind? We pick inside it.</span>
-                  <input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="$500" style={{ ...input, width: 74, marginTop: 0, padding: '8px 10px', fontSize: 13 }} />
-                  <button type="button" onClick={pickForBudget} disabled={!budget.trim()} style={{ ...chip(true), opacity: budget.trim() ? 1 : .5 }}>Pick</button>
-                </div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} preview={{ name: a.what?.trim() || kind.label, price: a.price?.trim() || null, caption: social, image: media[0] && !media[0].video ? media[0].preview : null, video: !!media[0]?.video, onWords: () => setStep('words'), onPhoto: () => fileRef.current?.click() }} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
 

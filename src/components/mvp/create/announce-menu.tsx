@@ -7,7 +7,7 @@
  * (announce-suggest) pre-adds the usual for this kind, each with one line of why. The bottom
  * bar is the cart: how many things, how many people, the total.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Plus } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
@@ -79,9 +79,13 @@ const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
   print: { kinds: ['tent'] },
   creator: { code: true, repost: true },
 }
-export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready }: {
+export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
+  /* the calm plan screen (owner 2026-09-18): a small preview, a five-step how-far, date tiles */
+  preview?: { name: string; price: string | null; caption: string; image: string | null; video?: boolean; onWords: () => void; onPhoto: () => void }
+  dates?: { posts: string | null; ready: string | null; results: string | null }
+  usualReach?: number | null
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
@@ -255,6 +259,43 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   const nameOf = (it: ItemPick) => (it.id === 'creator' && profile && it.on ? `${profile.name.split(' ')[0]} posts it` : META[it.id].name)
   const Thumb = ({ it, size }: { it: ItemPick; size: number }) => { const m = META[it.id]; const av = it.id === 'creator' ? (profile?.avatarUrl ?? null) : null; return <span style={{ width: size, height: size, borderRadius: Math.round(size * 0.22), flex: 'none', display: 'grid', placeItems: 'center', background: it.id === 'creator' && it.on ? 'linear-gradient(135deg,#f6c1dc,#c2418f)' : `${m.hue}1f`, overflow: 'hidden', ['--c2' as string]: m.hue }}>{av && it.on ? <img src={av} alt="" style={{ width: size, height: size, objectFit: 'cover' }} /> : it.id === 'creator' && it.on ? <span style={{ color: '#fff', fontWeight: 800, fontSize: size * 0.3 }}>{initials(profile?.name ?? me?.creator?.name ?? 'C')}</span> : <span style={{ width: Math.round(size * 0.7) }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(s) => s} /></span>}</span> }
 
+  /* THE STEPS: five whole plans, from free to everything, in the order each dollar buys the most.
+     The picker's own set is step two. Tapping a step sets the lines; every line stays editable. */
+  const cn = me?.creator && me.creator.nearby ? me.creator : null
+  /* the picker's own options, kept from the moment the items arrived, so the steps and their
+     prices stay put while the owner edits lines */
+  const baseline = useRef<Record<string, Record<string, unknown>>>({})
+  useEffect(() => { for (const it of items) if (it.uid === it.id && !baseline.current[it.id]) baseline.current[it.id] = { ...it.options } }, [items])
+  const baseOpts = (it: ItemPick) => baseline.current[it.id] ?? it.options
+  const stepSets = useMemo((): { label: string; note: string; on: Record<string, Record<string, unknown> | true>; }[] => {
+    const usualOn: Record<string, Record<string, unknown> | true> = {}
+    for (const it of items) if (it.on && it.uid === it.id) usualOn[it.id] = true
+    const free: Record<string, Record<string, unknown> | true> = { post: true, taste: true, review: true, sign: true }
+    const s1 = { ...free, ...usualOn }
+    const s2 = { ...s1, ...(cn ? { creator: { slug: cn.slug } } : { boost: { cents: 10000 } }) }
+    const s3 = { ...s2, video: { filmed: cn ? 'creator' : 'clips', count: 1, style: 'dish', captions: true }, print: { kinds: ['poster'] } }
+    const s4 = { ...s3, photos: { list: [], reel: false }, boost: { cents: 10000 } }
+    return [{ label: 'Free', note: 'Your channels only', on: free }, { label: '', note: 'The usual pick', on: s1 }, { label: '', note: cn ? `${cn.name.split(' ')[0]} posts it` : 'A bigger boost', on: s2 }, { label: '', note: 'A Reel and a poster', on: s3 }, { label: '', note: 'A shoot day too', on: s4 }]
+  }, [items.length, cn?.slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  const costOf = (set: Record<string, Record<string, unknown> | true>) => items.filter((x) => x.uid === x.id).reduce((sum, it) => { const v = set[it.id]; if (!v) return sum; const opt = v === true ? baseOpts(it) : { ...baseOpts(it), ...v }; return sum + itemCents({ ...it, on: true, options: opt }, prices, profile) }, 0)
+  const applyStep = (n: number) => {
+    const set = stepSets[n].on
+    setItems((xs) => xs.filter((x) => x.uid === x.id).map((it) => { const v = set[it.id]; return v ? { ...it, on: true, options: v === true ? baseOpts(it) : { ...baseOpts(it), ...v } } : { ...it, on: false } }))
+  }
+  const currentStep = (() => {
+    const onIds = items.filter((x) => x.on).map((x) => x.id).sort().join(',')
+    const boostNow = Number(items.find((x) => x.id === 'boost' && x.on)?.options.cents) || 0
+    for (let i = 0; i < stepSets.length; i++) {
+      const set = stepSets[i].on
+      const ids = Object.keys(set).sort().join(',')
+      if (ids !== onIds) continue
+      const b = set.boost; const bl = items.find((x) => x.uid === 'boost'); const wantB = b === true ? (Number(bl ? baseOpts(bl).cents : 0) || 0) : b ? Number((b as Record<string, unknown>).cents) || 0 : 0
+      if (!set.boost || wantB === boostNow) return i
+    }
+    return -1
+  })()
+  const stepLabels = stepSets.map((st, i) => (i === 0 ? 'Free' : dollars(costOf(st.on))))
+
   /* PLAN MODE: one short row per picked line; the free in-restaurant things as one row */
   const picked = items.filter((x) => x.on && META[x.id].group !== 'inside')
   const insideOn = items.filter((x) => x.on && META[x.id].group === 'inside')
@@ -262,7 +303,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
       <Thumb it={it} size={44} />
       <button type="button" onClick={() => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-        <b style={{ display: 'block', fontSize: 14 }}>{nameOf(it)}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sum}</small>{it.why && <small style={{ ...sub, fontSize: 11, color: C.faint }}>{it.why}</small>}
+        <b style={{ display: 'block', fontSize: 14 }}>{nameOf(it)}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sum}</small>
       </button>
       <b style={{ fontSize: 13.5, whiteSpace: 'nowrap', color: cents ? C.ink : C.greenDk }}>{cents ? dollars(cents) : 'Free'}</b>
       <button type="button" aria-label="Remove" onClick={() => (it.uid === it.id ? toggle(it.uid) : remove(it.uid))} style={{ width: 26, height: 26, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, cursor: 'pointer', display: 'grid', placeItems: 'center', fontSize: 14, lineHeight: 1, flex: 'none' }}>×</button>
@@ -274,7 +315,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
       <Thumb it={it} size={44} />
       <button type="button" onClick={() => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>
+        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>{it.why && <small style={{ ...sub, fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.why}</small>}
       </button>
       <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions && !it.on ? 'from ' : ''}${dollars(cents)}`}</b>
       {MULTI.includes(it.id) && it.on && <button type="button" onClick={() => addNew(it.id)} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>＋ Another</button>}
@@ -285,14 +326,36 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   return (
     <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
       {mode === 'plan' ? <>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 4px' }}><span style={h3}>Your plan</span><span style={{ fontSize: 12, color: C.mute }}>{me?.budgetCents != null ? `Picked inside your $${Math.round(me.budgetCents / 100)}` : 'Picked for you'}</span></div>
+        {preview && (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 10, border: `0.5px solid ${C.line}`, borderRadius: 16 }}>
+            <button type="button" onClick={preview.onPhoto} aria-label="Change the photo" style={{ width: 96, height: 96, borderRadius: 12, flex: 'none', position: 'relative', border: 0, padding: 0, cursor: 'pointer', overflow: 'hidden', background: preview.image ? `center/cover url(${preview.image})` : 'linear-gradient(160deg,#f3e3c8,#c98a3a)' }}>
+              {!preview.image && <span style={{ position: 'absolute', left: 8, top: 8, right: 8, color: '#fff', fontWeight: 800, fontSize: 12, textAlign: 'left', lineHeight: 1.15, textShadow: '0 1px 3px rgba(0,0,0,.35)' }}>{preview.name}</span>}
+              {preview.video && <span style={{ position: 'absolute', right: 6, top: 6, background: 'rgba(255,255,255,.92)', borderRadius: 99, padding: '2px 7px', fontSize: 10, fontWeight: 800 }}>Reel</span>}
+              {preview.price && <span style={{ position: 'absolute', left: 6, bottom: 6, background: C.ink, color: '#fff', fontWeight: 800, padding: '3px 7px', borderRadius: 7, fontSize: 12 }}>{preview.price}</span>}
+            </button>
+            <button type="button" onClick={preview.onWords} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+              <b style={{ display: 'block', fontSize: 14, marginBottom: 2 }}>{preview.name}</b>
+              <span style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 12.5, lineHeight: 1.4 }}>{preview.caption || (writing ? 'Writing the words…' : 'Tap to write the words')}</span>
+              <small style={{ display: 'block', color: C.mute, fontSize: 11.5, marginTop: 4 }}>Tap to change the photo or the words</small>
+            </button>
+          </div>
+        )}
+        <div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><b style={{ fontSize: 17, letterSpacing: '-.01em' }}>How far should it go?</b><span style={{ fontSize: 13, color: C.greenDk, fontWeight: 700 }}>{currentStep >= 0 ? (me?.budgetCents != null && total <= me.budgetCents && currentStep > 1 ? `Inside your $${Math.round(me.budgetCents / 100)}` : stepSets[currentStep].note) : 'Your own mix'}</span></div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>{stepSets.map((_, i) => <button key={i} type="button" onClick={() => applyStep(i)} aria-label={`Step ${i + 1}, ${stepLabels[i]}`} style={{ flex: 1, height: 22, border: 0, background: 'none', padding: '7px 0', cursor: 'pointer' }}><span style={{ display: 'block', height: 8, borderRadius: 99, background: currentStep >= i ? C.ink : C.line, transition: 'background .15s' }} /></button>)}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11.5, color: C.mute, fontWeight: 600 }}>{stepLabels.map((l, i) => <span key={i} style={{ color: currentStep === i ? C.ink : C.mute, fontWeight: currentStep === i ? 800 : 600 }}>{l}</span>)}</div>
+          <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.03em' }}>{reach != null ? round2(reach).toLocaleString() : '—'}<small style={{ fontSize: 12, fontWeight: 600, color: C.mute, marginLeft: 6, letterSpacing: 0 }}>people, about</small></span><span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>{total ? dollars(total) : 'Free'}</span></div>
+          <div style={{ fontSize: 11, color: C.mute, marginTop: 4 }}>Tap a step. Each one is a whole plan.{me?.budgetCents != null ? ` Your budget is $${Math.round(me.budgetCents / 100).toLocaleString()}.` : ''}{usualReach ? ` Your posts usually reach about ${usualReach.toLocaleString()}.` : ''}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 4px' }}><span style={h3}>Your plan</span></div>
         {picked.map((it) => <PlanRow key={it.uid} it={it} />)}
         {insideOn.length > 0 && <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
           <span style={{ width: 44, height: 44, borderRadius: 10, flex: 'none', display: 'grid', placeItems: 'center', background: '#eaf7f3', ['--c2' as string]: '#2e9a78' }}><span style={{ width: 30 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span></span>
           <button type="button" onClick={() => setMode('add')} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}><b style={{ display: 'block', fontSize: 14 }}>In the restaurant</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{insideOn.map((x) => META[x.id].name.toLowerCase()).join(', ')}</small></button>
           <b style={{ fontSize: 13.5, color: C.greenDk }}>Free</b>
         </div>}
-        <button type="button" onClick={() => setMode('add')} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, height: 44, borderRadius: 99, border: `1.5px dashed ${C.line}`, background: '#fff', font: 'inherit', fontSize: 13.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>＋ Add more</button>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}><button type="button" onClick={() => setMode('add')} style={{ fontSize: 13, fontWeight: 800, padding: '9px 16px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>＋ Add more</button></div>
+        {dates && <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>{[['Posts', dates.posts], ['Graphic ready', items.some((x) => x.on && x.id === 'graphic') ? dates.ready : '—'], ['Results', dates.results]].map(([k, v]) => <div key={k} style={{ flex: 1, background: '#f6f6f8', borderRadius: 12, padding: '8px 10px', fontSize: 11.5, color: C.mute }}>{k}<b style={{ display: 'block', color: C.ink, fontSize: 12.5, marginTop: 1 }}>{v ? (v.length === 10 ? nice(v).replace(/^(\w+), /, '$1 ') : v) : '—'}</b></div>)}</div>}
       </> : <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '18px 0 4px' }}><button type="button" onClick={() => setMode('plan')} aria-label="Back to the plan" style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={14} /></button><span style={{ ...h3, margin: 0 }}>Add more</span><button type="button" onClick={() => setMode('plan')} style={{ marginLeft: 'auto', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 800, color: C.ink, cursor: 'pointer' }}>Done</button></div>
         {GROUPS.map((g) => (
@@ -303,7 +366,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
         ))}
       </>}
       <div style={{ paddingTop: 10, marginTop: 6 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: C.mute, padding: '0 2px 2px' }}><span><b style={{ color: C.ink }}>{onCount} thing{onCount === 1 ? '' : 's'}</b>{reach != null ? ` · about ${round2(reach).toLocaleString()} people` : ''}</span><span>{onCount ? `${picked.length + (insideOn.length ? 1 : 0)} on the plan` : ''}</span></div>
+        {mode === 'add' && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: C.mute, padding: '0 2px 2px' }}><span><b style={{ color: C.ink }}>{onCount} thing{onCount === 1 ? '' : 's'}</b>{reach != null ? ` · about ${round2(reach).toLocaleString()} people` : ''}</span></div>}
         <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : 'Make it happen'}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
         <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
       </div>
