@@ -24,9 +24,10 @@ export async function POST(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   const admin = createAdminClient()
-  const [conns, biz, site, gbp, recent, last, card] = await Promise.all([
+  const [conns, biz, shp, site, gbp, recent, last, card] = await Promise.all([
     admin.from('social_connections').select('platform').eq('client_id', clientId),
-    admin.from('businesses').select('monthly_budget, city, state, cuisine').eq('client_id', clientId).maybeSingle(),
+    admin.from('businesses').select('monthly_budget, city, state, cuisine, location_count, primary_goal, can_film').eq('client_id', clientId).maybeSingle(),
+    admin.from('clients').select('shape_footprint, shape_concept').eq('id', clientId).maybeSingle(),
     admin.from('site_settings').select('order_online_url').eq('client_id', clientId).maybeSingle(),
     admin.from('gbp_locations').select('id').eq('client_id', clientId).limit(1),
     admin.from('social_posts').select('reach').eq('client_id', clientId).order('posted_at', { ascending: false }).limit(12),
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
     kind: body.kind, facts: body.facts ?? { hasMedia: false, hasVideo: false },
     connected: { instagram: plats.has('instagram'), facebook: plats.has('facebook'), google: (gbp.data ?? []).length > 0, website: false, ordering: !!site.data?.order_online_url, apps: false },
     usualReach, budgetCents, creator, last: lastResult, prices: { graphic, video, shoot, print: 2500 },
+    profile: { locations: (() => { const v = String(biz.data?.location_count ?? '1'); const m = v.match(/\d+/); return m ? Number(m[0]) : /\+|many|more/.test(v) ? 6 : 1 })(), footprint: (shp.data?.shape_footprint as string | null) ?? null, concept: (shp.data?.shape_concept as string | null) ?? null, goal: (biz.data?.primary_goal as string | null) ?? null, canFilm: Array.isArray(biz.data?.can_film) ? (biz.data!.can_film as string[]).length > 0 : null },
   }
   return NextResponse.json({ items: suggestItems(input), me: { usualReach, budgetCents, creator, connected: input.connected } }, { headers: { 'Cache-Control': 'no-store' } })
 }

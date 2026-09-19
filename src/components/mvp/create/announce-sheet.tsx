@@ -624,7 +624,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; suggest: (budgetCents?: number | null) => Promise<void> } | null>(null)
   useEffect(() => { if ((step === 'words' || step === 'plans') && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the picker runs when the kind opens, and again when a photo lands */
-  useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}`) void helpers.current?.suggest() }, [step, kind?.id, media.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}:${a.picsrc ?? ''}`) void helpers.current?.suggest() }, [step, kind?.id, media.length, a.picsrc]) // eslint-disable-line react-hooks/exhaustive-deps
   /* ── the menu ── */
   const usual = ctx?.usualReach ?? null
   const prices: MenuPrices = { graphic: ctx?.prices.graphic ?? 23100, video: ctx?.prices.video ?? 27500, print: 2500, shootFor: (n) => tierCents(tierFor(n)) ?? ctx?.prices.shoot ?? 38500, shootLabel: (n) => `${TIERS.find((t) => t.id === tierFor(n))?.label}: ${sizeOf(n)}` }
@@ -660,9 +660,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
   const suggest = async (budgetCents?: number | null) => {
     if (!kind) return
-    setSuggested(`${kind.id}:${media.length}`)
+    setSuggested(`${kind.id}:${media.length}:${a.picsrc ?? ''}`)
     try {
-      const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
+      const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null, source: media.length ? 'mine' : (a.picsrc as 'licensed' | 'shoot' | 'none' | undefined) ?? 'none', look: a.look ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
       const j = await r.json().catch(() => ({}))
       if (r.ok && Array.isArray(j.items)) { setItems(j.items); setMe(j.me ?? null) }
     } catch { /* the menu still works by hand */ }
@@ -809,15 +809,24 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             {!openItem && <>
             {kind.photo && (!kind.picture || simple) && (
               <div style={{ margin: '4px 0 6px' }}>
-                {media.length === 0 ? (
-                  <button type="button" onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 118, borderRadius: 18, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer', font: 'inherit', color: C.ink }}>
-                    {uploading ? <Loader2 size={22} className="mvp-spin" color={hue} /> : <><span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span><span style={{ textAlign: 'left' }}><b style={{ fontSize: 14 }}>Add a photo or video</b><small style={sub}>Optional. Every plan can make one.</small></span></>}
-                  </button>
-                ) : (
+                {media.length > 0 ? (
                   <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
                     {media.map((m, i) => <div key={i} style={{ position: 'relative', flex: 'none', width: 96, height: 96, borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((_, j) => j !== i))} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button></div>)}
                     {media.length < 10 && <button type="button" onClick={() => fileRef.current?.click()} style={{ flex: 'none', width: 96, height: 96, borderRadius: 14, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute }}>{uploading ? <Loader2 size={18} className="mvp-spin" /> : <Plus size={20} />}</button>}
                   </div>
+                ) : simple ? (
+                  /* WHERE THE PICTURE COMES FROM (owner 2026-09-18): mine, licensed, a shoot, or not yet */
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Got a photo or video?</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+                      {([['mine', 'Use mine', 'Phone is fine', 'photos', '#2e9a78'], ['licensed', 'Licensed', 'Stock, your style', 'grid', '#3b6fd4'], ['shoot', 'A shoot', 'We come shoot', 'creator', '#6a39de'], ['none', 'Not yet', 'We design one', 'graphic', '#d99a1e']] as [string, string, string, Scene, string][]).map(([id, l, sm, sc, hu]) => { const on = (a.picsrc ?? 'none') === id && !(id === 'mine'); return <button key={id} type="button" onClick={() => { if (id === 'mine') { fileRef.current?.click(); return } setA((x) => ({ ...x, picsrc: id })) }} style={{ ...hv(hu), border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: on ? hexa(hu, 0.08) : '#fff', borderRadius: 14, padding: '9px 4px 8px', textAlign: 'center', font: 'inherit', color: C.ink, cursor: 'pointer' }}><span style={{ display: 'block', width: 34, margin: '0 auto 4px' }}>{uploading && id === 'mine' ? <Loader2 size={18} className="mvp-spin" /> : <Drawing spec={{ scene: sc }} name="" rating="" t={(s) => s} />}</span><b style={{ display: 'block', fontSize: 12, lineHeight: 1.15 }}>{l}</b><small style={{ display: 'block', color: C.mute, fontSize: 10.5, marginTop: 2 }}>{sm}</small></button> })}
+                    </div>
+                    {(a.picsrc === 'shoot' || a.picsrc === 'licensed') && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>{a.picsrc === 'shoot' ? 'A shoot day is added to the plan, priced by its list.' : 'The desk picks licensed photos in your style, no extra cost.'}</div>}
+                  </>
+                ) : (
+                  <button type="button" onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 118, borderRadius: 18, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer', font: 'inherit', color: C.ink }}>
+                    {uploading ? <Loader2 size={22} className="mvp-spin" color={hue} /> : <><span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span><span style={{ textAlign: 'left' }}><b style={{ fontSize: 14 }}>Add a photo or video</b><small style={sub}>Optional. Every plan can make one.</small></span></>}
+                  </button>
                 )}
               </div>
             )}
@@ -872,6 +881,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>For a limited time</span><Switch on={limited} set={setLimited} /></div>
                 {limited && <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 10 }}>Until when<input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={input} /></label>}
+              </>
+            )}
+            {simple && moreOpen && (
+              <>
+                <div style={h3}>The look<span style={{ fontWeight: 500, color: C.faint, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>optional</span></div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful', 'Like my brand kit'].map((t) => <button key={t} type="button" onClick={() => setA((x) => { const cur = (x.look ?? '').split(', ').filter(Boolean); const n = cur.includes(t) ? cur.filter((y) => y !== t) : [...cur, t].slice(-3); return { ...x, look: n.join(', ') } })} style={chip((a.look ?? '').split(', ').includes(t))}>{t}</button>)}</div>
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Goes to the designer and the photographer. Up to three.</div>
               </>
             )}
             {kind.tags && (!simple || moreOpen) && (

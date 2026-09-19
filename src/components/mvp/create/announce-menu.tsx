@@ -29,7 +29,7 @@ const META: Record<ItemId, { name: string; line: string; scene: Scene; hue: stri
   post: { name: 'Post it', line: 'Your channels, a Story, menus, the team told', scene: 'post', hue: '#2e9a78', group: 'make', free: true },
   graphic: { name: 'A graphic', line: 'Designed for the post, with the price on it', scene: 'graphic', hue: '#d99a1e', group: 'make', hasOptions: true },
   video: { name: 'A video', line: 'A Reel, from your clips or filmed here', scene: 'reel', hue: '#0f97a8', group: 'make', hasOptions: true },
-  photos: { name: 'Photos', line: 'A shoot day. Add other things to the list', scene: 'photos', hue: '#6a39de', group: 'make', hasOptions: true },
+  photos: { name: 'A shoot', line: 'A photographer comes. Add other things to the list', scene: 'photos', hue: '#6a39de', group: 'make', hasOptions: true },
   boost: { name: 'Boost it', line: 'Ad money to people nearby', scene: 'boost', hue: '#d99a1e', group: 'seen', hasOptions: true },
   creator: { name: 'A creator posts it', line: 'A local food creator visits and posts', scene: 'creator', hue: '#c2418f', group: 'seen', hasOptions: true },
   print: { name: 'Print', line: 'A table tent or a window poster', scene: 'print', hue: '#d99a1e', group: 'seen', hasOptions: true },
@@ -59,7 +59,7 @@ export function itemSummary(it: ItemPick, p: MenuPrices, profile?: CreatorProfil
   const o = it.options
   switch (it.id) {
     case 'post': return `${extra?.platforms ?? 'Your channels'} · Story · ${extra?.bestHour ?? 'your best hour'}`
-    case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; return [where.includes('post') ? 'Post + Story' : '', where.includes('tent') ? 'table tent' : '', where.includes('poster') ? 'poster' : '', o.priceOn ? 'price on it' : '', o.spanish ? 'Spanish' : '', extra?.readyBy ? `ready ${nice(extra.readyBy)}` : 'ready in 2 days'].filter(Boolean).join(' · ') }
+    case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; return [where.includes('post') ? 'Post + Story' : '', where.includes('tent') ? 'table tent' : '', where.includes('poster') ? 'poster' : '', o.from === 'stock' ? 'licensed photos' : o.from === 'shoot' ? 'from the shoot' : '', o.priceOn ? 'price on it' : '', o.look ? String(o.look).toLowerCase() : '', o.spanish ? 'Spanish' : '', extra?.readyBy ? `ready ${nice(extra.readyBy)}` : 'ready in 2 days'].filter(Boolean).join(' · ') }
     case 'video': return [Number(o.count) > 1 ? `${o.count} Reels` : '', o.filmed === 'clips' ? 'From your clips' : o.filmed === 'creator' ? `Filmed when ${profile?.name.split(' ')[0] ?? 'the creator'} visits` : o.filmed === 'shoot' ? 'On the shoot day' : 'We come film it', o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : 'the dish up close', o.tiktok ? 'TikTok cut' : ''].filter(Boolean).join(' · ')
     case 'photos': return `${p.shootLabel(1 + ((o.list as string[] | undefined)?.length ?? 0))}${(o.list as string[] | undefined)?.length ? ` · ${(o.list as string[]).join(', ')}` : ''}`
     case 'boost': return `$${Math.round((Number(o.cents) || 2000) / 100)} · ${o.days ?? 3} days · about ${((Number(o.cents) || 2000) / 100 * 150).toLocaleString()} people`
@@ -156,8 +156,11 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <Opt kind="cb" on={!!o.spanish} label="Spanish too" small="A second version" price="+$40" onClick={() => setOpt('graphic', { spanish: !o.spanish })} />
           <div style={h3}>From</div>
           <Opt kind="rb" on={o.from === 'own'} label="Your photo" small={media ? `${media} added` : 'Add one on the first screen'} onClick={() => setOpt('graphic', { from: 'own' })} />
-          <Opt kind="rb" on={o.from !== 'own' && o.from !== 'shoot'} label="Our photos" small="Stock, in your style" onClick={() => setOpt('graphic', { from: 'ours' })} />
+          <Opt kind="rb" on={o.from === 'stock'} label="Licensed photos" small="Stock the desk picks, in your style" onClick={() => setOpt('graphic', { from: 'stock' })} />
+          <Opt kind="rb" on={!o.from || o.from === 'ours'} label="Our photos" small="What the desk has on file" onClick={() => setOpt('graphic', { from: 'ours' })} />
           <Opt kind="rb" on={o.from === 'shoot'} label="The shoot" small={items.find((x) => x.id === 'photos')?.on ? 'From the shoot day' : 'Add Photos first'} onClick={() => setOpt('graphic', { from: 'shoot' })} />
+          <div style={h3}>The look</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful'].map((t) => { const cur = String(o.look ?? '').split(', ').filter(Boolean); const on = cur.includes(t); return <button key={t} type="button" onClick={() => setOpt(it.id, { look: (on ? cur.filter((x) => x !== t) : [...cur, t].slice(-3)).join(', ') })} style={chip(on)}>{t}</button> })}</div>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>A note for the designer<span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span><input value={String(o.note ?? '')} onChange={(e) => setOpt('graphic', { note: e.target.value })} placeholder="Use the blue plates" style={input} /></label>
           {foot}
         </>}
@@ -175,6 +178,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <Opt kind="rb" on={!o.style || o.style === 'dish'} label="The dish, up close" small="Steam, the cut, the first bite" onClick={() => setOpt('video', { style: 'dish' })} />
           <Opt kind="rb" on={o.style === 'chef'} label="The chef making it" small="30 seconds" price="+$75" onClick={() => setOpt('video', { style: 'chef' })} />
           <Opt kind="rb" on={o.style === 'room'} label="The room and the dish" onClick={() => setOpt('video', { style: 'room' })} />
+          <div style={h3}>The look</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful'].map((t) => { const cur = String(o.look ?? '').split(', ').filter(Boolean); const on = cur.includes(t); return <button key={t} type="button" onClick={() => setOpt(it.id, { look: (on ? cur.filter((x) => x !== t) : [...cur, t].slice(-3)).join(', ') })} style={chip(on)}>{t}</button> })}</div>
           <div style={h3}>Also</div>
           <Opt kind="cb" on={o.captions !== false} label="Captions burned in" price="free" onClick={() => setOpt('video', { captions: o.captions === false })} />
           <Opt kind="cb" on={!!o.tiktok} label="A second cut for TikTok" price="+$60" onClick={() => setOpt('video', { tiktok: !o.tiktok })} />
@@ -295,6 +300,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     return -1
   })()
   const stepLabels = stepSets.map((st, i) => (i === 0 ? 'Free' : dollars(costOf(st.on))))
+  /* a step that adds nothing (the shoot was already on) is not a step */
+  const stepIdx = stepSets.map((_, i) => i).filter((i, k, arr) => i === 0 || costOf(stepSets[i].on) !== costOf(stepSets[arr[k - 1]].on))
 
   /* PLAN MODE: one short row per picked line; the free in-restaurant things as one row */
   const picked = items.filter((x) => x.on && META[x.id].group !== 'inside')
@@ -342,8 +349,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
         )}
         <div style={{ marginTop: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><b style={{ fontSize: 17, letterSpacing: '-.01em' }}>How far should it go?</b><span style={{ fontSize: 13, color: C.greenDk, fontWeight: 700 }}>{currentStep >= 0 ? (me?.budgetCents != null && total <= me.budgetCents && currentStep > 1 ? `Inside your $${Math.round(me.budgetCents / 100)}` : stepSets[currentStep].note) : 'Your own mix'}</span></div>
-          <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>{stepSets.map((_, i) => <button key={i} type="button" onClick={() => applyStep(i)} aria-label={`Step ${i + 1}, ${stepLabels[i]}`} style={{ flex: 1, height: 22, border: 0, background: 'none', padding: '7px 0', cursor: 'pointer' }}><span style={{ display: 'block', height: 8, borderRadius: 99, background: currentStep >= i ? C.ink : C.line, transition: 'background .15s' }} /></button>)}</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11.5, color: C.mute, fontWeight: 600 }}>{stepLabels.map((l, i) => <span key={i} style={{ color: currentStep === i ? C.ink : C.mute, fontWeight: currentStep === i ? 800 : 600 }}>{l}</span>)}</div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>{stepIdx.map((i) => <button key={i} type="button" onClick={() => applyStep(i)} aria-label={`Step ${stepIdx.indexOf(i) + 1}, ${stepLabels[i]}`} style={{ flex: 1, height: 22, border: 0, background: 'none', padding: '7px 0', cursor: 'pointer' }}><span style={{ display: 'block', height: 8, borderRadius: 99, background: currentStep >= i ? C.ink : C.line, transition: 'background .15s' }} /></button>)}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 11.5, color: C.mute, fontWeight: 600 }}>{stepIdx.map((i) => { const l = stepLabels[i]; return <span key={i} style={{ color: currentStep === i ? C.ink : C.mute, fontWeight: currentStep === i ? 800 : 600 }}>{l}</span> })}</div>
           <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><span style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.03em' }}>{reach != null ? round2(reach).toLocaleString() : '—'}<small style={{ fontSize: 12, fontWeight: 600, color: C.mute, marginLeft: 6, letterSpacing: 0 }}>people, about</small></span><span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>{total ? dollars(total) : 'Free'}</span></div>
           <div style={{ fontSize: 11, color: C.mute, marginTop: 4 }}>Tap a step. Each one is a whole plan.{me?.budgetCents != null ? ` Your budget is $${Math.round(me.budgetCents / 100).toLocaleString()}.` : ''}{usualReach ? ` Your posts usually reach about ${usualReach.toLocaleString()}.` : ''}</div>
         </div>
