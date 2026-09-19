@@ -22,7 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, Check, Loader2, X, Plus, Copy } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
-import { Drawing, type Scene } from './drawings'
+import { Drawing, DRAW_CSS, type Scene } from './drawings'
 import AnnounceMenu, { itemCents, type MenuMe, type MenuPrices } from './announce-menu'
 import type { ItemId, ItemPick } from '@/lib/plan/suggest'
 import { BrandOrMark } from '../mvp-insights'
@@ -191,12 +191,13 @@ const longDate = (iso: string) => { const d = new Date(iso + 'T00:00:00'); retur
 const dollars = (c: number | null) => (c == null ? '' : `$${Math.round(c / 100).toLocaleString()}`)
 const localInput = (d: Date) => `${isoDay(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 
-export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, initialKind }: { clientId: string; onClose: () => void; /** whether the client has a Google listing to post to */ hasGoogle?: boolean; /** open straight on one kind: the Slow night tile */ initialKind?: AnnounceKind }) {
+export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, initialKind, page = false, onPick }: { clientId: string; onClose: () => void; /** A PAGE, NOT A POPUP (owner 2026-09-18): render inline under the app shell instead of a bottom sheet */ page?: boolean; /** in page mode the kind grid hands the pick to the router */ onPick?: (kind: AnnounceKind) => void; /** whether the client has a Google listing to post to */ hasGoogle?: boolean; /** open straight on one kind: the Slow night tile */ initialKind?: AnnounceKind }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
   /* The page behind must not move while the sheet is up (owner 2026-09-17: "you can move the form
      around"): the body is pinned at its scroll position and put back on close. */
   useEffect(() => {
+    if (page) return
     const y = window.scrollY
     const b = document.body.style
     const prev = { position: b.position, top: b.top, width: b.width, overflow: b.overflow }
@@ -320,6 +321,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }, [clientId])
 
   const pick = (k: KindDef) => {
+    if (onPick && !initialKind) { onPick(k.id); return }
     setKind(k); setCta(k.cta); setTags(new Set()); setLimited(false); setOneDay(false); setClosed(k.id === 'holiday'); setReminder(!!k.reminder); setReminderText('')
     const dateKey = k.fields.find((f) => f.kind === 'date')?.key
     setA(dateKey ? { [dateKey]: todayIso() } : {})
@@ -719,15 +721,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     </div>
   )
 
-  return createPortal(
-    <div className="cr" role="dialog" aria-modal="true" aria-label="Announce something" onClick={step === 'kind' ? onClose : undefined} style={{ position: 'fixed', left: 0, right: 0, top: vv ? vv.top : 0, height: vv ? vv.h : '100dvh', zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', touchAction: 'none' }}>
-      <div onClick={(e) => e.stopPropagation()} onFocusCapture={(e) => { const t = e.target as HTMLElement; if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') setTimeout(() => t.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250) }} style={{ width: '100%', maxWidth: 480, maxHeight: vv ? vv.h - 16 : '92dvh', overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink, fontFamily: 'inherit' }}>
-        <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 10px' }}>
-          {step !== 'kind' && step !== 'done' && !(initialKind && visible.indexOf(step) === 0) ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
-          <span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</span>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
-        </div>
+  const body = (
+
+    <>
+        {page && step !== 'kind' && step !== 'done' && !(initialKind && visible.indexOf(step) === 0) && <button type="button" onClick={back} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, cursor: 'pointer', padding: '6px 0' }}><ArrowLeft size={14} /> Back</button>}
         {step !== 'kind' && step !== 'done' && visible.length > 1 && <div style={{ display: 'flex', gap: 4, margin: '0 0 14px' }}>{visible.map((s) => <i key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: visible.indexOf(s) <= visible.indexOf(step) ? C.ink : C.line }} />)}</div>}
         <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
 
@@ -1135,6 +1132,24 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           </div>
         )}
         </div>
+        </>
+  )
+  if (page) return (
+    <div className="cr" style={{ padding: '4px 16px 40px', color: C.ink, maxWidth: 480, margin: '0 auto' }}>
+      <style>{DRAW_CSS}</style>
+      {body}
+    </div>
+  )
+  return createPortal(
+    <div className="cr" role="dialog" aria-modal="true" aria-label="Announce something" onClick={step === 'kind' ? onClose : undefined} style={{ position: 'fixed', left: 0, right: 0, top: vv ? vv.top : 0, height: vv ? vv.h : '100dvh', zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', touchAction: 'none' }}>
+      <div onClick={(e) => e.stopPropagation()} onFocusCapture={(e) => { const t = e.target as HTMLElement; if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') setTimeout(() => t.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250) }} style={{ width: '100%', maxWidth: 480, maxHeight: vv ? vv.h - 16 : '92dvh', overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink, fontFamily: 'inherit' }}>
+        <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 10px' }}>
+          {step !== 'kind' && step !== 'done' && !(initialKind && visible.indexOf(step) === 0) ? <button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button> : <span style={{ width: 34 }} />}
+          <span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</span>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button>
+        </div>
+        {body}
       </div>
     </div>,
     document.body,

@@ -710,6 +710,8 @@ export default function CreatePage() {
   ]
   const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
   const [announcing, setAnnouncing] = useState<false | true | AnnounceKind>(false)
+  /* Announce is a page, not a popup (owner 2026-09-18) */
+  const goAnnounce = (k: true | AnnounceKind) => { const q = clientId ? `?clientId=${clientId}` : ''; router.push(k === true ? `/dashboard/announce${q}` : `/dashboard/announce/${k}${q}`) }
   const [replying, setReplying] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [requesting, setRequesting] = useState<RequestType | null>(null)
@@ -717,7 +719,7 @@ export default function CreatePage() {
   const [adsOpen, setAdsOpen] = useState(false)
   const [influencersOpen, setInfluencersOpen] = useState(false)
   function quickGo(x: Quick) {
-    if ('announce' in x.to) { setAnnouncing(x.to.announce); return }
+    if ('announce' in x.to) { goAnnounce(x.to.announce); return }
     if ('reply' in x.to) { setReplying(true); return }
     if ('reviews' in x.to) { setReviewing(true); return }
     if ('shoot' in x.to) { setShootOpen(true); return }
@@ -1082,8 +1084,8 @@ export default function CreatePage() {
       {replying && clientId && <ReplySheet clientId={clientId} onClose={() => setReplying(false)} />}
       {adsOpen && clientId && <AdsSheet clientId={clientId} onClose={() => setAdsOpen(false)} />}
       {influencersOpen && clientId && <InfluencersSheet clientId={clientId} onClose={() => setInfluencersOpen(false)} />}
-      {shootOpen && clientId && <ShootSheet clientId={clientId} onClose={() => setShootOpen(false)} onAnnounce={(k) => { setShootOpen(false); setAnnouncing(k) }} />}
-      {requesting && clientId && <RequestSheet clientId={clientId} type={requesting} onClose={() => setRequesting(null)} onAnnounce={(k) => { setRequesting(null); setAnnouncing(k) }} />}
+      {shootOpen && clientId && <ShootSheet clientId={clientId} onClose={() => setShootOpen(false)} onAnnounce={(k) => { setShootOpen(false); goAnnounce(k) }} />}
+      {requesting && clientId && <RequestSheet clientId={clientId} type={requesting} onClose={() => setRequesting(null)} onAnnounce={(k) => { setRequesting(null); goAnnounce(k) }} />}
       {reviewing && clientId && <ReviewsSheet clientId={clientId} onClose={() => setReviewing(false)} onReply={() => { setReviewing(false); setReplying(true) }} />}
       {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} initialKind={announcing === true ? undefined : announcing} onClose={() => setAnnouncing(false)} />}
       {view.name !== 'browse' && view.name !== 'product' && (
