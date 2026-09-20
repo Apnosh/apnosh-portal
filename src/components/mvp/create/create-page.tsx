@@ -17,7 +17,7 @@ import { PROMISE_BY_CARD, promiseSentence, renderPromiseSentence } from '@/lib/p
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Check, Search, Sparkles, X, Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Eye, Lightbulb, MousePointerClick, DoorOpen, Repeat, Loader2, Mic, Compass, Image as ImageIcon, Store, Camera, Video, Mail, PenLine, Gift, Clock, Wrench, BarChart3, TrendingUp, Target } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Check, Search, Sparkles, X, Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Eye, Lightbulb, MousePointerClick, DoorOpen, Repeat, Loader2, Mic, Compass, Image as ImageIcon, Store, Camera, Video, Mail, PenLine, Gift, Clock, Wrench, Calendar, BarChart3, TrendingUp, Target } from 'lucide-react'
 import MvpShell from '../mvp-shell'
 import TopRow from '../top-row'
 import { useClient } from '@/lib/client-context'
@@ -688,7 +688,7 @@ export default function CreatePage() {
      sideways. Every tile is a door to something real: a live screen, a card's own page, or the
      describe box with the first words typed. A tile whose card is not on the shelf is dropped,
      so nothing here opens onto "that one is not on the shelf". */
-  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { announce: true | 'slow' | 'post' | 'update' } | { reply: true } | { reviews: true } | { request: RequestType } | { shoot: true } | { ads: true } | { influencers: true } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
+  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { announce: true | 'slow' | 'post' | 'update' } | { reply: true } | { reviews: true } | { request: RequestType } | { shoot: true } | { plan: true } | { ads: true } | { influencers: true } | { href: string } | { card: string }; hue?: HueKey; /** what the tile draws: the thing itself, not an icon (owner 2026-09-15) */ scene: DrawSpec }
   /* THE ROW IS VERBS FIRST (owner 2026-09-16): the seven things an owner does in a week, then the
      things they ask the team for, each named in two words at most. */
   const QUICK_ALL: Quick[] = [
@@ -702,6 +702,7 @@ export default function CreatePage() {
     { hue: 'amber', t: T('Graphic'), I: ImageIcon, to: { request: 'graphic' }, scene: { scene: 'graphic' } },
     { hue: 'brand', t: T('Video'), I: Video, to: { request: 'video' }, scene: { scene: 'reel' } },
     { t: T('Photos'), I: Camera, to: { shoot: true }, scene: { scene: 'photos' } },
+    { t: T('The month'), I: Calendar, to: { plan: true }, scene: { scene: 'calendar' } },
     { hue: 'amber', t: T('Print'), I: Tag, to: { request: 'print' }, scene: { scene: 'print' } },
     { hue: 'brand', t: T('Branding'), I: Tag, to: { request: 'logo' }, scene: { scene: 'brand' } },
     { hue: 'brand', t: T('Website'), I: Store, to: { request: 'website' }, scene: { scene: 'site' } },
@@ -720,6 +721,7 @@ export default function CreatePage() {
   const [influencersOpen, setInfluencersOpen] = useState(false)
   function quickGo(x: Quick) {
     if ('announce' in x.to) { goAnnounce(x.to.announce); return }
+    if ('plan' in x.to) { router.push(`/dashboard/plan${clientId ? `?clientId=${clientId}` : ''}`); return }
     if ('reply' in x.to) { setReplying(true); return }
     if ('reviews' in x.to) { setReviewing(true); return }
     if ('shoot' in x.to) { setShootOpen(true); return }
