@@ -31,8 +31,9 @@ export async function GET(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   const admin = createAdminClient()
-  const probe = await admin.from('plan_months').select('id').limit(1)
-  const off = !!probe.error
+  const [probe, probe267] = await Promise.all([admin.from('plan_months').select('id').limit(1), admin.from('announcements').select('id').limit(1)])
+  /* Start books a shoot day and a creator, which live on announcements (267). Off until both are in. */
+  const off = !!probe.error || !!probe267.error
   const month = monthOk(sp.get('month')) ? sp.get('month')! : nextMonth()
   const saved = off ? null : await loadMonth(admin, clientId, month)
   const edits = parseEdits({ lean: sp.get('lean') ?? undefined, drop: sp.get('drop') ?? undefined, add: sp.get('add') ?? undefined })
@@ -54,8 +55,8 @@ export async function POST(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized || !access.userId) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   const admin = createAdminClient()
-  const probe = await admin.from('plan_months').select('id').limit(1)
-  if (probe.error) return NextResponse.json({ error: 'The monthly plan is not switched on yet' }, { status: 503 })
+  const [probe, probe267] = await Promise.all([admin.from('plan_months').select('id').limit(1), admin.from('announcements').select('id').limit(1)])
+  if (probe.error || probe267.error) return NextResponse.json({ error: 'The monthly plan is not switched on yet' }, { status: 503 })
   const month = monthOk(body.month) ? body.month : nextMonth()
 
   if (body.action === 'start') {
