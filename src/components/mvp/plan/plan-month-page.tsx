@@ -30,9 +30,12 @@ interface Read { month: Month; off: boolean; actual: Record<Stage, number | null
 
 const HUE: Record<Stage, string> = { aware: '#2e9a78', interest: '#3b6fd4', action: '#6a39de', order: '#d99a1e', keep: '#0f97a8' }
 const SCENE: Record<Kind, Scene> = { post: 'post', graphic: 'graphic', reel: 'reel', photos: 'photos', creator: 'creator', boost: 'boost', print: 'print', offer: 'offer', review: 'review', taste: 'dish', sign: 'sticky', team: 'grid' }
-const RING: { stage: Stage; cx: number; cy: number; r: number; side: 'L' | 'R' }[] = [
-  { stage: 'aware', cx: 240, cy: 72, r: 64, side: 'L' }, { stage: 'interest', cx: 112, cy: 206, r: 52, side: 'R' }, { stage: 'action', cx: 244, cy: 338, r: 44, side: 'L' }, { stage: 'order', cx: 112, cy: 462, r: 40, side: 'R' }, { stage: 'keep', cx: 244, cy: 586, r: 36, side: 'L' },
-]
+/* Home's geometry (home-funnel.tsx layout): the mouth ring biggest, tapering [1,.8,.7,.64,.6];
+   even stations swing right and odd swing left, the top pair wider; the number sits on the
+   opposite side. Drawn in a 430×800 space that scales to the page width. */
+const W = 430, H = 800, RTOP = 76
+const RING = ([1, .8, .7, .64, .6] as const).map((ratio, i) => { const lean = i % 2 === 0 ? 1 : -1; return { stage: (['aware', 'interest', 'action', 'order', 'keep'] as Stage[])[i], cx: W / 2 + lean * 72 * (i <= 1 ? 1.34 : 1), cy: 90 + i * 158, r: RTOP * ratio, side: (i % 2 === 0 ? 'L' : 'R') as 'L' | 'R' } })
+const PATH = RING.map((p, i) => (i === 0 ? `M${p.cx} ${p.cy}` : `C${RING[i - 1].cx} ${RING[i - 1].cy + 80} ${p.cx} ${p.cy - 80} ${p.cx} ${p.cy}`)).join(' ')
 const MAXP = [34, 18, 9, 5, 3]
 const MONTH_NAME = (m: string) => new Date(m + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' })
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -123,36 +126,47 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
         <span style={{ textAlign: 'right', flex: 'none' }}><b style={{ display: 'block', fontSize: 20, letterSpacing: '-.03em' }}>{dollars(m.total)}</b><small style={{ fontSize: 11, color: C.mute, fontWeight: 600 }}>{state === 'done' ? 'billed' : state === 'on' ? 'as approved' : 'after approval'}</small></span>
       </div>
 
-      {/* the funnel */}
-      <div style={{ position: 'relative', width: '100%', maxWidth: 354, aspectRatio: '354 / 640', margin: '6px auto 0' }}>
-        <svg viewBox="0 0 354 640" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-          <path className={state === 'done' ? undefined : 'pm-path'} d={RING.map((p, i) => (i === 0 ? `M${p.cx} ${p.cy}` : `C${RING[i - 1].cx} ${RING[i - 1].cy + 60} ${p.cx} ${p.cy - 60} ${p.cx} ${p.cy}`)).join(' ')} fill="none" stroke={HUE.aware} strokeOpacity=".45" strokeWidth="1.8" strokeDasharray="3 5" />
+      {/* the funnel, drawn the way Home draws it */}
+      <div style={{ position: 'relative', width: '100%', aspectRatio: `${W} / ${H}`, margin: '2px 0 0' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          <path className={state === 'done' ? undefined : 'pm-path'} d={PATH} fill="none" stroke={HUE.aware} strokeOpacity=".45" strokeWidth="1.8" strokeDasharray="3 5" />
           {RING.map((p) => {
             const s = stageOf[p.stage]; const c = HUE[p.stage]
             const act = actual?.[p.stage] ?? null
+            const empty = state === 'draft' ? s?.add == null && s?.now == null : act == null
             const ratio = live && act != null && s?.planned ? Math.max(.25, Math.min(1.5, Math.sqrt(act / s.planned))) : null
+            /* the number's leader: a hairline from the number to the rim, ending in a dot (Home) */
+            const nx = p.side === 'L' ? 150 : W - 150
             return (
               <g key={p.stage} className="pm-ring" onClick={() => setOpen(p.stage)}>
+                <line x1={nx} y1={p.cy} x2={p.side === 'L' ? p.cx - p.r - 4 : p.cx + p.r + 4} y2={p.cy} stroke={c} strokeOpacity=".28" strokeWidth=".8" />
+                <circle cx={p.side === 'L' ? p.cx - p.r - 4 : p.cx + p.r + 4} cy={p.cy} r="2" fill={c} fillOpacity=".6" />
                 <circle cx={p.cx} cy={p.cy} r={p.r + 14} fill="transparent" />
-                <circle cx={p.cx} cy={p.cy} r={p.r} fill={c + '0d'} stroke={c} strokeWidth="1.8" strokeDasharray="4 5" />
-                {ratio != null && <circle cx={p.cx} cy={p.cy} r={p.r * ratio} fill={c + '1c'} stroke={c} strokeWidth="2" />}
+                <circle cx={p.cx} cy={p.cy} r={p.r} fill={empty ? '#f6f6f8' : '#fff'} stroke={c} strokeOpacity={empty ? .5 : 1} strokeWidth="1.6" strokeDasharray={state === 'draft' ? '4 5' : undefined} />
+                {ratio != null && <circle cx={p.cx} cy={p.cy} r={p.r * ratio} fill={c + '14'} stroke={c} strokeWidth="1.6" />}
+                <path d={`M${W - 16} ${p.cy - 6} L${W - 10} ${p.cy} L${W - 16} ${p.cy + 6}`} fill="none" stroke={c} strokeOpacity=".45" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </g>
             )
           })}
         </svg>
-        <PlanCrowd rings={rings} flow={state !== 'done'} />
-        {RING.map((p, i) => { const s = stageOf[p.stage]; const c = HUE[p.stage]; const act = actual?.[p.stage] ?? null; return (
-          <div key={p.stage} className="pm-num" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', [p.side === 'L' ? 'left' : 'right']: 0, top: `${(p.cy - 28) / 6.4}%`, width: 150, textAlign: p.side === 'R' ? 'right' : 'left', fontSize: 12.5, color: C.mute, fontWeight: 600, cursor: 'pointer', animationDelay: `${i * 90}ms` }}>
-            {s?.label ?? p.stage}
-            {state === 'draft'
-              ? <><b style={{ display: 'block', fontSize: 28, letterSpacing: '-.04em', color: c, lineHeight: 1, marginTop: 2 }}>{s?.add != null ? `+${about(s.add)}` : '—'}</b><small style={{ display: 'block', fontSize: 11, color: C.mute, marginTop: 3, fontWeight: 600 }}>{s?.add != null ? `${s.unit} · ` : ''}{s?.now != null ? `now ${fmt(s.now)}` : s?.add != null ? 'estimate' : 'nothing planned'}</small></>
-              : <><b style={{ display: 'block', fontSize: 28, letterSpacing: '-.04em', color: c, lineHeight: 1, marginTop: 2 }}>{fmt(act)}</b><small style={{ display: 'block', fontSize: 11, color: C.mute, marginTop: 3, fontWeight: 600 }}>{state === 'on' ? 'so far · ' : ''}about {about(s?.planned ?? null)} planned</small></>}
+        <PlanCrowd rings={rings} flow={state !== 'done'} W={W} H={H} />
+        {RING.map((p, i) => { const s = stageOf[p.stage]; const c = HUE[p.stage]; const act = actual?.[p.stage] ?? null
+          const big = state === 'draft' ? s?.now : act
+          const chip = state === 'draft' ? (s?.add != null ? [`+${about(s.add)}`, c] : null) : state === 'on' ? (s?.planned != null ? [`of ${about(s.planned)}`, C.mute] : null) : (act != null && s?.planned ? [`${act >= s.planned ? '▲' : '▼'}${Math.round(Math.abs(act - s.planned) / s.planned * 100)}%`, act >= s.planned ? C.greenDk : '#c92d32'] : null)
+          return (
+          <div key={p.stage} className="pm-num" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', [p.side === 'L' ? 'left' : 'right']: '3%', top: `${(p.cy - 34) / H * 100}%`, width: '37%', textAlign: p.side === 'R' ? 'right' : 'left', cursor: 'pointer', animationDelay: `${i * 90}ms` }}>
+            <div style={{ fontSize: 14, color: C.mute, fontWeight: 600, letterSpacing: '-.01em' }}>{s?.label ?? p.stage}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, justifyContent: p.side === 'R' ? 'flex-end' : 'flex-start', flexDirection: p.side === 'R' ? 'row-reverse' : 'row' }}>
+              <b style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 600, letterSpacing: '-.5px', color: big == null ? C.faint : C.ink, lineHeight: 1 }}>{big == null ? (state === 'draft' && s?.add != null ? `+${about(s.add)}` : '—') : fmt(big)}</b>
+              {chip && big != null && <span style={{ fontSize: 13, fontWeight: 700, color: chip[1], whiteSpace: 'nowrap' }}>{chip[0]}</span>}
+            </div>
+            <div style={{ fontSize: 11, color: C.mute, fontWeight: 600, marginTop: 4 }}>{state === 'draft' ? (s?.add != null ? `+${about(s.add)} ${s.unit} · estimate` : big != null ? 'nothing planned' : 'nothing planned') : state === 'on' ? `so far · ${s?.unit ?? ''}` : `the month · ${s?.unit ?? ''}`}</div>
           </div>) })}
-        {state !== 'done' && RING.slice(0, 4).map((p, i) => { const s = stageOf[p.stage]; if (!s?.lever) return null; const y = (p.cy + RING[i + 1].cy) / 2; return <span key={p.stage} className="pm-num" style={{ position: 'absolute', left: '50%', top: `${y / 6.4}%`, transform: 'translate(-50%,-50%)', fontSize: 11, fontWeight: 800, padding: '4px 9px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', animationDelay: `${300 + i * 90}ms` }}>{s.lever}</span> })}
+        {state !== 'done' && RING.slice(0, 4).map((p, i) => { const s = stageOf[p.stage]; if (!s?.lever) return null; const y = (p.cy + RING[i + 1].cy) / 2; return <span key={p.stage} className="pm-num" style={{ position: 'absolute', left: '50%', top: `${y / H * 100}%`, transform: 'translate(-50%,-50%)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap', maxWidth: '52%', overflow: 'hidden', textOverflow: 'ellipsis', animationDelay: `${300 + i * 90}ms` }}>{s.lever}</span> })}
         {state !== 'done' && RING.map((p, i) => {
           const beads = on.filter((s) => s.stage === p.stage).reduce<Slot[]>((acc, s) => (acc.some((x) => x.kind === s.kind) ? acc : [...acc, s]), []).slice(0, 4)
           return beads.map((b, j) => { const ang = -Math.PI * .75 + j * (Math.PI * .5); const x = p.cx + Math.cos(ang) * p.r * .98, y = p.cy + Math.sin(ang) * p.r * .98; return (
-            <span key={b.kind} className="pm-bead" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', left: `${x / 3.54}%`, top: `${y / 6.4}%`, width: 26, height: 26, borderRadius: 99, background: '#fff', border: `2px solid ${HUE[p.stage]}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', ['--c2' as string]: HUE[p.stage], cursor: 'pointer', animationDelay: `${500 + i * 120 + j * 70}ms` }}><span style={{ width: 15, display: 'block' }}><Drawing spec={{ scene: SCENE[b.kind] }} now={b.status === 'done'} name="" rating="" t={(s) => s} /></span></span>) })
+            <span key={b.kind} className="pm-bead" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', left: `${x / W * 100}%`, top: `${y / H * 100}%`, width: 28, height: 28, borderRadius: 99, background: '#fff', border: `1.6px solid ${HUE[p.stage]}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', ['--c2' as string]: HUE[p.stage], cursor: 'pointer', animationDelay: `${500 + i * 120 + j * 70}ms` }}><span style={{ width: 16, display: 'block' }}><Drawing spec={{ scene: SCENE[b.kind] }} now={b.status === 'done'} name="" rating="" t={(s) => s} /></span></span>) })
         })}
       </div>
 

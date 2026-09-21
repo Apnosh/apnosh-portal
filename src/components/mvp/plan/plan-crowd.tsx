@@ -18,9 +18,9 @@ function person(ctx: CanvasRenderingContext2D, x: number, y: number, u: number, 
   ctx.beginPath(); ctx.moveTo(x - u * .6, y + u * .92); ctx.quadraticCurveTo(x - u * .7, y + u * .02, x, y - u * .16); ctx.quadraticCurveTo(x + u * .7, y + u * .02, x + u * .6, y + u * .92); ctx.closePath(); ctx.fillStyle = color; ctx.fill()
   ctx.beginPath(); ctx.arc(x, y - u * .74, u * .46, 0, 7); ctx.fillStyle = head; ctx.fill()
 }
-const bez = (a: { cx: number; cy: number }, b: { cx: number; cy: number }, t: number) => { const x0 = a.cx, y0 = a.cy, x1 = b.cx, y1 = b.cy; const c1x = x0, c1y = y0 + 60, c2x = x1, c2y = y1 - 60; const u = 1 - t; return { x: u * u * u * x0 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x1, y: u * u * u * y0 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * y1 } }
+const bez = (a: { cx: number; cy: number }, b: { cx: number; cy: number }, t: number) => { const x0 = a.cx, y0 = a.cy, x1 = b.cx, y1 = b.cy; const c1x = x0, c1y = y0 + 80, c2x = x1, c2y = y1 - 80; const u = 1 - t; return { x: u * u * u * x0 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x1, y: u * u * u * y0 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * y1 } }
 
-export default function PlanCrowd({ rings, flow = true, seed = 1 }: { rings: CrowdRing[]; /** the trickle along the path; off on the recap */ flow?: boolean; seed?: number }) {
+export default function PlanCrowd({ rings, flow = true, seed = 1, W = 430, H = 800 }: { rings: CrowdRing[]; /** the trickle along the path; off on the recap */ flow?: boolean; seed?: number; /** the stage's coordinate space, the same one the SVG uses */ W?: number; H?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const cv = ref.current; if (!cv) return
@@ -40,10 +40,10 @@ export default function PlanCrowd({ rings, flow = true, seed = 1 }: { rings: Cro
     people.forEach(spot)
     const trav: T[] = []
     let raf = 0, last = performance.now(), t = 0, nextSpawn = .6
-    const fit = () => { const w = cv.clientWidth || 354, h = cv.clientHeight || 640; const dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); ctx.setTransform((w / 354) * dpr, 0, 0, (h / 640) * dpr, 0, 0) }
+    const fit = () => { const w = cv.clientWidth || W, h = cv.clientHeight || H; const dpr = Math.min(2, window.devicePixelRatio || 1); cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); ctx.setTransform((w / W) * dpr, 0, 0, (h / H) * dpr, 0, 0) }
     fit()
     const draw = () => {
-      ctx.clearRect(0, 0, 354, 640)
+      ctx.clearRect(0, 0, W, H)
       for (const p of people) {
         if (p.a <= .01) continue
         const fx = Math.sin(t * .7 + p.phase) * 1.7, fy = Math.cos(t * .5 + p.phase * 1.4) * 1.9
@@ -81,6 +81,6 @@ export default function PlanCrowd({ rings, flow = true, seed = 1 }: { rings: Cro
     const vis = () => { if (document.hidden) cancelAnimationFrame(raf); else { last = performance.now(); raf = requestAnimationFrame(frame) } }
     document.addEventListener('visibilitychange', vis)
     return () => { cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('visibilitychange', vis) }
-  }, [rings, flow, seed])
+  }, [rings, flow, seed, W, H])
   return <canvas ref={ref} aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
 }
