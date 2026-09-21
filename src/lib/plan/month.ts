@@ -24,7 +24,7 @@ export type SlotKind = 'post' | 'graphic' | 'reel' | 'photos' | 'creator' | 'boo
 export type Lean = 'seen' | 'asis' | 'in'
 export interface Rhythm { posts_week: number; graphics_week: number; reels_month: number; shoots_month: number; creator_quarter: number }
 export interface Slot { id?: string; date: string; stage: Stage; kind: SlotKind; label: string; options: Record<string, unknown>; cents: number; status: 'open' | 'planned' | 'minted' | 'done' | 'rolled' | 'removed'; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null }
-export interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; unit: string; lever: string | null; levers: string[] }
+export interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; /** what the plan adds, an estimate */ add: number | null; /** the arithmetic behind the estimate, in words */ basis: string | null; unit: string; lever: string | null; levers: string[] }
 export interface Month { month: string; status: string; thesis: string; rhythm: Rhythm; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: Facts }
 interface Facts { usualReach: number | null; reelLift: number | null; postsN: number; reviews30: number | null; slowDay: string | null; budgetCents: number | null; locations: number; goal: string | null; prices: { graphic: number; video: number; shoot: number; print: number } }
 
@@ -125,9 +125,17 @@ export function planStages(slots: Slot[], base: Record<Stage, number | null>, f:
     order: [] as string[],
     keep: [n('review') ? 'ask for a review' : ''].filter(Boolean),
   }
-  const mk = (stage: Stage, add: number, unit: string): StagePlan => ({ stage, label: STAGE_LABEL[stage], now: base[stage], planned: base[stage] != null ? Math.round(base[stage]! + add) : add > 0 ? Math.round(add) : null, unit, lever: levers[stage][0] ? levers[stage].join(' · ') : null, levers: levers[stage] })
+  const basis: Record<Stage, string | null> = {
+    aware: [n('post') ? `${n('post')} posts × your usual ${usual.toLocaleString()}` : '', n('reel') ? `${n('reel')} Reel${n('reel') > 1 ? 's' : ''} at ${reelLift}× a photo` : '', boost ? `$${boost / 100} boost ≈ ${(Math.round(boost / 100) * REACH_PER_DOLLAR).toLocaleString()}` : '', n('creator') && creator?.nearby ? `${creator.name.split(' ')[0]} ≈ ${creator.nearby.toLocaleString()} nearby` : ''].filter(Boolean).join(' + ') || null,
+    interest: [n('reel') ? `about 40 a Reel` : '', n('graphic') ? `15 a graphic` : '', n('photos') ? `10 from the shoot` : ''].filter(Boolean).join(' + ') || null,
+    action: [n('offer') ? 'about 25 from the deal' : '', n('creator') ? '20 from the code' : '', n('print') ? '8 from the table tent' : '', n('taste') ? '10 from the taste' : ''].filter(Boolean).join(' + ') || null,
+    order: 'about 15 in 100 actions become a visit',
+    keep: n('review') ? 'about 6 when you ask' : null,
+  }
+  const mk = (stage: Stage, add: number, unit: string): StagePlan => ({ stage, label: STAGE_LABEL[stage], now: base[stage], planned: base[stage] != null ? Math.round(base[stage]! + add) : add > 0 ? Math.round(add) : null, add: add > 0 ? Math.round(add) : null, basis: add > 0 ? basis[stage] : null, unit, lever: levers[stage][0] ? levers[stage].join(' · ') : null, levers: levers[stage] })
   const action = mk('action', actionAdd, 'actions')
-  return [mk('aware', awareAdd, 'people'), mk('interest', interestAdd, 'follows & saves'), action, { stage: 'order', label: STAGE_LABEL.order, now: base.order, planned: base.order != null ? Math.round(base.order * 1.1) : action.planned != null ? Math.round(action.planned * 0.15) : null, unit: base.order != null ? 'orders' : 'visits, about', lever: null, levers: [] }, mk('keep', keepAdd, 'reviews')]
+  const orderAdd = action.add != null ? Math.round(action.add * 0.15) : null
+  return [mk('aware', awareAdd, 'people'), mk('interest', interestAdd, 'follows & saves'), action, { stage: 'order', label: STAGE_LABEL.order, now: base.order, planned: base.order != null && orderAdd != null ? base.order + orderAdd : orderAdd, add: orderAdd, basis: orderAdd ? basis.order : null, unit: base.order != null ? 'orders' : 'visits', lever: null, levers: [] }, mk('keep', keepAdd, 'reviews')]
 }
 
 export async function topCreator(admin: Admin, clientId: string, month: string): Promise<Month['creator']> {
@@ -205,10 +213,13 @@ export function applyEdits(m: Month, e: Edits): Month {
 }
 /** what the month actually did: Home's numbers for that month, once it has run */
 export async function loadActual(clientId: string, month: string): Promise<Record<Stage, number | null> | null> {
-  const days = monthDays(month); const end = days[days.length - 1]
-  if (end > ymd(new Date())) return null
+  const days = monthDays(month); const end = days[days.length - 1]; const today = ymd(new Date())
+  if (days[0] > today) return null
+  /* the month so far while it runs, the whole month once it has */
+  const upTo = end > today ? today : end
+  const elapsed = days.filter((d) => d <= upTo).length
   try {
-    const stages = await computeStages(clientId, '30d', 0, end)
+    const stages = await computeStages(clientId, '30d', 0, upTo, elapsed)
     const out: Record<Stage, number | null> = { aware: null, interest: null, action: null, order: null, keep: null }
     const map: Record<string, Stage> = { '1': 'aware', '2': 'interest', '3': 'action', '4': 'order', '5': 'keep' }
     for (const s of stages) { const k = map[String(s.stage)]; if (k && s.headline != null) out[k] = s.headline }

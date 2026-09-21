@@ -45,7 +45,10 @@ export async function GET(req: NextRequest) {
     m = applyEdits(base, { drop: edits.drop, add: edits.add })
   }
   const actual = m.status === 'started' || m.status === 'done' ? await loadActual(clientId, month) : null
-  return NextResponse.json({ month: strip(m), off, actual, next: nextMonth() }, { headers: { 'Cache-Control': 'no-store' } })
+  const days = (() => { const [y, mo] = month.split('-').map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate() })()
+  const today = new Date().toISOString().slice(0, 10)
+  const elapsed = today < `${month}-01` ? 0 : Math.min(days, Number(today.slice(8, 10)) + (today.slice(0, 7) > month ? days : 0))
+  return NextResponse.json({ month: strip(m), off, actual, elapsed, days, next: nextMonth() }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(req: NextRequest) {
