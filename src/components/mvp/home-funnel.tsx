@@ -809,9 +809,6 @@ export default function HomeFunnel({
       ctx.lineWidth = lw; ctx.setLineDash(dash || [])
       ctx.strokeStyle = `rgba(${ringStr},${baseA * eIn})`; ctx.stroke(); ctx.setLineDash([])
       ctx.restore()
-      /* the month's planned ring (owner 2026-09-22): dashed, faint, in the stage's own hue, sized
-         against the real count so actual-versus-plan reads without a number */
-      { const pl = plan?.planned[i]; if (pl != null && pl > 0 && s.count != null && s.count > 0) { const ratio = Math.max(0.6, Math.min(1.3, Math.sqrt(pl / s.count))); const [sr, sg, sb] = stageRgb(i); ctx.save(); ctx.beginPath(); ctx.arc(ox, oy, r * ratio, 0, 7); ctx.lineWidth = 1.2; ctx.setLineDash([4, 5]); ctx.strokeStyle = `rgba(${sr},${sg},${sb},${0.45 * eIn})`; ctx.stroke(); ctx.setLineDash([]); ctx.restore() } }
 
       // a bright core dot at the orb's centre (the mockup's lit bead) — night only
       if (dark) {
@@ -1314,8 +1311,8 @@ export default function HomeFunnel({
         style={{ display: 'block', position: 'absolute', top: 0, left: 0, zIndex: 0, width: '100%', height: effH, cursor: 'pointer', opacity: loading ? 0.5 : 1, transition: 'opacity .2s' }}
         aria-label={T('Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.')}
       />
-      {/* THE MONTH ON HOME (owner 2026-09-22): its pieces as beads on the rings they push, coloured by
-          state (coming: white; with the team: tinted; done: greyed), and one pill for the month itself.
+      {/* THE MONTH ON HOME (owner 2026-09-22, "the small icons on Home, nothing else"): its pieces as beads on the rings
+          they push, coloured by state (coming: white; with the team: tinted; done: greyed).
           HTML over the canvas so the drawings stay the app's own; the same geometry as the rings. */}
       {plan && !loading && (
         <div className="cr" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
@@ -1328,10 +1325,6 @@ export default function HomeFunnel({
             return mine.map((b, j) => { const deg = right ? [-30, 30, 90, 150][j] : [210, 150, 90, 30][j]; const a = deg * Math.PI / 180; const x = ox + Math.cos(a) * r * 0.98, y = oy + Math.sin(a) * r * 0.98; const sz = Math.max(18, Math.min(24, Math.round(r * 0.34))); return (
               <Link key={`${i}-${b.scene}-${j}`} href={plan.href} aria-label={b.label} style={{ position: 'absolute', left: x, top: y, width: sz, height: sz, transform: 'translate(-50%,-50%)', borderRadius: 99, background: b.status === 'minted' ? `${hue}1f` : '#fff', border: `1.4px solid ${hue}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', pointerEvents: 'auto', ['--c2' as string]: hue, opacity: b.status === 'done' ? .7 : 1 }}><span style={{ width: Math.round(sz * 0.58), display: 'block' }}><Drawing spec={{ scene: b.scene }} now={b.status === 'done'} name="" rating="" t={(x) => x} /></span></Link>) })
           })}
-          <Link href={plan.href} style={{ position: 'absolute', left: 12, top: (layout[0]?.y ?? 200) + Math.round((layout[0]?.r ?? 60) * 0.42), pointerEvents: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 99, background: theme === 'dark' ? 'rgba(255,255,255,.1)' : 'rgba(240,241,240,.85)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: C.ink, textDecoration: 'none', maxWidth: 'calc(100% - 24px)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            <span style={{ width: 7, height: 7, borderRadius: 99, background: plan.status === 'started' ? C.greenDk : C.mute, flex: 'none' }} />
-            {plan.status === 'done' && plan.recap ? plan.recap : `${new Date(plan.month + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' })}, on · day ${plan.elapsed} of ${plan.days}${plan.counts.done ? ` · ${plan.counts.done} done` : ''}${plan.counts.minted ? ` · ${plan.counts.minted} with the team` : ''}`}
-          </Link>
         </div>
       )}
     </div>
