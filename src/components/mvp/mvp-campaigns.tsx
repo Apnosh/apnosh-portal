@@ -83,7 +83,7 @@ function tabOf(c: HuedCard): Exclude<Tab, 'all'> | null {
   return c.kind === 'done' ? 'done' : 'live'
 }
 
-export default function MvpCampaigns({ view: viewProp, embedded = false }: { view?: 'list' | 'calendar'; /** inside the Plan ahead drawer (owner 2026-09-22): no card, no calendar row, no page chrome */ embedded?: boolean } = {}) {
+export default function MvpCampaigns({ view: viewProp, embedded = false, board }: { view?: 'list' | 'calendar'; /** inside another page: no calendar row, no page chrome */ embedded?: boolean; /** active = the Campaigns tab (owner 2026-09-22): Calendar and Order history rows, then what is running; history = what ran */ board?: 'active' | 'history' } = {}) {
   const { client, loading: clientLoading } = useClient()
   const router = useRouter()
   const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
@@ -181,19 +181,26 @@ export default function MvpCampaigns({ view: viewProp, embedded = false }: { vie
     production: cards.filter((c) => tabOf(c) === 'production').length,
     done: cards.filter((c) => tabOf(c) === 'done').length,
   }
-  const shown = tab === 'all' ? cards : cards.filter((c) => tabOf(c) === tab)
+  const shown = board === 'active' ? cards.filter((c) => tabOf(c) === 'live' || tabOf(c) === 'production') : board === 'history' ? cards.filter((c) => tabOf(c) === 'done') : tab === 'all' ? cards : cards.filter((c) => tabOf(c) === tab)
 
   const loading = clientLoading || saved === null
-  const empty = !loading && cards.length === 0 && !error
+  const empty = !loading && cards.length === 0 && !error && board !== 'active'
 
   return (
     <div style={embedded ? { fontFamily: "'Inter',system-ui,sans-serif", color: C.ink } : { fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
 
-      <div style={{ padding: embedded ? '8px 16px 0' : '16px 18px 0' }}>
+      <div style={{ padding: embedded ? '8px 16px 0' : '16px 18px 0', display: 'flex', flexDirection: 'column' }}>
         {/* The calendar is a row (owner 2026-09-11), where Orders used to be: tap it for the month
             view, tap again for the list. Orders keep their door on the More hub. */}
-        {!empty && !embedded && (
+        {board === 'active' && !embedded && (
+          <button type="button" onClick={() => router.push(`/dashboard/campaigns/history${client?.id ? `?clientId=${client.id}` : ''}`)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 2, borderRadius: 12, width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', order: 1 }}>
+            <Mark hue="mint" size={36} bare><Clock size={18} /></Mark>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink }}>Order history</span>
+            <ChevronRight size={17} color={C.faint} />
+          </button>
+        )}
+        {(board === 'active' || (!empty && !board)) && !embedded && (
           <button type="button" onClick={() => { if (viewProp) return; router.push(`/dashboard/campaigns/calendar${client?.id ? `?clientId=${client.id}` : ''}`) }} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 10, borderRadius: 12, width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
             <Mark hue="mint" size={36} bare>{view === 'calendar' ? <LayoutList size={18} /> : <CalendarDays size={18} />}</Mark>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink }}>{view === 'calendar' ? 'Campaigns' : 'Calendar'}</span>
@@ -220,7 +227,8 @@ export default function MvpCampaigns({ view: viewProp, embedded = false }: { vie
           <>
             {/* the same tabs Create's stages wear (owner 2026-09-11): a coloured outline each, the
                 picked one filled */}
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 16, padding: '2px 0' }}>
+            {board && <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '10px 2px 8px', order: 2 }}>{board === 'active' ? 'Active' : 'Ran'}</div>}
+            {!board && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 16, padding: '2px 0' }}>
               {([['all', 'All', '#2e9a78'], ['live', 'Live', '#17ad6b'], ['production', 'In progress', '#3b6fd4'], ['done', 'History', '#6a39de']] as const).map(([k, l, col]) => {
                 const on = tab === k
                 const n = k === 'all' ? undefined : counts[k]
@@ -230,9 +238,9 @@ export default function MvpCampaigns({ view: viewProp, embedded = false }: { vie
                   </button>
                 )
               })}
-            </div>
+            </div>}
             {shown.length === 0 ? (
-              <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5 }}>Nothing in this filter.</div>
+              <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5, order: 3 }}>{board === 'active' ? <>Nothing running right now.<br /><Link href={`/dashboard/plan${client?.id ? `?clientId=${client.id}` : ''}`} style={{ display: 'inline-block', marginTop: 8, color: C.greenDk, fontWeight: 700, textDecoration: 'none' }}>Plan ahead</Link></> : board === 'history' ? 'Nothing has run yet.' : 'Nothing in this filter.'}</div>
             ) : (
               <div className="cc-stagger" key={tab}>
                 {shown.map((c) => <CampaignCard key={c.key} c={c} />)}
