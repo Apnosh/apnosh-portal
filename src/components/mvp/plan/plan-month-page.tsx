@@ -13,8 +13,9 @@
  * funnel, the services: every piece by week, with its date and price, the receipt for the total.
  * Start makes it real; every paid piece is approved before it is charged.
  */
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Check, Loader2, X, Plus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Loader2, X, Plus } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, DRAW_CSS, type Scene } from '../create/drawings'
 import PlanCrowd, { type CrowdRing } from './plan-crowd'
@@ -64,6 +65,19 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const [subject, setSubject] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [day, setDay] = useState<string | null>(null)
+  const [drawer, setDrawer] = useState(false)
+  const [tab, setTab] = useState<'pieces' | 'days' | 'money'>('pieces')
+  /* the funnel fits the screen like Home: as tall as the room between the header and the
+     bottom block, never wider than the page */
+  const wrap = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ w: 398, h: 740 })
+  useEffect(() => {
+    const fit = () => { const el = wrap.current; if (!el) return; const w = el.clientWidth; const top = el.getBoundingClientRect().top; const room = window.innerHeight - top - 262; const h = Math.max(440, Math.min(room, w * H / W)); setBox({ w: Math.min(w, h * W / H), h: Math.min(h, w * H / W) }) }
+    fit(); window.addEventListener('resize', fit); const t = setTimeout(fit, 50); return () => { window.removeEventListener('resize', fit); clearTimeout(t) }
+  }, [data])
+  const dragY = useRef<number | null>(null)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const [started, setStarted] = useState<{ minted: number; errors: string[] } | null>(null)
   const qs = (o: Record<string, string | undefined>) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&')
   const load = (l = lean, d = drop, a = add, sub = subject) => fetch(`/api/dashboard/plan-month?${qs({ clientId, month: monthParam ?? undefined, lean: l, subject: sub ?? undefined, drop: d.join(',') || undefined, add: a.map((x) => `${x.kind}:${x.date ?? ''}`).join(',') || undefined })}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not read the month'); setData(j as Read); setLean((j as Read).month.lean); if ((j as Read).month.subject && subject == null) setSubject((j as Read).month.subject) }).catch((e) => setErr(e instanceof Error ? e.message : 'Could not read the month'))
@@ -105,7 +119,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   }
   const start = async () => { setBusy('start'); const j = await post({ action: 'start', lean, drop, add, subject }); if (j?.ok) { setStarted({ minted: j.minted, errors: j.errors ?? [] }); setConfirm(false); load() } setBusy(null) }
 
-  const h1: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: '-.04em', lineHeight: .95, margin: 0 }
+  const h1: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, letterSpacing: '-.04em', lineHeight: 1, margin: 0, whiteSpace: 'nowrap' }
   const k2: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, margin: '18px 0 0' }
   const cta: React.CSSProperties = { marginTop: 12, width: '100%', height: 52, borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 15, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', cursor: 'pointer', boxSizing: 'border-box' }
   const tile = (bg: string, dashed = false): React.CSSProperties => ({ borderRadius: 16, padding: '12px 6px 10px', textAlign: 'center', background: bg, border: dashed ? '1.5px dashed #c9c9d0' : 0, position: 'relative', font: 'inherit', color: C.ink, cursor: 'pointer' })
@@ -143,21 +157,9 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   /* the services, by week */
   const weeks = (() => { const g = new Map<string, Slot[]>(); for (const s of on) { const k = weekOf(s.date); g.set(k, [...(g.get(k) ?? []), s]) } return [...g.entries()].sort(([a], [b]) => a.localeCompare(b)) })()
 
-  return (
-    <div className="cr" style={{ padding: '4px 16px 40px', color: C.ink, maxWidth: 480, margin: '0 auto' }}>
-      <style>{DRAW_CSS}{`.pm-ring{cursor:pointer}@keyframes pm-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}.pm-in{animation:pm-in .24s cubic-bezier(.2,.7,.2,1)}@keyframes pm-flow{to{stroke-dashoffset:-16}}.pm-path{animation:pm-flow 1.6s linear infinite}@keyframes pm-pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}70%{transform:translate(-50%,-50%) scale(1.12)}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}.pm-bead{animation:pm-pop .5s cubic-bezier(.2,.7,.2,1) both}@keyframes pm-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.pm-num{animation:pm-up .6s cubic-bezier(.2,.7,.2,1) both}@media(prefers-reduced-motion:reduce){.pm-in,.pm-path,.pm-bead,.pm-num{animation:none}}`}</style>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 }}>
-        <h1 style={{ ...h1, minWidth: 0, flex: 1 }}>{title}
-          {editing
-            ? <input autoFocus defaultValue={m.subject ?? ''} placeholder="What is this month about? Fall menu, Halloween" maxLength={80} onBlur={(e) => saveSubject(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }} style={{ display: 'block', marginTop: 8, width: '100%', font: 'inherit', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, letterSpacing: 0, padding: '6px 10px', borderRadius: 10, border: `1px solid ${C.ink}`, color: C.ink, boxSizing: 'border-box' }} />
-            : <small onClick={() => setEditing(true)} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 8, letterSpacing: 0, fontFamily: 'inherit', lineHeight: 1.35, cursor: 'text' }}>{state === 'draft' ? <>{m.subject ?? m.thesis}<span style={{ color: C.faint }}> · edit</span></> : subtitle}</small>}
-        </h1>
-        <span style={{ textAlign: 'right', flex: 'none' }}><b style={{ display: 'block', fontSize: 20, letterSpacing: '-.03em' }}>{dollars(m.total)}</b><small style={{ fontSize: 11, color: C.mute, fontWeight: 600 }}>{state === 'done' ? 'billed' : state === 'on' ? 'as approved' : 'after approval'}</small></span>
-      </div>
-
-      {/* the funnel, drawn the way Home draws it */}
-      <div style={{ position: 'relative', width: '100%', aspectRatio: `${W} / ${H}`, margin: '2px 0 0' }}>
+  const funnel = (
+      <div ref={wrap} style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '2px 0 0' }}>
+      <div style={{ position: 'relative', width: box.w, height: box.h }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
           <path className={state === 'done' ? undefined : 'pm-path'} d={PATH} fill="none" stroke={HUE.aware} strokeOpacity=".45" strokeWidth="1.8" strokeDasharray="3 5" />
           {RING.map((p) => {
@@ -165,7 +167,6 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
             const act = actual?.[p.stage] ?? null
             const empty = state === 'draft' ? s?.add == null && s?.now == null : act == null
             const ratio = live && act != null && s?.planned ? Math.max(.25, Math.min(1.5, Math.sqrt(act / s.planned))) : null
-            /* the number's leader: a hairline from the number to the rim, ending in a dot (Home) */
             const nx = p.side === 'L' ? 150 : W - 150
             return (
               <g key={p.stage} className="pm-ring" onClick={() => setOpen(p.stage)}>
@@ -183,14 +184,15 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
         {RING.map((p, i) => { const s = stageOf[p.stage]; const c = HUE[p.stage]; const act = actual?.[p.stage] ?? null
           const big = state === 'draft' ? s?.now : act
           const chip = state === 'draft' ? (s?.add != null ? [`+${about(s.add)}`, c] : null) : state === 'on' ? (s?.planned != null ? [`of ${about(s.planned)}`, C.mute] : null) : (act != null && s?.planned ? [`${act >= s.planned ? '▲' : '▼'}${Math.round(Math.abs(act - s.planned) / s.planned * 100)}%`, act >= s.planned ? C.greenDk : '#c92d32'] : null)
+          const k = box.w / W
           return (
           <div key={p.stage} className="pm-num" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', [p.side === 'L' ? 'left' : 'right']: '3%', top: `${(p.cy - 34) / H * 100}%`, width: '37%', textAlign: p.side === 'R' ? 'right' : 'left', cursor: 'pointer', animationDelay: `${i * 90}ms` }}>
-            <div style={{ fontSize: 14, color: C.mute, fontWeight: 600, letterSpacing: '-.01em' }}>{s?.label ?? p.stage}</div>
+            <div style={{ fontSize: Math.round(14 * k), color: C.mute, fontWeight: 600, letterSpacing: '-.01em' }}>{s?.label ?? p.stage}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, justifyContent: p.side === 'R' ? 'flex-end' : 'flex-start', flexDirection: p.side === 'R' ? 'row-reverse' : 'row' }}>
-              <b style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 600, letterSpacing: '-.5px', color: big == null ? C.faint : C.ink, lineHeight: 1 }}>{big == null ? (state === 'draft' && s?.add != null ? `+${about(s.add)}` : '—') : fmt(big)}</b>
-              {chip && big != null && <span style={{ fontSize: 13, fontWeight: 700, color: chip[1], whiteSpace: 'nowrap' }}>{chip[0]}</span>}
+              <b style={{ fontFamily: DISPLAY, fontSize: Math.round(40 * k), fontWeight: 600, letterSpacing: '-.5px', color: big == null ? C.faint : C.ink, lineHeight: 1 }}>{big == null ? (state === 'draft' && s?.add != null ? `+${about(s.add)}` : '—') : fmt(big)}</b>
+              {chip && big != null && <span style={{ fontSize: Math.round(13 * k), fontWeight: 700, color: chip[1], whiteSpace: 'nowrap' }}>{chip[0]}</span>}
             </div>
-            <div style={{ fontSize: 11, color: C.mute, fontWeight: 600, marginTop: 4 }}>{state === 'draft' ? (s?.add != null ? `+${about(s.add)} ${s.unit} · estimate` : big != null ? 'nothing planned' : 'nothing planned') : state === 'on' ? `so far · ${s?.unit ?? ''}` : `the month · ${s?.unit ?? ''}`}</div>
+            <div style={{ fontSize: Math.round(11 * k), color: C.mute, fontWeight: 600, marginTop: 4 }}>{state === 'draft' ? (s?.add != null ? `+${about(s.add)} ${s.unit} · estimate` : 'nothing planned') : state === 'on' ? `so far · ${s?.unit ?? ''}` : `the month · ${s?.unit ?? ''}`}</div>
           </div>) })}
         {state !== 'done' && RING.slice(0, 4).map((p, i) => { const s = stageOf[p.stage]; if (!s?.lever) return null; const y = (p.cy + RING[i + 1].cy) / 2; return <span key={p.stage} className="pm-num" style={{ position: 'absolute', left: '50%', top: `${y / H * 100}%`, transform: 'translate(-50%,-50%)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap', maxWidth: '52%', overflow: 'hidden', textOverflow: 'ellipsis', animationDelay: `${300 + i * 90}ms` }}>{s.lever}</span> })}
         {state !== 'done' && RING.map((p, i) => {
@@ -199,75 +201,110 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
             <span key={b.kind} className="pm-bead" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', left: `${x / W * 100}%`, top: `${y / H * 100}%`, width: 28, height: 28, borderRadius: 99, background: '#fff', border: `1.6px solid ${HUE[p.stage]}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', ['--c2' as string]: HUE[p.stage], cursor: 'pointer', animationDelay: `${500 + i * 120 + j * 70}ms` }}><span style={{ width: 16, display: 'block' }}><Drawing spec={{ scene: SCENE[b.kind] }} now={b.status === 'done'} name="" rating="" t={(s) => s} /></span></span>) })
         })}
       </div>
+      </div>
+  )
 
-      <div style={{ fontSize: 12.5, color: C.mute, textAlign: 'center', marginTop: 4, lineHeight: 1.45 }}>{advice}</div>
-      {data.off && <div style={{ marginTop: 10, fontSize: 12.5, color: '#8a5a0c', fontWeight: 600, lineHeight: 1.45, textAlign: 'center' }}>The monthly plan is not switched on yet. The team has to run one update first. You can shape it; Start waits.</div>}
+  const row = (s: Slot | null, label: string, sub: string, cents: number, stage: Stage, kind: Kind, canDrop: boolean) => (
+    <div key={s?.id ?? `${kind}:${label}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}>
+      <span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE[stage] }}><Drawing spec={{ scene: SCENE[kind] }} now={s?.status === 'done'} name="" rating="" t={(x) => x} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>{label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{sub}</small></span>
+      {s && chip(s)}
+      <span style={{ fontSize: 12.5, color: cents ? C.ink : C.mute, fontWeight: 700, width: 46, textAlign: 'right' }}>{cents ? dollars(cents) : 'Free'}</span>
+      {canDrop && s && <button type="button" aria-label="Take it off" disabled={busy != null} onClick={() => dropSlot(s)} style={{ width: 24, height: 24, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer', flex: 'none' }}>{busy === (s.id ?? '') ? <Loader2 size={10} className="mvp-spin" /> : <X size={11} />}</button>}
+    </div>
+  )
+  const allMonth = (s: Slot) => s.kind === 'taste' || s.kind === 'review' || s.kind === 'team'
+  const prevMonth = (mm: string) => { const [y, mo] = mm.split('-').map(Number); return `${mo === 1 ? y - 1 : y}-${String(mo === 1 ? 12 : mo - 1).padStart(2, '0')}` }
+  const go = (mm: string) => { window.location.href = `/dashboard/plan?clientId=${clientId}&month=${mm}` }
+
+  return (
+    <div className="cr" style={{ padding: '4px 16px 84px', color: C.ink, maxWidth: 480, margin: '0 auto' }}>
+      <style>{DRAW_CSS}{`.pm-ring{cursor:pointer}@keyframes pm-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}.pm-in{animation:pm-in .24s cubic-bezier(.2,.7,.2,1)}@keyframes pm-flow{to{stroke-dashoffset:-16}}.pm-path{animation:pm-flow 1.6s linear infinite}@keyframes pm-pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}70%{transform:translate(-50%,-50%) scale(1.12)}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}.pm-bead{animation:pm-pop .5s cubic-bezier(.2,.7,.2,1) both}@keyframes pm-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.pm-num{animation:pm-up .6s cubic-bezier(.2,.7,.2,1) both}.pm-drawer{transition:transform .32s cubic-bezier(.2,.7,.2,1)}.pm-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}.pm-chips::-webkit-scrollbar{display:none}@media(prefers-reduced-motion:reduce){.pm-in,.pm-path,.pm-bead,.pm-num{animation:none}.pm-drawer{transition:none}}`}</style>
+
+      {/* the month you are in, and the ones either side */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 2, gap: 8 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button type="button" aria-label="The month before" onClick={() => go(prevMonth(m.month))} style={{ width: 28, height: 28, border: 0, background: 'none', color: C.faint, display: 'grid', placeItems: 'center', cursor: 'pointer', marginLeft: -8 }}><ChevronLeft size={20} /></button>
+            <h1 style={h1}>{title}</h1>
+            <button type="button" aria-label="The month after" onClick={() => go(monthAfter(m.month))} style={{ width: 28, height: 28, border: 0, background: 'none', color: C.faint, display: 'grid', placeItems: 'center', cursor: 'pointer' }}><ChevronRight size={20} /></button>
+          </div>
+          {editing
+            ? <input autoFocus defaultValue={m.subject ?? ''} placeholder="What is this month about? Fall menu, Halloween" maxLength={80} onBlur={(e) => saveSubject(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }} style={{ display: 'block', marginTop: 6, width: '100%', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '6px 10px', borderRadius: 10, border: `1px solid ${C.ink}`, color: C.ink, boxSizing: 'border-box' }} />
+            : <small onClick={() => setEditing(true)} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 4, lineHeight: 1.35, cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{state === 'draft' ? <>{m.subject ?? m.thesis}<span style={{ color: C.faint }}> · edit</span></> : subtitle}</small>}
+        </div>
+        <button type="button" onClick={() => { setTab('money'); setDrawer(true) }} style={{ textAlign: 'right', flex: 'none', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', padding: 0 }}><b style={{ display: 'block', fontSize: 20, letterSpacing: '-.03em' }}>{dollars(m.total)}</b><small style={{ fontSize: 11, color: C.mute, fontWeight: 600 }}>{state === 'done' ? 'billed' : state === 'on' ? 'as approved' : 'after approval'}</small></button>
+      </div>
+
+      {funnel}
+
+      {/* one line of what you get, one line of what it needs, the lean, and Start */}
+      <div className="pm-chips" style={{ marginTop: 6 }}>
+        {getting.map(([n, w, k]) => <span key={w} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '5px 9px 5px 5px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 20, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}
+        {m.creator && on.some((x) => x.kind === 'creator') && <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 99, background: '#f6f6f8' }}>{m.creator.name.split(' ')[0]}</span>}
+      </div>
+      <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{advice}{needs.length > 0 && state === 'draft' ? <> Needs you {needs.length} times.</> : null}</div>
+      {data.off && <div style={{ marginTop: 8, fontSize: 12.5, color: '#8a5a0c', fontWeight: 600, lineHeight: 1.45, textAlign: 'center' }}>The monthly plan is not switched on yet. The team has to run one update first.</div>}
       {state === 'draft' && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          {([['seen', 'Seen'], ['asis', 'As is'], ['in', 'In']] as [Lean, string][]).map(([k, l]) => <button key={k} type="button" disabled={busy != null} onClick={() => relean(k)} style={{ flex: 1, textAlign: 'center', fontSize: 12.5, fontWeight: 800, padding: '10px 0', borderRadius: 99, border: `1.5px solid ${lean === k ? C.ink : C.line}`, background: lean === k ? C.ink : '#fff', color: lean === k ? '#fff' : C.ink, font: 'inherit', cursor: 'pointer' }}>{busy === 'lean' && lean === k ? <Loader2 size={12} className="mvp-spin" /> : l}</button>)}
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          {([['seen', 'Seen'], ['asis', 'As is'], ['in', 'In']] as [Lean, string][]).map(([k, l]) => <button key={k} type="button" disabled={busy != null} onClick={() => relean(k)} style={{ flex: 1, textAlign: 'center', fontSize: 12.5, fontWeight: 800, padding: '9px 0', borderRadius: 99, border: `1.5px solid ${lean === k ? C.ink : C.line}`, background: lean === k ? C.ink : '#fff', color: lean === k ? '#fff' : C.ink, font: 'inherit', cursor: 'pointer' }}>{busy === 'lean' && lean === k ? <Loader2 size={12} className="mvp-spin" /> : l}</button>)}
         </div>
       )}
-      {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10, textAlign: 'center' }}>{err}</div>}
-      {started && <div className="pm-in" style={{ marginTop: 12, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date. Every paid piece waits for your OK.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
-      {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
-        : state === 'on' ? <a href={`/dashboard/campaigns?clientId=${clientId}`} style={{ ...cta, textDecoration: 'none' }}><span>See it on Coming up</span><ArrowRight size={18} /></a>
-        : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><ArrowRight size={18} /></button>}
+      {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 8, textAlign: 'center' }}>{err}</div>}
+      {started && <div className="pm-in" style={{ marginTop: 10, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date. Every paid piece waits for your OK.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
+      {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, marginTop: 10, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
+        : state === 'on' ? <a href={`/dashboard/campaigns?clientId=${clientId}`} style={{ ...cta, marginTop: 10, textDecoration: 'none' }}><span>See it on Coming up</span><ArrowRight size={18} /></a>
+        : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, marginTop: 10, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><ArrowRight size={18} /></button>}
 
-      {state === 'draft' && <div style={{ fontSize: 11.5, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>{MONTH_NAME(monthAfter(m.month))} drafts itself near the end of {name}. Nothing starts without you.</div>}
-
-      {/* what you get: the month as deliverables */}
-      <div style={k2}>What you get</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-        {getting.map(([n, w, k]) => <span key={w} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '6px 10px 6px 6px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 22, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}
-      </div>
-
-      {/* what we need from you: the owner's side of the deal */}
-      {needs.length > 0 && <>
-        <div style={k2}>What we need from you</div>
-        {needs.map(([t, d], i) => <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 22, height: 22, borderRadius: 99, background: C.greenSoft, color: C.greenDk, display: 'grid', placeItems: 'center', flex: 'none', fontSize: 11, fontWeight: 800 }}>{i + 1}</span><span>{t}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{d}</small></span></div>)}
-      </>}
-
-      {/* the days: one month, a dot per piece, coloured by the ring it pushes */}
-      <div style={k2}>The days</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginTop: 8, textAlign: 'center' }}>
-        {WD.map((w) => <span key={w} style={{ fontSize: 10, fontWeight: 700, color: C.faint, padding: '2px 0' }}>{w[0]}</span>)}
-        {Array.from({ length: dt(`${m.month}-01`).getDay() }).map((_, i) => <span key={`b${i}`} />)}
-        {Array.from({ length: data.days }).map((_, i) => { const iso = `${m.month}-${String(i + 1).padStart(2, '0')}`; const here = on.filter((x) => x.date === iso && !(x.kind === 'taste' || x.kind === 'review' || x.kind === 'team')); const sel = day === iso; const past = state !== 'draft' && i + 1 <= data.elapsed; return (
-          <button key={iso} type="button" onClick={() => setDay(sel ? null : iso)} style={{ font: 'inherit', border: 0, background: sel ? C.ink : 'transparent', color: sel ? '#fff' : past ? C.faint : C.ink, borderRadius: 10, padding: '4px 0 3px', cursor: 'pointer', minHeight: 36 }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>{i + 1}</span>
-            <span style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 3, height: 5 }}>{here.slice(0, 4).map((x, j) => <span key={j} style={{ width: 5, height: 5, borderRadius: 99, background: sel ? '#fff' : HUE[x.stage], opacity: x.kind === 'post' ? .45 : 1 }} />)}</span>
-          </button>) })}
-      </div>
-      {day && (() => { const here = on.filter((x) => x.date === day); return <div className="pm-in" style={{ marginTop: 8, fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 12, background: '#f6f6f8' }}>{niceDate(day)}: {here.length ? here.map((x) => x.kind === 'post' ? 'a post' : x.label).join(', ') : 'nothing planned'}</div> })()}
-
-      {/* the services, by week: the receipt for the total */}
-      <div style={k2}>{state === 'draft' ? 'In the month' : state === 'on' ? 'The month' : 'What ran'}</div>
-      {weeks.map(([wk, rows]) => {
-        const posts = rows.filter((s) => s.kind === 'post'); const rest = rows.filter((s) => s.kind !== 'post')
-        const ds = rows.map((s) => s.date).sort(); const a = dt(ds[0]), b = dt(ds[ds.length - 1]); const label = a.getDate() === b.getDate() ? `${MO[a.getMonth()]} ${a.getDate()}` : `${MO[a.getMonth()]} ${a.getDate()} to ${b.getDate()}`
-        const allMonth = (s: Slot) => s.kind === 'taste' || s.kind === 'review' || s.kind === 'team'
-        return (
-          <div key={wk} style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, padding: '6px 0 2px' }}>{label}</div>
-            {posts.length > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE.aware }}><Drawing spec={{ scene: 'post' }} name="" rating="" t={(s) => s} /></span><span style={{ flex: 1, minWidth: 0 }}>{posts.length} post{posts.length === 1 ? '' : 's'}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{posts.map((p) => WD[dt(p.date).getDay()]).join(' · ')}</small></span>{chip(posts[0])}<span style={{ fontSize: 12.5, color: C.mute, fontWeight: 600, width: 46, textAlign: 'right' }}>Free</span></div>}
-            {rest.map((s) => (
-              <div key={s.id ?? `${s.kind}:${s.date}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}>
-                <span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE[s.stage] }}><Drawing spec={{ scene: SCENE[s.kind] }} now={s.status === 'done'} name="" rating="" t={(x) => x} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>{s.label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{allMonth(s) ? 'All month' : niceDate(s.date)}{s.why ? ` · ${s.why}` : ''}</small></span>
-                {chip(s)}
-                <span style={{ fontSize: 12.5, color: s.cents ? C.ink : C.mute, fontWeight: 700, width: 46, textAlign: 'right' }}>{s.cents ? dollars(s.cents) : 'Free'}</span>
-                {s.status === 'planned' && <button type="button" aria-label="Take it off" disabled={busy != null} onClick={() => dropSlot(s)} style={{ width: 24, height: 24, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer', flex: 'none' }}>{busy === (s.id ?? '') ? <Loader2 size={10} className="mvp-spin" /> : <X size={11} />}</button>}
-              </div>
-            ))}
+      {/* the drawer: pieces, days, money. Rests on the bottom edge; pull it up. Portaled to the
+         body so 'fixed' means the screen, not the shell's transformed frame. */}
+      {mounted && createPortal(<>
+      {drawer && <div onClick={() => setDrawer(false)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(20,22,26,.25)' }} />}
+      <div className="pm-drawer" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 71, display: 'flex', justifyContent: 'center', transform: drawer ? 'none' : 'translateY(calc(100% - 64px))', pointerEvents: 'none' }}>
+        <div className="cr" style={{ width: '100%', maxWidth: 480, height: '76dvh', background: '#fff', borderRadius: '22px 22px 0 0', boxShadow: '0 -8px 30px rgba(0,0,0,.10)', display: 'flex', flexDirection: 'column', pointerEvents: 'auto', boxSizing: 'border-box' }}
+          onTouchStart={(e) => { dragY.current = e.touches[0].clientY }} onTouchEnd={(e) => { const y0 = dragY.current; dragY.current = null; if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; if (dy < -30) setDrawer(true); else if (dy > 30) setDrawer(false) }}>
+          <style>{DRAW_CSS}</style>
+          <button type="button" onClick={() => setDrawer((v) => !v)} aria-label={drawer ? 'Close' : 'Open'} style={{ border: 0, background: 'none', padding: '8px 0 0', cursor: 'pointer', width: '100%' }}><span style={{ display: 'block', width: 38, height: 4, borderRadius: 99, background: '#d9d9de', margin: '0 auto' }} /></button>
+          <div style={{ display: 'flex', gap: 4, padding: '8px 14px 8px', background: '#f2f2f5', margin: '6px 16px 0', borderRadius: 12 }}>
+            {([['pieces', 'Pieces'], ['days', 'Days'], ['money', 'Money']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setDrawer(true) }} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 0', borderRadius: 9, border: 0, background: tab === k ? '#fff' : 'transparent', color: tab === k ? C.ink : C.mute, boxShadow: tab === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
           </div>
-        )
-      })}
-      {/* the money: against the budget, by kind, and when each is paid */}
-      <div style={k2}>The money</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}><b style={{ fontFamily: DISPLAY, fontSize: 28, letterSpacing: '-.03em', fontWeight: 600 }}>{dollars(m.total)}</b>{m.budgetCents ? <span style={{ fontSize: 12.5, color: m.total > m.budgetCents ? '#c92d32' : C.mute, fontWeight: 700 }}>of your {dollars(m.budgetCents)} a month</span> : null}</div>
-      {m.budgetCents ? <div style={{ height: 6, borderRadius: 99, background: '#eeeef1', marginTop: 8, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, m.total / m.budgetCents * 100)}%`, height: '100%', background: m.total > m.budgetCents ? '#c92d32' : C.greenDk, borderRadius: 99 }} /></div> : null}
-      {byKind.map(([label, cents, when]) => <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ flex: 1 }}>{label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{when}</small></span><span style={{ fontWeight: 700 }}>{dollars(cents)}</span></div>)}
-      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Posts, the taste, the review ask and the team card are free. Nothing is charged today; each paid piece is approved before it is charged.</div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px calc(24px + env(safe-area-inset-bottom))', overscrollBehavior: 'contain' }}>
+            {tab === 'pieces' && weeks.map(([wk, rows]) => {
+              const posts = rows.filter((s) => s.kind === 'post'); const rest = rows.filter((s) => s.kind !== 'post')
+              const ds = rows.map((s) => s.date).sort(); const a = dt(ds[0]), b = dt(ds[ds.length - 1]); const label = a.getDate() === b.getDate() ? `${MO[a.getMonth()]} ${a.getDate()}` : `${MO[a.getMonth()]} ${a.getDate()} to ${b.getDate()}`
+              return (
+                <div key={wk} style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, padding: '6px 0 2px' }}>{label}</div>
+                  {posts.length > 0 && row(posts[0], `${posts.length} post${posts.length === 1 ? '' : 's'}`, posts.map((p) => WD[dt(p.date).getDay()]).join(' · '), 0, 'aware', 'post', false)}
+                  {rest.map((s) => row(s, s.label, `${allMonth(s) ? 'All month' : niceDate(s.date)}${s.why ? ` · ${s.why}` : ''}`, s.cents, s.stage, s.kind, s.status === 'planned'))}
+                </div>
+              )
+            })}
+            {tab === 'pieces' && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 14, fontWeight: 800 }}><span>{name}</span><span>{dollars(m.total)}</span></div>}
+            {tab === 'days' && <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginTop: 10, textAlign: 'center' }}>
+                {WD.map((w) => <span key={w} style={{ fontSize: 10, fontWeight: 700, color: C.faint, padding: '2px 0' }}>{w[0]}</span>)}
+                {Array.from({ length: dt(`${m.month}-01`).getDay() }).map((_, i) => <span key={`b${i}`} />)}
+                {Array.from({ length: data.days }).map((_, i) => { const iso = `${m.month}-${String(i + 1).padStart(2, '0')}`; const here = on.filter((x) => x.date === iso && !allMonth(x)); const sel = day === iso; const past = state !== 'draft' && i + 1 <= data.elapsed; return (
+                  <button key={iso} type="button" onClick={() => setDay(sel ? null : iso)} style={{ font: 'inherit', border: 0, background: sel ? C.ink : 'transparent', color: sel ? '#fff' : past ? C.faint : C.ink, borderRadius: 10, padding: '6px 0 5px', cursor: 'pointer', minHeight: 44 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, lineHeight: 1 }}>{i + 1}</span>
+                    <span style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 4, height: 5 }}>{here.slice(0, 4).map((x, j) => <span key={j} style={{ width: 5, height: 5, borderRadius: 99, background: sel ? '#fff' : HUE[x.stage], opacity: x.kind === 'post' ? .45 : 1 }} />)}</span>
+                  </button>) })}
+              </div>
+              {day ? (() => { const here = on.filter((x) => x.date === day); return <div className="pm-in" style={{ marginTop: 10 }}><div style={{ fontSize: 12, fontWeight: 700, color: C.mute, padding: '6px 0 2px' }}>{niceDate(day)}</div>{here.length ? here.map((s) => row(s, s.kind === 'post' ? 'A post' : s.label, s.why ?? (allMonth(s) ? 'All month' : ''), s.cents, s.stage, s.kind, s.status === 'planned' && s.kind !== 'post')) : <div style={{ fontSize: 13, color: C.mute, padding: '8px 0' }}>Nothing planned. Tap a ring to add something.</div>}</div> })() : <div style={{ fontSize: 12, color: C.mute, marginTop: 10, textAlign: 'center' }}>A dot per piece, in the colour of the ring it pushes. Tap a day.</div>}
+              {state === 'on' && <div style={{ fontSize: 12, color: C.mute, marginTop: 12, textAlign: 'center' }}>These are on your Calendar too.</div>}
+            </>}
+            {tab === 'money' && <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 12 }}><b style={{ fontFamily: DISPLAY, fontSize: 28, letterSpacing: '-.03em', fontWeight: 600 }}>{dollars(m.total)}</b>{m.budgetCents ? <span style={{ fontSize: 12.5, color: m.total > m.budgetCents ? '#c92d32' : C.mute, fontWeight: 700 }}>of your {dollars(m.budgetCents)} a month</span> : null}</div>
+              {m.budgetCents ? <div style={{ height: 6, borderRadius: 99, background: '#eeeef1', marginTop: 8, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, m.total / m.budgetCents * 100)}%`, height: '100%', background: m.total > m.budgetCents ? '#c92d32' : C.greenDk, borderRadius: 99 }} /></div> : null}
+              {byKind.map(([label, cents, when]) => <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ flex: 1 }}>{label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{when}</small></span><span style={{ fontWeight: 700 }}>{dollars(cents)}</span></div>)}
+              <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Posts, the taste, the review ask and the team card are free. Nothing is charged today; each paid piece is approved before it is charged.</div>
+              {state === 'draft' && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>{MONTH_NAME(monthAfter(m.month))} drafts itself near the end of {name}. Nothing starts without you.</div>}
+            </>}
+          </div>
+        </div>
+      </div>
+      </>, document.body)}
 
       {/* a ring, tapped */}
       {open && (() => {
@@ -326,7 +363,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
 
       {confirm && (
         <div role="dialog" aria-modal="true" onClick={() => setConfirm(false)} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(20,22,26,.42)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div className="cr pm-in" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink }}>
+          <div className="cr pm-in" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '90dvh', overflowY: 'auto', background: '#fff', borderRadius: '24px 24px 0 0', padding: '10px 18px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box', color: C.ink }}>
             <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
             <div style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', margin: '4px 2px 12px' }}>Start {name}</div>
             {[
@@ -335,7 +372,11 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
               on.some((s) => s.kind === 'post') ? [`${on.filter((s) => s.kind === 'post').length} posts are ordered`, 'Written from the shoot. Each one waits for your OK.'] : null,
               on.some((s) => s.kind === 'graphic' || s.kind === 'reel' || s.kind === 'print') ? ['Graphics and Reels follow', 'Each becomes a request a week before its date.'] : null,
               ['Nothing is charged today', 'Every paid piece is approved first.'],
-            ].filter(Boolean).map((r, i) => <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600 }}><Check size={16} color={C.greenDk} style={{ flex: 'none', marginTop: 2 }} /><span>{r![0]}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 12, marginTop: 2 }}>{r![1]}</small></span></div>)}
+            ].filter(Boolean).map((r, i) => <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600 }}><Check size={16} color={C.greenDk} style={{ flex: 'none', marginTop: 2 }} /><span>{r![0]}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 12, marginTop: 2 }}>{r![1]}</small></span></div>)}
+            {needs.length > 0 && <>
+              <div style={{ ...k2, margin: '14px 0 2px' }}>What we need from you</div>
+              {needs.map(([t, d], i) => <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 22, height: 22, borderRadius: 99, background: C.greenSoft, color: C.greenDk, display: 'grid', placeItems: 'center', flex: 'none', fontSize: 11, fontWeight: 800 }}>{i + 1}</span><span>{t}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{d}</small></span></div>)}
+            </>}
             <button type="button" disabled={busy != null} onClick={start} style={{ ...cta, justifyContent: 'center', gap: 8 }}>{busy === 'start' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} Start {name}, {dollars(m.total)} after approval</button>
             <button type="button" onClick={() => setConfirm(false)} style={{ ...cta, justifyContent: 'center', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>Not yet</button>
           </div>

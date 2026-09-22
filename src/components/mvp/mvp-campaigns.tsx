@@ -190,6 +190,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
       <style>{ANIM}</style>
 
       <div style={{ padding: '16px 18px 0' }}>
+        {client?.id && !loading && <MonthCard clientId={client.id} />}
         {/* The calendar is a row (owner 2026-09-11), where Orders used to be: tap it for the month
             view, tap again for the list. Orders keep their door on the More hub. */}
         {!empty && (
@@ -401,6 +402,43 @@ function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {
   )
 }
 
+
+/* ── The month (owner 2026-09-21): the door to the monthly plan from the Campaigns tab.
+   Reads the plan-month route once for the state line; the little funnel is drawn here in the
+   five stage colours so the card looks like what it opens. ── */
+function MonthCard({ clientId }: { clientId: string }) {
+  const router = useRouter()
+  const [st, setSt] = useState<{ month: string; status: string; total: number; thesis: string; elapsed: number; days: number; adds: number; subject: string | null } | null>(null)
+  useEffect(() => {
+    fetch(`/api/dashboard/plan-month?clientId=${clientId}`, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).then((j) => {
+      if (!j?.month) return
+      const m = j.month as { month: string; status: string; total: number; thesis: string; subject: string | null; stages: { add: number | null }[] }
+      setSt({ month: m.month, status: m.status, total: m.total, thesis: m.thesis, subject: m.subject, elapsed: j.elapsed ?? 0, days: j.days ?? 30, adds: (m.stages ?? []).filter((x) => x.add).length })
+    }).catch(() => {})
+  }, [clientId])
+  const name = st ? new Date(st.month + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' }) : 'Next month'
+  const on = st?.status === 'started'
+  const line = !st ? 'Every post, shoot and creator visit, one month at a time.' : on ? `Day ${st.elapsed} of ${st.days}. ${st.subject ?? st.thesis}` : `${st.subject ?? st.thesis} · $${Math.round(st.total / 100).toLocaleString()} after approval`
+  const HUES5 = ['#2e9a78', '#3b6fd4', '#6a39de', '#d99a1e', '#0f97a8']
+  return (
+    <button type="button" onClick={() => router.push(`/dashboard/plan?clientId=${clientId}`)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left', border: 0, font: 'inherit', cursor: 'pointer', marginBottom: 14, padding: '14px 14px 14px 12px', borderRadius: 18, background: 'linear-gradient(135deg, #f2faf6, #eef3fb)', boxShadow: CARD_SHADOW, color: C.ink }}>
+      <svg width="58" height="58" viewBox="0 0 58 58" aria-hidden style={{ flex: 'none' }}>
+        <path d="M38 9 C38 22 18 18 18 29 C18 40 38 36 38 49" fill="none" stroke="#2e9a78" strokeOpacity=".5" strokeWidth="1.4" strokeDasharray="2 3" />
+        {[[38, 9, 8.5], [18, 19, 7], [38, 29, 6], [18, 39, 5.2], [38, 49, 4.6]].map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill="#fff" stroke={HUES5[i]} strokeWidth="1.4" strokeDasharray={on ? undefined : '2.5 2.5'} />)}
+        {[[38, 9, 2.6], [18, 19, 2.2], [38, 29, 1.9], [18, 39, 1.6]].map(([x, y, u], i) => <g key={i}><circle cx={x} cy={y - u * .74} r={u * .46} fill={HUES5[i]} opacity=".9" /><path d={`M${x - u * .6} ${y + u * .92} Q${x - u * .7} ${y + u * .02} ${x} ${y - u * .16} Q${x + u * .7} ${y + u * .02} ${x + u * .6} ${y + u * .92} Z`} fill={HUES5[i]} /></g>)}
+      </svg>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, letterSpacing: '-.01em' }}>{on ? `${name}, on` : `Plan ${name}`}</span>
+          {st && !on && st.adds > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.04em', padding: '2px 7px', borderRadius: 99, background: C.greenSoft, color: C.greenDk }}>DRAFT READY</span>}
+          {on && <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.04em', padding: '2px 7px', borderRadius: 99, background: C.greenSoft, color: C.greenDk }}>ON</span>}
+        </span>
+        <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</span>
+      </span>
+      <ChevronRight size={18} color={C.faint} style={{ flex: 'none' }} />
+    </button>
+  )
+}
 
 /* ── Occasions coming up (GD-3) ──────────────────────────────────────────────
    Pure client-side date math (occasions.ts); shows nothing when no occasion is
