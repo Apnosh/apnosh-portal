@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, saveMonth, type Edits, type Lean, type SlotKind, type Month } from '@/lib/plan/month'
+import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,18 +38,25 @@ export async function GET(req: NextRequest) {
   const month = monthOk(sp.get('month')) ? sp.get('month')! : nextMonth()
   const saved = off ? null : await loadMonth(admin, clientId, month)
   const edits = parseEdits({ lean: sp.get('lean') ?? undefined, subject: sp.get('subject') ?? undefined, drop: sp.get('drop') ?? undefined, add: sp.get('add') ?? undefined })
+  const pre: Pre | null = off ? null : await preload(admin, clientId)
   let m: Month
   if (saved && saved.status !== 'draft') m = saved
   else {
     /* a fresh draft, re-drawn with the lean when it changes (the lean shapes the slots) */
-    const base = await draftMonth(admin, clientId, month, edits.lean ?? saved?.lean ?? 'asis', undefined, edits.subject ?? saved?.subject ?? null)
+    const base = await draftMonth(admin, clientId, month, edits.lean ?? saved?.lean ?? 'asis', undefined, edits.subject ?? saved?.subject ?? null, pre ?? undefined)
     m = applyEdits(base, { drop: edits.drop, add: edits.add })
   }
   const actual = m.status === 'started' || m.status === 'done' ? await loadActual(clientId, month) : null
+  /* the season: this month and the two after it, each with its occasions, so the holidays are in view */
+  const season = await Promise.all([month, nextOf(month), nextOf(nextOf(month))].map(async (mm) => {
+    const sv = mm === month ? m : off ? null : (await loadMonth(admin, clientId, mm)) ?? (await draftMonth(admin, clientId, mm, 'asis', undefined, null, pre ?? undefined))
+    return { month: mm, status: sv?.status ?? 'draft', total: sv?.total ?? 0, subject: sv?.subject ?? null, pieces: (sv?.slots ?? []).filter((x) => x.kind !== 'post' && x.status !== 'removed').length, occasions: occasionsIn(mm) }
+  }))
+  const rhythm = pre ? await loadRhythm(admin, clientId, pre.facts) : null
   const days = (() => { const [y, mo] = month.split('-').map(Number); return new Date(Date.UTC(y, mo, 0)).getUTCDate() })()
   const today = new Date().toISOString().slice(0, 10)
   const elapsed = today < `${month}-01` ? 0 : Math.min(days, Number(today.slice(8, 10)) + (today.slice(0, 7) > month ? days : 0))
-  return NextResponse.json({ month: strip(m), off, actual, elapsed, days, next: nextMonth() }, { headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json({ month: strip(m), off, actual, elapsed, days, next: nextMonth(), season, rhythm: rhythm?.rhythm ?? m.rhythm, rhythmSet: rhythm?.set ?? false }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(req: NextRequest) {
@@ -77,6 +84,12 @@ export async function POST(req: NextRequest) {
     const m = applyEdits(await draftMonth(admin, clientId, month, edits.lean ?? 'asis', undefined, edits.subject ?? null), { drop: edits.drop, add: edits.add })
     const id = await saveMonth(admin, clientId, access.userId, m, 'draft')
     return NextResponse.json({ ok: !!id, month: strip(m) })
+  }
+  if (body.action === 'rhythm') {
+    const pre = await preload(admin, clientId)
+    const r = await saveRhythm(admin, clientId, (body as { rhythm?: Record<string, unknown> }).rhythm ?? {}, pre.facts)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: 503 })
+    return NextResponse.json({ ok: true })
   }
   if (body.action === 'subject') {
     const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 80) || null : null

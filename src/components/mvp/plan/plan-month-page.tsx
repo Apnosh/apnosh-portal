@@ -27,7 +27,9 @@ interface Slot { id?: string; date: string; stage: Stage; kind: Kind; label: str
 interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; add: number | null; basis: string | null; unit: string; lever: string | null; levers: string[] }
 interface Tile { kind: Kind; stage: Stage; label: string; cents: number; date: string; why: string | null }
 interface Month { month: string; status: string; thesis: string; subject: string | null; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: { usualReach: number | null; reelLift: number | null; reviews30: number | null; budgetCents: number | null; locations: number }; tiles: Tile[] }
-interface Read { month: Month; off: boolean; actual: Record<Stage, number | null> | null; elapsed: number; days: number; next: string }
+interface Rhythm { posts_week: number; graphics_week: number; reels_month: number; shoots_month: number; creator_quarter: number }
+interface SeasonMonth { month: string; status: string; total: number; subject: string | null; pieces: number; occasions: { id: string; name: string; emoji: string; date: string }[] }
+interface Read { month: Month; off: boolean; actual: Record<Stage, number | null> | null; elapsed: number; days: number; next: string; season: SeasonMonth[]; rhythm: Rhythm; rhythmSet: boolean }
 
 const HUE: Record<Stage, string> = { aware: '#2e9a78', interest: '#3b6fd4', action: '#6a39de', order: '#d99a1e', keep: '#0f97a8' }
 const SCENE: Record<Kind, Scene> = { post: 'post', graphic: 'graphic', reel: 'reel', photos: 'photos', creator: 'creator', boost: 'boost', print: 'print', offer: 'offer', review: 'review', taste: 'dish', sign: 'sticky', team: 'grid' }
@@ -66,7 +68,8 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const [editing, setEditing] = useState(false)
   const [day, setDay] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
-  const [tab, setTab] = useState<'pieces' | 'days' | 'money'>('pieces')
+  const [tab, setTab] = useState<'pieces' | 'days' | 'money' | 'rhythm'>('pieces')
+  const [rh, setRh] = useState<Rhythm | null>(null)
   /* the funnel fits the screen like Home: as tall as the room between the header and the
      bottom block, never wider than the page */
   const wrap = useRef<HTMLDivElement>(null)
@@ -98,6 +101,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
     if (live) { setBusy('subject'); await post({ action: 'subject', subject: sub }); setBusy(null); return }
     setBusy('subject'); await load(lean, drop, add, sub); setBusy(null)
   }
+  const saveRhythm = async (r: Rhythm) => { setRh(r); setBusy('rhythm'); const j = await post({ action: 'rhythm', rhythm: r }); if (j?.ok) await load(); setBusy(null) }
   const relean = (l: Lean) => { setLean(l); setBusy('lean'); load(l, drop, add).finally(() => setBusy(null)) }
   const dropSlot = async (s: Slot) => {
     if (live) { setBusy(s.id ?? ''); await post({ action: 'drop', key: s.id ?? `${s.kind}:${s.date}` }); setBusy(null); return }
@@ -197,7 +201,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
         {state !== 'done' && RING.slice(0, 4).map((p, i) => { const s = stageOf[p.stage]; if (!s?.lever) return null; const y = (p.cy + RING[i + 1].cy) / 2; return <span key={p.stage} className="pm-num" style={{ position: 'absolute', left: '50%', top: `${y / H * 100}%`, transform: 'translate(-50%,-50%)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap', maxWidth: '52%', overflow: 'hidden', textOverflow: 'ellipsis', animationDelay: `${300 + i * 90}ms` }}>{s.lever}</span> })}
         {state !== 'done' && RING.map((p, i) => {
           const beads = on.filter((s) => s.stage === p.stage).reduce<Slot[]>((acc, s) => (acc.some((x) => x.kind === s.kind) ? acc : [...acc, s]), []).slice(0, 4)
-          return beads.map((b, j) => { const ang = -Math.PI * .75 + j * (Math.PI * .5); const x = p.cx + Math.cos(ang) * p.r * .98, y = p.cy + Math.sin(ang) * p.r * .98; return (
+          return beads.map((b, j) => { /* on the ring's OUTER side, clear of the levers in the middle and the number opposite */ const right = p.cx > W / 2; const deg = right ? [-55, 5, 65, 125][j] : [235, 175, 115, 55][j]; const ang = deg * Math.PI / 180; const x = p.cx + Math.cos(ang) * p.r * .98, y = p.cy + Math.sin(ang) * p.r * .98; return (
             <span key={b.kind} className="pm-bead" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', left: `${x / W * 100}%`, top: `${y / H * 100}%`, width: 28, height: 28, borderRadius: 99, background: '#fff', border: `1.6px solid ${HUE[p.stage]}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', ['--c2' as string]: HUE[p.stage], cursor: 'pointer', animationDelay: `${500 + i * 120 + j * 70}ms` }}><span style={{ width: 16, display: 'block' }}><Drawing spec={{ scene: SCENE[b.kind] }} now={b.status === 'done'} name="" rating="" t={(s) => s} /></span></span>) })
         })}
       </div>
@@ -236,6 +240,17 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
         <button type="button" onClick={() => { setTab('money'); setDrawer(true) }} style={{ textAlign: 'right', flex: 'none', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', padding: 0 }}><b style={{ display: 'block', fontSize: 20, letterSpacing: '-.03em' }}>{dollars(m.total)}</b><small style={{ fontSize: 11, color: C.mute, fontWeight: 600 }}>{state === 'done' ? 'billed' : state === 'on' ? 'as approved' : 'after approval'}</small></button>
       </div>
 
+      {/* the season: this month and the two after it, the holidays on them */}
+      {data.season?.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          {data.season.map((sm) => { const here = sm.month === m.month; const st = sm.status === 'started' ? 'on' : sm.status === 'done' ? 'done' : 'draft'; return (
+            <button key={sm.month} type="button" onClick={() => { if (!here) go(sm.month) }} style={{ flex: 1, minWidth: 0, textAlign: 'left', font: 'inherit', border: `1.5px solid ${here ? C.ink : C.line}`, background: here ? C.ink : '#fff', color: here ? '#fff' : C.ink, borderRadius: 12, padding: '7px 9px', cursor: here ? 'default' : 'pointer' }}>
+              <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}><b style={{ fontSize: 12.5 }}>{MONTH_NAME(sm.month).slice(0, 3)}</b><small style={{ fontSize: 10, fontWeight: 700, color: here ? 'rgba(255,255,255,.7)' : st === 'on' ? C.greenDk : C.mute }}>{st === 'on' ? 'on' : st === 'done' ? 'done' : sm.total ? dollars(sm.total) : ''}</small></span>
+              <span style={{ display: 'block', fontSize: 11, marginTop: 2, color: here ? 'rgba(255,255,255,.75)' : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sm.occasions.length ? sm.occasions.map((o) => `${o.emoji} ${o.name}`).join(' · ') : sm.subject ?? `${sm.pieces} pieces`}</span>
+            </button>) })}
+        </div>
+      )}
+
       {funnel}
 
       {/* one line of what you get, one line of what it needs, the lean, and Start */}
@@ -266,7 +281,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
           <style>{DRAW_CSS}</style>
           <button type="button" onClick={() => setDrawer((v) => !v)} aria-label={drawer ? 'Close' : 'Open'} style={{ border: 0, background: 'none', padding: '8px 0 0', cursor: 'pointer', width: '100%' }}><span style={{ display: 'block', width: 38, height: 4, borderRadius: 99, background: '#d9d9de', margin: '0 auto' }} /></button>
           <div style={{ display: 'flex', gap: 4, padding: '8px 14px 8px', background: '#f2f2f5', margin: '6px 16px 0', borderRadius: 12 }}>
-            {([['pieces', 'Pieces'], ['days', 'Days'], ['money', 'Money']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setDrawer(true) }} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 0', borderRadius: 9, border: 0, background: tab === k ? '#fff' : 'transparent', color: tab === k ? C.ink : C.mute, boxShadow: tab === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
+            {([['pieces', 'Pieces'], ['days', 'Days'], ['money', 'Money'], ['rhythm', 'Rhythm']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setDrawer(true) }} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 0', borderRadius: 9, border: 0, background: tab === k ? '#fff' : 'transparent', color: tab === k ? C.ink : C.mute, boxShadow: tab === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px calc(24px + env(safe-area-inset-bottom))', overscrollBehavior: 'contain' }}>
             {tab === 'pieces' && weeks.map(([wk, rows]) => {
@@ -276,7 +291,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
                 <div key={wk} style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.mute, padding: '6px 0 2px' }}>{label}</div>
                   {posts.length > 0 && row(posts[0], `${posts.length} post${posts.length === 1 ? '' : 's'}`, posts.map((p) => WD[dt(p.date).getDay()]).join(' · '), 0, 'aware', 'post', false)}
-                  {rest.map((s) => row(s, s.label, `${allMonth(s) ? 'All month' : niceDate(s.date)}${s.why ? ` · ${s.why}` : ''}`, s.cents, s.stage, s.kind, s.status === 'planned'))}
+                  {rest.map((s) => row(s, `${s.options.emoji ? `${s.options.emoji} ` : ''}${s.label}`, `${allMonth(s) ? 'All month' : niceDate(s.date)}${s.why ? ` · ${s.why}` : ''}`, s.cents, s.stage, s.kind, s.status === 'planned'))}
                 </div>
               )
             })}
@@ -301,6 +316,13 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
               <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Posts, the taste, the review ask and the team card are free. Nothing is charged today; each paid piece is approved before it is charged.</div>
               {state === 'draft' && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>{MONTH_NAME(monthAfter(m.month))} drafts itself near the end of {name}. Nothing starts without you.</div>}
             </>}
+            {tab === 'rhythm' && (() => { const r = rh ?? data.rhythm; const step = (k: keyof Rhythm, lo: number, hi: number) => (v: number) => setRh({ ...r, [k]: Math.max(lo, Math.min(hi, v)) }); const rows: [keyof Rhythm, string, string, number, number][] = [['posts_week', 'Posts', 'a week', 0, 7], ['graphics_week', 'Graphics', 'a week', 0, 3], ['reels_month', 'Reels', 'a month', 0, 8], ['shoots_month', 'Shoot days', 'a month', 0, 2], ['creator_quarter', 'Creator visits', 'a quarter', 0, 3]]; const dirty = rh != null && JSON.stringify(rh) !== JSON.stringify(data.rhythm); return (
+              <>
+                <div style={{ fontSize: 13, color: C.mute, marginTop: 12, lineHeight: 1.45 }}>Set once. Every month starts from this, and the holidays add their own pieces on top. {data.rhythmSet ? 'This is yours.' : 'This is our read of your budget until you change it.'}</div>
+                {rows.map(([k, l, unit, lo, hi]) => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600 }}><span style={{ flex: 1 }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{unit}</small></span><button type="button" aria-label="Fewer" onClick={() => step(k, lo, hi)(r[k] - 1)} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 16, cursor: 'pointer' }}>−</button><b style={{ width: 22, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18 }}>{r[k]}</b><button type="button" aria-label="More" onClick={() => step(k, lo, hi)(r[k] + 1)} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 16, cursor: 'pointer' }}>+</button></div>)}
+                <button type="button" disabled={!dirty || busy != null} onClick={() => saveRhythm(r)} style={{ ...cta, marginTop: 14, justifyContent: 'center', gap: 8, opacity: dirty ? 1 : .5 }}>{busy === 'rhythm' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} Keep this rhythm</button>
+                <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8, textAlign: 'center' }}>Changes the months you have not started. Started months keep their pieces.</div>
+              </>) })()}
           </div>
         </div>
       </div>

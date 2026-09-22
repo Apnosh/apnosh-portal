@@ -17,6 +17,7 @@ import { graphicOrderCents, createCreativeRequest } from '@/lib/requests/create'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
 import { bookShoot, tierCents, tierFor } from '@/lib/shoot/day'
 import { bookInfluencer } from '@/lib/influencers/book'
+import { OCCASIONS } from '@/lib/design/occasions'
 
 type Admin = ReturnType<typeof createAdminClient>
 export type Stage = 'aware' | 'interest' | 'action' | 'order' | 'keep'
@@ -34,6 +35,7 @@ const REACH_PER_DOLLAR = 150
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
 const addDays = (iso: string, n: number) => ymd(new Date(Date.parse(iso + 'T12:00:00Z') + n * 86400000))
 const dow = (iso: string) => new Date(iso + 'T12:00:00Z').getUTCDay()
+export const nextOf = (m: string): string => { const [y, mo] = m.split('-').map(Number); return `${mo === 12 ? y + 1 : y}-${String(mo === 12 ? 1 : mo + 1).padStart(2, '0')}` }
 export const nextMonth = (): string => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + 1); return d.toISOString().slice(0, 7) }
 const monthDays = (month: string): string[] => { const [y, m] = month.split('-').map(Number); const out: string[] = []; for (let d = 1; d <= 31; d++) { const iso = `${month}-${String(d).padStart(2, '0')}`; const dt = new Date(iso + 'T12:00:00Z'); if (dt.getUTCMonth() !== m - 1 || dt.getUTCFullYear() !== y) break; out.push(iso) } return out }
 
@@ -70,19 +72,57 @@ export async function loadBaseline(clientId: string): Promise<Record<Stage, numb
   return out
 }
 
+/** the owner's own rhythm, when they have set one (migration 271); the budget's default otherwise */
+export async function loadRhythm(admin: Admin, clientId: string, f: Facts): Promise<{ rhythm: Rhythm; set: boolean }> {
+  const { data, error } = await admin.from('plan_rhythm').select('posts_week, graphics_week, reels_month, shoots_month, creator_quarter').eq('client_id', clientId).maybeSingle()
+  if (error || !data) return { rhythm: defaultRhythm(f), set: false }
+  return { rhythm: { posts_week: Number(data.posts_week), graphics_week: Number(data.graphics_week), reels_month: Number(data.reels_month), shoots_month: Number(data.shoots_month), creator_quarter: Number(data.creator_quarter) }, set: true }
+}
+export async function saveRhythm(admin: Admin, clientId: string, r: Partial<Rhythm>, f: Facts): Promise<{ ok: boolean; error?: string }> {
+  const cur = (await loadRhythm(admin, clientId, f)).rhythm
+  const clamp = (v: unknown, lo: number, hi: number, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.round(n))) : d }
+  const row = { client_id: clientId, posts_week: clamp(r.posts_week, 0, 7, cur.posts_week), graphics_week: clamp(r.graphics_week, 0, 3, cur.graphics_week), reels_month: clamp(r.reels_month, 0, 8, cur.reels_month), shoots_month: clamp(r.shoots_month, 0, 2, cur.shoots_month), creator_quarter: clamp(r.creator_quarter, 0, 3, cur.creator_quarter), updated_at: new Date().toISOString() }
+  const { error } = await admin.from('plan_rhythm').upsert(row, { onConflict: 'client_id' })
+  return error ? { ok: false, error: /plan_rhythm/.test(error.message) ? 'The rhythm is not switched on yet. The team has to run one update first.' : error.message } : { ok: true }
+}
 export function defaultRhythm(f: Facts): Rhythm {
   const b = f.budgetCents ?? 0
   return { posts_week: b >= 100000 ? 6 : b >= 40000 ? 4 : 3, graphics_week: b >= 40000 ? 1 : 0, reels_month: f.reelLift && f.reelLift >= 1.5 ? 2 : b >= 100000 ? 2 : b >= 40000 ? 1 : 0, shoots_month: b >= 40000 ? 1 : 0, creator_quarter: b >= 80000 ? 1 : 0 }
 }
 
 /* ── build the month: slots on dates, planned numbers per stage, levers ── */
+/* ── the occasions in a month, and the work each one needs, walked back from its date ──
+   A graphic lands ten days before, print two weeks before when the holiday sells ahead
+   (catering, pre-orders, a ticketed night), a boost three days before, a post on the day.
+   The month BEFORE a menu holiday puts the holiday menu on its shoot list. */
+export interface OccasionHit { id: string; name: string; emoji: string; date: string; sellsAhead: boolean; menu: boolean }
+const SELLS_AHEAD = new Set(['thanksgiving', 'christmas', 'nye', 'valentines', 'mothersday'])
+const MENU_HOLIDAY = new Set(['thanksgiving', 'christmas', 'nye', 'valentines'])
+export function occasionsIn(month: string): OccasionHit[] {
+  const from = new Date(`${month}-01T12:00:00`); from.setMonth(from.getMonth() - 1)
+  return OCCASIONS.map((o) => { const d = o.nextOn(from); return { id: o.id, name: o.name, emoji: o.emoji, date: ymd(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))), sellsAhead: SELLS_AHEAD.has(o.id), menu: MENU_HOLIDAY.has(o.id) } }).filter((o) => o.date.startsWith(month))
+}
+export function occasionSlots(month: string, f: Facts, lean: Lean): Slot[] {
+  const out: Slot[] = []
+  for (const o of occasionsIn(month)) {
+    const inMonth = (d: string) => (d.startsWith(month) ? d : `${month}-01`)
+    out.push({ date: inMonth(addDays(o.date, -10)), stage: 'interest', kind: 'graphic', label: `${o.name} graphic`, options: { where: ['post', 'story'], priceOn: false, brandKit: true, occasion: o.id, emoji: o.emoji }, cents: f.prices.graphic, status: 'planned', why: `${o.emoji} ${o.name} is ${niceShort(o.date)}` })
+    if (o.sellsAhead && (lean === 'in' || (f.budgetCents ?? 0) >= 100000)) out.push({ date: inMonth(addDays(o.date, -14)), stage: 'action', kind: 'print', label: `${o.name} table tent`, options: { kinds: ['tent'], occasion: o.id, emoji: o.emoji }, cents: f.prices.print, status: 'planned', why: 'Sells ahead: pre-orders and catering' })
+    if ((f.budgetCents ?? 0) >= 40000) out.push({ date: inMonth(addDays(o.date, -3)), stage: 'aware', kind: 'boost', label: `${o.name} boost`, options: { cents: 4000, days: 3, occasion: o.id, emoji: o.emoji }, cents: 4000, status: 'planned', why: `The three days before ${o.name}` })
+    out.push({ date: o.date, stage: 'aware', kind: 'post', label: `${o.name} post`, options: { story: true, occasion: o.id, emoji: o.emoji }, cents: 0, status: 'planned' })
+  }
+  return out
+}
+const niceShort = (iso: string) => { const d = new Date(iso + 'T12:00:00Z'); return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCDate()}` }
+
 export function buildSlots(month: string, r: Rhythm, f: Facts, creator: Month['creator'], lean: Lean): Slot[] {
   const days = monthDays(month)
   const slots: Slot[] = []
   const thursdays = days.filter((d) => dow(d) === 4), saturdays = days.filter((d) => dow(d) === 6), tuesdays = days.filter((d) => dow(d) === 2)
   /* the shoot day: first Thursday; everything made that month comes from it */
   const shootDay = r.shoots_month > 0 ? thursdays[0] ?? days[3] : null
-  if (shootDay) slots.push({ date: shootDay, stage: 'interest', kind: 'photos', label: 'Shoot day', options: { list: ['the specials', 'the room', 'drinks'] }, cents: tierCents(tierFor(3)) ?? f.prices.shoot, status: 'planned', why: 'One day feeds the month' })
+  const nextMenuHoliday = occasionsIn(nextOf(month)).find((o) => o.menu)
+  if (shootDay) slots.push({ date: shootDay, stage: 'interest', kind: 'photos', label: 'Shoot day', options: { list: [...(nextMenuHoliday ? [`the ${nextMenuHoliday.name} menu`] : []), 'the specials', 'the room', 'drinks'] }, cents: tierCents(tierFor(3)) ?? f.prices.shoot, status: 'planned', why: 'One day feeds the month' })
   /* posts: spread over the week, from the shoot */
   const postDays = [1, 3, 5, 6, 0, 2].slice(0, Math.max(0, Math.min(7, r.posts_week)))
   for (const d of days) if (postDays.includes(dow(d))) slots.push({ date: d, stage: 'aware', kind: 'post', label: 'Post', options: { story: dow(d) === 5 }, cents: 0, status: 'planned' })
@@ -93,7 +133,9 @@ export function buildSlots(month: string, r: Rhythm, f: Facts, creator: Month['c
   const reelDays = days.filter((d) => dow(d) === 0 && (!shootDay || d > shootDay))
   for (let i = 0; i < r.reels_month; i++) { const d = reelDays[i * 2] ?? reelDays[i]; if (d) slots.push({ date: d, stage: 'interest', kind: 'reel', label: 'Reel', options: { filmed: shootDay ? 'shoot' : 'clips', style: 'dish', captions: true }, cents: f.prices.video, status: 'planned', why: f.reelLift ? `Your Reels do ${f.reelLift}× your photos` : 'Reels reach further than photos' }) }
   /* the creator: a Saturday in week two, or a Tuesday when leaning in */
-  if (r.creator_quarter > 0 && creator) { let d = lean === 'in' ? tuesdays[1] ?? saturdays[1] : creator.date && creator.date.startsWith(month) ? creator.date : saturdays[1] ?? saturdays[0]; if (d && d === shootDay) d = saturdays.find((x) => x > d!) ?? tuesdays.find((x) => x > d!) ?? d; if (d) slots.push({ date: d, stage: 'aware', kind: 'creator', label: `${creator.name.split(' ')[0]} visits`, options: { slug: creator.slug, code: true, repost: true }, cents: creator.fromCents ?? 0, status: 'planned', why: creator.nearby ? `${creator.nearby.toLocaleString()} people nearby watch ${creator.name.split(' ')[0]}` : null }) }
+  /* a creator "a quarter": the first month of each quarter gets one; 2 a quarter, the first two; 3, every month */
+  const inQuarter = ((Number(month.slice(5)) - 1) % 3) < r.creator_quarter
+  if (inQuarter && creator) { let d = lean === 'in' ? tuesdays[1] ?? saturdays[1] : creator.date && creator.date.startsWith(month) ? creator.date : saturdays[1] ?? saturdays[0]; if (d && d === shootDay) d = saturdays.find((x) => x > d!) ?? tuesdays.find((x) => x > d!) ?? d; if (d) slots.push({ date: d, stage: 'aware', kind: 'creator', label: `${creator.name.split(' ')[0]} visits`, options: { slug: creator.slug, code: true, repost: true }, cents: creator.fromCents ?? 0, status: 'planned', why: creator.nearby ? `${creator.nearby.toLocaleString()} people nearby watch ${creator.name.split(' ')[0]}` : null }) }
   /* boost: the first post after the shoot, sized by lean */
   const boostCents = lean === 'seen' ? 10000 : lean === 'in' ? 4000 : 6000
   const firstPost = slots.filter((s) => s.kind === 'post' && (!shootDay || s.date > shootDay)).map((s) => s.date).sort()[0]
@@ -105,7 +147,11 @@ export function buildSlots(month: string, r: Rhythm, f: Facts, creator: Month['c
   slots.push({ date: days[0], stage: 'keep', kind: 'review', label: 'Ask for a review', options: { days: 14 }, cents: 0, status: 'planned', why: f.reviews30 != null ? `${f.reviews30} reviews last month` : null })
   slots.push({ date: days[0], stage: 'keep', kind: 'team', label: 'Team card', options: {}, cents: 0, status: 'planned' })
   if (lean === 'seen') { const b = slots.find((s) => s.kind === 'boost'); if (b) { b.options.cents = 10000; b.cents = 10000 } }
-  return slots.sort((a, b) => a.date.localeCompare(b.date))
+  /* the occasions: their pieces join, and the rhythm post on the day gives way to the occasion's post */
+  const occ = occasionSlots(month, f, lean)
+  const occDays = new Set(occ.filter((s) => s.kind === 'post').map((s) => s.date))
+  const merged = [...slots.filter((s) => !(s.kind === 'post' && occDays.has(s.date))), ...occ]
+  return merged.sort((a, b) => a.date.localeCompare(b.date))
 }
 
 export function planStages(slots: Slot[], base: Record<Stage, number | null>, f: Facts, creator: Month['creator']): StagePlan[] {
@@ -153,9 +199,17 @@ export async function topCreator(admin: Admin, clientId: string, month: string):
   } catch { return null }
 }
 
-export async function draftMonth(admin: Admin, clientId: string, month: string, lean: Lean = 'asis', rhythm?: Rhythm, subject?: string | null): Promise<Month> {
-  const [facts, base, creator] = await Promise.all([loadFacts(admin, clientId), loadBaseline(clientId), topCreator(admin, clientId, month)])
-  const r = rhythm ?? defaultRhythm(facts)
+export interface Pre { facts: Facts; base: Record<Stage, number | null>; rhythm: Rhythm }
+export async function preload(admin: Admin, clientId: string): Promise<Pre> {
+  const [facts, base] = await Promise.all([loadFacts(admin, clientId), loadBaseline(clientId)])
+  const { rhythm } = await loadRhythm(admin, clientId, facts)
+  return { facts, base, rhythm }
+}
+export async function draftMonth(admin: Admin, clientId: string, month: string, lean: Lean = 'asis', rhythm?: Rhythm, subject?: string | null, pre?: Pre): Promise<Month> {
+  const p = pre ?? await preload(admin, clientId)
+  const creator = await topCreator(admin, clientId, month)
+  const facts = p.facts, base = p.base
+  const r = rhythm ?? p.rhythm
   let slots = buildSlots(month, r, facts, creator, lean)
   /* the law from the picker: paid pieces only inside the budget. Trim the priciest optional piece first. */
   if (facts.budgetCents) {
