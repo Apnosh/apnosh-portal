@@ -149,20 +149,12 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
     <div className="cr" style={{ padding: '2px 16px 0', color: C.ink, maxWidth: 480, margin: '0 auto', boxSizing: 'border-box' }}>
       <style>{DRAW_CSS}{`@keyframes pm-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}.pm-in{animation:pm-in .24s cubic-bezier(.2,.7,.2,1)}.pm-day:active{transform:scale(.96)}@media(prefers-reduced-motion:reduce){.pm-in{animation:none}}`}</style>
 
-      {/* the month and its subject */}
-      <div style={{ minWidth: 0 }}>
-        <h1 style={h1}>{title}</h1>
-        {editing
-          ? <input autoFocus defaultValue={m.subject ?? ''} placeholder="Fall menu, Halloween…" maxLength={80} onBlur={(e) => saveSubject(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }} style={{ display: 'block', marginTop: 4, width: '100%', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '5px 10px', borderRadius: 10, border: `1px solid ${C.ink}`, color: C.ink, boxSizing: 'border-box' }} />
-          : <small onClick={() => { if (state === 'draft') setEditing(true) }} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 4, lineHeight: 1.3, cursor: state === 'draft' ? 'text' : 'default', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle ?? (m.subject ?? <span style={{ color: C.faint }}>What is {name} about? Tap to say.</span>)}</small>}
-      </div>
       {/* the lean: three ways to tilt the month, each saying what it changes */}
       {state === 'draft' && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 6 }}>
           <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 99, background: '#f2f2f5' }}>
             {LEANS.map(([kk, l]) => <button key={kk} type="button" disabled={busy != null} onClick={() => relean(kk)} style={{ flex: 1, fontSize: 12.5, fontWeight: 800, padding: '7px 0', borderRadius: 99, border: 0, background: lean === kk ? '#fff' : 'transparent', color: lean === kk ? C.ink : C.mute, boxShadow: lean === kk ? '0 1px 3px rgba(0,0,0,.12)' : 'none', font: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}>{busy === 'lean' && lean === kk ? <Loader2 size={11} className="mvp-spin" /> : l}</button>)}
           </div>
-          <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5, textAlign: 'center' }}>{LEANS.find((x) => x[0] === lean)?.[2]}.</div>
         </div>
       )}
 
