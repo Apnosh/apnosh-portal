@@ -190,7 +190,7 @@ export default function MvpCampaigns({ view: viewProp, embedded = false, board }
     <div style={embedded ? { fontFamily: "'Inter',system-ui,sans-serif", color: C.ink } : { fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
 
-      <div style={{ padding: embedded ? '8px 16px 0' : '16px 18px 0' }}>
+      <div style={{ padding: embedded ? (board === 'active' ? 0 : '8px 16px 0') : '16px 18px 0' }}>
         {/* The calendar is a row (owner 2026-09-11), where Orders used to be: tap it for the month
             view, tap again for the list. Orders keep their door on the More hub. */}
         {(board === 'active' || (!empty && !board)) && !embedded && (
@@ -227,7 +227,8 @@ export default function MvpCampaigns({ view: viewProp, embedded = false, board }
           <>
             {/* the same tabs Create's stages wear (owner 2026-09-11): a coloured outline each, the
                 picked one filled */}
-            {board && <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '10px 2px 8px' }}>{board === 'active' ? 'Active' : 'Ran'}</div>}
+            {board && !embedded && <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '10px 2px 8px' }}>{board === 'active' ? 'Active' : 'Ran'}</div>}
+            {board === 'history' && embedded && <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '10px 2px 8px' }}>Ran</div>}
             {!board && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 16, padding: '2px 0' }}>
               {([['all', 'All', '#2e9a78'], ['live', 'Live', '#17ad6b'], ['production', 'In progress', '#3b6fd4'], ['done', 'History', '#6a39de']] as const).map(([k, l, col]) => {
                 const on = tab === k

@@ -5,13 +5,13 @@
  * rows on top, then what is running. What ran lives on Order history.
  */
 
-import MvpCampaigns from '@/components/mvp/mvp-campaigns'
+import CampaignsBoard from '@/components/mvp/campaigns-board'
 import MvpShell from '@/components/mvp/mvp-shell'
 
 export default function CampaignsPage() {
   return (
     <MvpShell active="campaigns" title="Campaigns">
-      <MvpCampaigns board="active" />
+      <CampaignsBoard />
     </MvpShell>
   )
 }
