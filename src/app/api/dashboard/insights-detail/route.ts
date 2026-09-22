@@ -91,6 +91,11 @@ export async function GET(req: NextRequest) {
     computeStages(clientId, range, 0, isCustom ? customEnd! : todayYmd, isCustom ? customDays : undefined),
   ])
   const stages: ComputedStage[] = stagesRes.status === 'fulfilled' ? stagesRes.value : []
+  /* THE ACCOUNTS ON EACH RING (owner 2026-09-22): which connected accounts feed each stage, as
+   * brand marks on Home's circles instead of piece icons. One mark per brand per stage, in the
+   * funnel's stage order 1..5, only sources that are connected and reporting. */
+  const BRAND: Record<string, string> = { google_business_profile: 'google', google: 'google', gbp: 'google', google_analytics: 'google', google_search_console: 'google', instagram: 'instagram', facebook: 'facebook', tiktok: 'tiktok', youtube: 'youtube', yelp: 'yelp', linkedin: 'linkedin', square: 'square', clover: 'clover', toast: 'toast' }
+  const providers: string[][] = [1, 2, 3, 4, 5].map((i) => { const st = stages.find((x) => Number(x.stage) === i); const seen: string[] = []; for (const src of st?.sources ?? []) { if (src.status !== 'CONNECTED' || !src.hasData || src.value == null) continue; const b = BRAND[String(src.provider)]; if (b && !seen.includes(b)) seen.push(b) } return seen })
 
   let findYou: FindYou | null = null
   let topQueries: { query: string; impressions: number }[] = []
@@ -245,5 +250,5 @@ export async function GET(req: NextRequest) {
     if (frontier) asOf = frontier
   } catch { /* keep the Google-derived asOf rather than showing none */ }
 
-  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, windowEnd, audience, yoy, yoyAbs, stages })
+  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, providers, profileVisits, followersGained, socialEngagement, asOf, windowStart, windowEnd, audience, yoy, yoyAbs, stages })
 }

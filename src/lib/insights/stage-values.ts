@@ -108,6 +108,25 @@ const num = (v: unknown): number => {
 /** Per-source "as of" stamps, filled alongside the values (see loadStageFreshness). */
 export type StageFreshnessMap = Record<string, string>
 
+/* Google's performance data lands two or three days late, and the sync writes a zero row for
+ * each day it has not processed yet. Those trailing zero days are not "no views", they are
+ * "not reported yet": summing them understates the window and paints a cliff on the chart.
+ * Drop the tail of all-zero days (never more than five, never a zero day that sits between
+ * real ones) so every Google number is over reported days only. */
+export function trimGoogleLag<T extends Record<string, unknown>>(rows: T[]): T[] {
+  const real = (r: T) => ['impressions_total', 'search_views', 'impressions_search_mobile', 'impressions_search_desktop', 'impressions_maps_mobile', 'impressions_maps_desktop', 'directions', 'calls', 'website_clicks'].some((k) => Number(r[k] ?? 0) > 0)
+  const sorted = [...rows].sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')))
+  let cut = sorted.length, dropped = 0
+  while (cut > 0 && dropped < 5 && !real(sorted[cut - 1])) { cut--; dropped++ }
+  return sorted.slice(0, cut)
+}
+/** the newest day Google actually reported, or null */
+export function lastGoogleDay(rows: { date?: unknown; [k: string]: unknown }[]): string | null {
+  const t = trimGoogleLag(rows as Record<string, unknown>[])
+  const d = t[t.length - 1]?.date
+  return typeof d === 'string' ? d : null
+}
+
 export async function loadStageValues(
   clientId: string,
   w: InsightsWindow = '30d',
@@ -146,7 +165,7 @@ export async function loadStageValues(
     if (data) {
       let search = 0, maps = 0
       let directions = 0, calls = 0, clicks = 0, bookings = 0, menuClicks = 0
-      for (const r of data as Record<string, unknown>[]) {
+      for (const r of trimGoogleLag(data as Record<string, unknown>[])) {
         // per-ROW fallback (same rule as the chart's daily fold, so the two
         // always sum identically): the real split when the row has it, else
         // the legacy search_views/impressions_total
@@ -601,11 +620,16 @@ export async function loadStageFreshness(clientId: string): Promise<StageFreshne
      * a date. The owner asked for a stamp on every platform (2026-08-13) and Google was the
      * one still bare. Stamp them with the last day they actually reported, date-only, so the
      * card says "as of Aug 8" rather than claiming an hour we cannot know. */
-    const dayStamp = async (table: string, ids: string[]) => {
+    /* THE LAST DAY WITH REAL DATA (owner 2026-09-22: "Google says Sept 20 but the graph shows
+     * nothing after the 18th"). Google's performance API lands two or three days late and the
+     * sync writes zero rows for the days it has not processed yet. A zero row is not a report.
+     * The stamp is the newest day that carries a number, so the card says "through Sep 18". */
+    const dayStamp = async (table: string, ids: string[], realCols: string[]) => {
       const { data } = await admin
         .from(table)
         .select('date')
         .eq('client_id', clientId)
+        .or(realCols.map((c) => `${c}.gt.0`).join(','))
         .order('date', { ascending: false })
         .limit(1)
       const d = (data ?? [])[0] as { date?: unknown } | undefined
@@ -615,8 +639,8 @@ export async function loadStageFreshness(clientId: string): Promise<StageFreshne
       dayStamp('gbp_metrics', [
         'gbp_impressions_search', 'gbp_impressions_maps', 'gbp_website_clicks',
         'gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'gbp_menu_clicks',
-      ]),
-      dayStamp('website_metrics', ['ga4_website_visits', 'ga4_order_clicks', 'ga4_returning_users']),
+      ], ['impressions_total', 'search_views', 'directions', 'calls', 'website_clicks']),
+      dayStamp('website_metrics', ['ga4_website_visits', 'ga4_order_clicks', 'ga4_returning_users'], ['sessions', 'menu_views', 'order_clicks']),
     ])
   } catch { /* freshness is a nicety; never break the numbers for it */ }
   return out

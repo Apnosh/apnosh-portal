@@ -827,7 +827,8 @@ function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceVi
      still says so on the row itself, because those are things to act on. */
   const [open, setOpen] = useState(false)
   const subText = err ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : ''
-  const detail = [s.context, asOf ? `as of ${asOf}` : '', label.toLowerCase().includes(groupLabel.toLowerCase()) ? '' : groupLabel].filter(Boolean).join(' · ')
+  /* a bare date is the last day the platform reported (Google, GA4): "through Sep 18", never "as of" a day it has not filed yet */
+  const detail = [s.context, asOf ? (/^\d{4}-\d{2}-\d{2}$/.test(String(s.asOf ?? '')) ? `data through ${asOf}` : `as of ${asOf}`) : '', label.toLowerCase().includes(groupLabel.toLowerCase()) ? '' : groupLabel].filter(Boolean).join(' · ')
   return (
     <div style={{ padding: '9px 0 10px' }}>
       <div role={detail ? 'button' : undefined} onClick={() => detail && setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: detail ? 'pointer' : 'default' }}>

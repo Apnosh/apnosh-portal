@@ -82,13 +82,16 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
   const today = new Date(now); today.setUTCHours(0, 0, 0, 0)
   // NOTE: SQL `neq` drops NULL location_id rows, so demo rows are excluded in
   // JS here (most clients' rows carry no location id at all).
+  /* the newest day that carries a number, not the newest row: the sync writes zero rows for
+   * the days Google has not processed yet (owner 2026-09-22, "the quieter-week card doesn't
+   * take Google's lag into account") */
   const { data: latestRows } = await admin
     .from('gbp_metrics')
-    .select('date, location_id')
+    .select('date, location_id, impressions_total, search_views, directions, calls, website_clicks')
     .eq('client_id', clientId)
     .order('date', { ascending: false })
-    .limit(10)
-  const latest = (latestRows ?? []).find((r) => r.location_id !== 'demo-proof')
+    .limit(20)
+  const latest = (latestRows ?? []).find((r) => r.location_id !== 'demo-proof' && ['impressions_total', 'search_views', 'directions', 'calls', 'website_clicks'].some((k) => Number((r as Record<string, unknown>)[k] ?? 0) > 0))
   let end = today
   if (latest?.date) {
     const d = new Date(`${String(latest.date)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)
@@ -222,7 +225,7 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
     label: 'Quieter week on Google',
     big: parts.join(' · '),
     // Same rule as the win card: the drop is in the TOTAL, so each metric states its own move.
-    context: `${weekMetricLines(w.cur, w.prior)} A push this week turns it around.`,
+    context: `${weekMetricLines(w.cur, w.prior)} Google reports a few days late; this is the week through ${w.latestDate ? new Date(`${w.latestDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'the last reported day'}. A push this week turns it around.`,
     metadata: { kind: 'gbp_week', calls: { cur: w.cur.calls, prior: w.prior.calls }, directions: { cur: w.cur.directions, prior: w.prior.directions } },
   }
 }
