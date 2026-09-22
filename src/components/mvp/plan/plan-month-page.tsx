@@ -184,7 +184,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
 
       {/* the view */}
       <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: '#f2f2f5', marginTop: 12 }}>
-        {([['month', 'Month'], ['list', 'List'], ['money', 'Money'], ['rhythm', 'Rhythm']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '8px 0', borderRadius: 9, border: 0, background: view === k ? '#fff' : 'transparent', color: view === k ? C.ink : C.mute, boxShadow: view === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
+        {([['month', 'Month'], ['list', 'List'], ['money', 'Order'], ['rhythm', 'Rhythm']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '8px 0', borderRadius: 9, border: 0, background: view === k ? '#fff' : 'transparent', color: view === k ? C.ink : C.mute, boxShadow: view === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
       </div>
 
       {view === 'month' && (
@@ -230,25 +230,54 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
           })}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 14, fontWeight: 800 }}><span>{name}</span><span>{dollars(m.total)}</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>{getting.map(([n, w, k]) => <span key={w} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '5px 9px 5px 5px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 20, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}</div>
-          {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Campaigns that already ran</span><ChevronRight size={16} color={C.faint} /></a>}
+          {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Your campaigns</span><ChevronRight size={16} color={C.faint} /></a>}
         </div>
       )}
 
-      {view === 'money' && (
+      {view === 'money' && (() => {
+        /* the order: one line per kind, quantity × price, the way an order reads */
+        const lines = ([
+          ['photos', 'Shoot day', shoot ? `${photosN} photos · ${niceDate(shoot.date)}` : ''],
+          ['graphic', 'Graphic', 'made from the shoot'],
+          ['reel', 'Reel', 'edited, captioned'],
+          ['creator', creator ? creator.label.replace(/ visits$/, '') : 'Creator', 'a visit and a post'],
+          ['boost', 'Boost', 'three days each'],
+          ['print', 'Table tent', 'printed, delivered'],
+        ] as [Kind, string, string][]).map(([k, label, sub]) => { const xs = on.filter((x) => x.kind === k); return { k, label, sub, n: xs.length, cents: xs.reduce((a, x) => a + x.cents, 0), unit: xs[0]?.cents ?? 0 } }).filter((l) => l.n > 0)
+        const free = ([['post', 'Posts'], ['taste', 'A taste at the counter'], ['review', 'Review ask'], ['team', 'Team card'], ['offer', 'Deal']] as [Kind, string][]).map(([k, label]) => ({ k, label, n: count(k) })).filter((l) => l.n > 0)
+        return (
         <div className="pm-in">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14 }}><b style={{ fontFamily: DISPLAY, fontSize: 28, letterSpacing: '-.03em', fontWeight: 600 }}>{dollars(m.total)}</b>{m.budgetCents ? <span style={{ fontSize: 12.5, color: m.total > m.budgetCents ? '#c92d32' : C.mute, fontWeight: 700 }}>of your {dollars(m.budgetCents)} a month</span> : null}</div>
-          {m.budgetCents ? <div style={{ height: 6, borderRadius: 99, background: '#eeeef1', marginTop: 8, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, m.total / m.budgetCents * 100)}%`, height: '100%', background: m.total > m.budgetCents ? '#c92d32' : C.greenDk, borderRadius: 99 }} /></div> : null}
-          {byKind.map(([label, cents, when]) => <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ flex: 1 }}>{label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{when}</small></span><span style={{ fontWeight: 700 }}>{dollars(cents)}</span></div>)}
-          <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Posts, the taste, the review ask and the team card are free. Nothing is charged today; each paid piece is approved before it is charged.</div>
-          {state === 'draft' && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>{MONTH_NAME(monthAfter(m.month))} drafts itself near the end of {name}. Nothing starts without you.</div>}
-        </div>
-      )}
+          <div style={{ marginTop: 14, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '4px 14px 12px' }}>
+            {lines.map((l) => <div key={l.k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE[KIND_STAGE[l.k]] }}><Drawing spec={{ scene: SCENE[l.k] }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0 }}>{l.label}{l.n > 1 ? ` × ${l.n}` : ''}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{l.n > 1 ? `${dollars(l.unit)} each · ` : ''}{l.sub}</small></span><span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{dollars(l.cents)}</span></div>)}
+            {free.map((l) => <div key={l.k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13, fontWeight: 600, color: C.mute }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE[KIND_STAGE[l.k]], opacity: .7 }}><Drawing spec={{ scene: SCENE[l.k] }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1 }}>{l.label}{l.n > 1 ? ` × ${l.n}` : ''}</span><span style={{ fontWeight: 700 }}>Free</span></div>)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 0 2px' }}><span style={{ fontSize: 14, fontWeight: 800 }}>{name}</span><b style={{ fontFamily: DISPLAY, fontSize: 24, letterSpacing: '-.03em', fontWeight: 600 }}>{dollars(m.total)}</b></div>
+            {m.budgetCents ? <div style={{ fontSize: 12, color: m.total > m.budgetCents ? '#c92d32' : C.mute, fontWeight: 600 }}>{m.total > m.budgetCents ? `${dollars(m.total - m.budgetCents)} over` : `${dollars(m.budgetCents - m.total)} under`} your {dollars(m.budgetCents)} a month</div> : null}
+          </div>
+          <div style={k2}>When you pay</div>
+          {byKind.map(([label, cents, when]) => <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ flex: 1 }}>{label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{when}</small></span><span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{dollars(cents)}</span></div>)}
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Nothing is charged today. Each paid piece is approved before it is charged, and prices include the Apnosh fee.</div>
+        </div>) })()}
 
-      {view === 'rhythm' && (() => { const r = rh ?? data.rhythm; const step = (k: keyof Rhythm, lo: number, hi: number) => (v: number) => setRh({ ...r, [k]: Math.max(lo, Math.min(hi, v)) }); const rows: [keyof Rhythm, string, string, number, number][] = [['posts_week', 'Posts', 'a week', 0, 7], ['graphics_week', 'Graphics', 'a week', 0, 3], ['reels_month', 'Reels', 'a month', 0, 8], ['shoots_month', 'Shoot days', 'a month', 0, 2], ['creator_quarter', 'Creator visits', 'a quarter', 0, 3]]; const dirty = rh != null && JSON.stringify(rh) !== JSON.stringify(data.rhythm); return (
+      {view === 'rhythm' && (() => { const r = rh ?? data.rhythm; const step = (k: keyof Rhythm, lo: number, hi: number) => (v: number) => setRh({ ...r, [k]: Math.max(lo, Math.min(hi, v)) }); const dirty = rh != null && JSON.stringify(rh) !== JSON.stringify(data.rhythm)
+        /* the rhythm by stage, the way the funnel reads: each stage wears its colour, its knobs under it */
+        const groups: { stage: Stage; rows: [keyof Rhythm, string, string, number, number][]; note?: string }[] = [
+          { stage: 'aware', rows: [['posts_week', 'Posts', 'a week', 0, 7], ['creator_quarter', 'Creator visits', 'a quarter', 0, 3]] },
+          { stage: 'interest', rows: [['shoots_month', 'Shoot days', 'a month', 0, 2], ['graphics_week', 'Graphics', 'a week', 0, 3], ['reels_month', 'Reels', 'a month', 0, 8]] },
+          { stage: 'action', rows: [], note: 'Deals, table tents and the taste come from the lean and the holidays.' },
+          { stage: 'keep', rows: [], note: 'The review ask and the team card run every month, free.' },
+        ]
+        const knob = (k: keyof Rhythm, l: string, unit: string, lo: number, hi: number) => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600 }}><span style={{ flex: 1 }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{unit}</small></span><button type="button" aria-label="Fewer" onClick={() => step(k, lo, hi)(r[k] - 1)} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 16, cursor: 'pointer' }}>−</button><b style={{ width: 22, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18 }}>{r[k]}</b><button type="button" aria-label="More" onClick={() => step(k, lo, hi)(r[k] + 1)} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 16, cursor: 'pointer' }}>+</button></div>
+        return (
         <div className="pm-in">
-          <div style={{ fontSize: 13, color: C.mute, marginTop: 14, lineHeight: 1.45 }}>Set once. Every month starts from this, and the holidays add their own pieces on top. {data.rhythmSet ? 'This is yours.' : 'This is our read of your budget until you change it.'}</div>
-          {rows.map(([k, l, unit, lo, hi]) => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600 }}><span style={{ flex: 1 }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{unit}</small></span><button type="button" aria-label="Fewer" onClick={() => step(k, lo, hi)(r[k] - 1)} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 16, cursor: 'pointer' }}>−</button><b style={{ width: 22, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18 }}>{r[k]}</b><button type="button" aria-label="More" onClick={() => step(k, lo, hi)(r[k] + 1)} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 16, cursor: 'pointer' }}>+</button></div>)}
-          <button type="button" disabled={!dirty || busy != null} onClick={() => saveRhythm(r)} style={{ ...cta, marginTop: 14, justifyContent: 'center', gap: 8, opacity: dirty ? 1 : .5 }}>{busy === 'rhythm' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} Keep this rhythm</button>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 12, lineHeight: 1.45 }}>What recurs. Every month starts from this; the holidays add their pieces on top. {data.rhythmSet ? 'This is yours.' : 'Our read of your budget until you change it.'}</div>
+          {groups.map((g) => (
+            <div key={g.stage} style={{ marginTop: 14 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 99, background: HUE[g.stage], color: '#fff' }}><span style={{ width: 7, height: 7, borderRadius: 99, background: 'rgba(255,255,255,.9)' }} />{STAGE_WORD[g.stage]}</span>
+              {g.rows.map(([k, l, unit, lo, hi]) => knob(k, l, unit, lo, hi))}
+              {g.note && <div style={{ fontSize: 12.5, color: C.mute, padding: '8px 0 2px' }}>{g.note}</div>}
+            </div>
+          ))}
+          <button type="button" disabled={!dirty || busy != null} onClick={() => saveRhythm(r)} style={{ ...cta, marginTop: 16, justifyContent: 'center', gap: 8, opacity: dirty ? 1 : .5 }}>{busy === 'rhythm' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} Keep this rhythm</button>
           <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8, textAlign: 'center' }}>Changes the months you have not started. Started months keep their pieces.</div>
         </div>) })()}
 

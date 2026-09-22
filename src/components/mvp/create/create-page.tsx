@@ -702,7 +702,7 @@ export default function CreatePage() {
     { hue: 'amber', t: T('Graphic'), I: ImageIcon, to: { request: 'graphic' }, scene: { scene: 'graphic' } },
     { hue: 'brand', t: T('Video'), I: Video, to: { request: 'video' }, scene: { scene: 'reel' } },
     { t: T('Photos'), I: Camera, to: { shoot: true }, scene: { scene: 'photos' } },
-    { t: T('The month'), I: Calendar, to: { plan: true }, scene: { scene: 'calendar' } },
+    { hue: 'mint', t: T('Plan ahead'), I: Calendar, to: { plan: true }, scene: { scene: 'calendar' } },
     { hue: 'amber', t: T('Print'), I: Tag, to: { request: 'print' }, scene: { scene: 'print' } },
     { hue: 'brand', t: T('Branding'), I: Tag, to: { request: 'logo' }, scene: { scene: 'brand' } },
     { hue: 'brand', t: T('Website'), I: Store, to: { request: 'website' }, scene: { scene: 'site' } },
@@ -721,7 +721,7 @@ export default function CreatePage() {
   const [influencersOpen, setInfluencersOpen] = useState(false)
   function quickGo(x: Quick) {
     if ('announce' in x.to) { goAnnounce(x.to.announce); return }
-    if ('plan' in x.to) { router.push(`/dashboard/campaigns${clientId ? `?clientId=${clientId}` : ''}`); return }
+    if ('plan' in x.to) { router.push(`/dashboard/plan${clientId ? `?clientId=${clientId}` : ''}`); return }
     if ('reply' in x.to) { setReplying(true); return }
     if ('reviews' in x.to) { setReviewing(true); return }
     if ('shoot' in x.to) { setShootOpen(true); return }
