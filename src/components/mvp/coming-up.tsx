@@ -156,6 +156,21 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
 
   if (nothing) {
     if (!nudge) return null
+    /* On Insights the section is always there (owner 2026-09-22): it says Upcoming, then that
+       nothing is scheduled, then where to make something. Never a rail that vanishes. */
+    if (compact) return (
+      <div style={{ marginTop: 16, padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }}>Upcoming</span>
+          <Link href="/dashboard/campaigns" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>Open <ChevronRight size={13} /></Link>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 13px', background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 14 }}>
+          <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: tint('mint', .16), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={15} color={C.greenDk} /></span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.mute, lineHeight: 1.4 }}>Nothing is scheduled.</span>
+          <Link href="/dashboard/campaigns/new" style={{ flexShrink: 0, textDecoration: 'none', font: 'inherit', fontSize: 13, fontWeight: 700, color: C.greenDk }}>Create something</Link>
+        </div>
+      </div>
+    )
     /* The quiet version. Nothing is wrong when nothing is scheduled, so this is a
        line and a link, not a card with a drawing in it. */
     return (
@@ -184,7 +199,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
     return (
       <div style={{ marginTop: 16, padding: '0 2px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
-          <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }}>Coming up</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, color: C.ink }}>Upcoming</span>
           <Link href="/dashboard/insights/coming-up" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
             Open <ChevronRight size={13} />
           </Link>
