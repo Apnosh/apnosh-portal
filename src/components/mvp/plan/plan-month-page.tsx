@@ -75,8 +75,9 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const wrap = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 398, h: 740 })
   useEffect(() => {
-    const fit = () => { const el = wrap.current; if (!el) return; const w = el.clientWidth; const top = el.getBoundingClientRect().top; const room = window.innerHeight - top - 262; const h = Math.max(440, Math.min(room, w * H / W)); setBox({ w: Math.min(w, h * W / H), h: Math.min(h, w * H / W) }) }
-    fit(); window.addEventListener('resize', fit); const t = setTimeout(fit, 50); return () => { window.removeEventListener('resize', fit); clearTimeout(t) }
+    const el = wrap.current; if (!el) return
+    const fit = () => { const w = el.clientWidth, h = el.clientHeight; if (!w || !h) return; const bh = Math.min(h, w * H / W); setBox({ w: bh * W / H, h: bh }) }
+    fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect()
   }, [data])
   const dragY = useRef<number | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -123,7 +124,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   }
   const start = async () => { setBusy('start'); const j = await post({ action: 'start', lean, drop, add, subject }); if (j?.ok) { setStarted({ minted: j.minted, errors: j.errors ?? [] }); setConfirm(false); load() } setBusy(null) }
 
-  const h1: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, letterSpacing: '-.04em', lineHeight: 1, margin: 0, whiteSpace: 'nowrap' }
+  const h1: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, letterSpacing: '-.04em', lineHeight: 1, margin: 0, whiteSpace: 'nowrap' }
   const k2: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, margin: '18px 0 0' }
   const cta: React.CSSProperties = { marginTop: 12, width: '100%', height: 52, borderRadius: 99, border: 0, background: C.ink, color: '#fff', fontWeight: 700, fontSize: 15, font: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', cursor: 'pointer', boxSizing: 'border-box' }
   const tile = (bg: string, dashed = false): React.CSSProperties => ({ borderRadius: 16, padding: '12px 6px 10px', textAlign: 'center', background: bg, border: dashed ? '1.5px dashed #c9c9d0' : 0, position: 'relative', font: 'inherit', color: C.ink, cursor: 'pointer' })
@@ -162,7 +163,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const weeks = (() => { const g = new Map<string, Slot[]>(); for (const s of on) { const k = weekOf(s.date); g.set(k, [...(g.get(k) ?? []), s]) } return [...g.entries()].sort(([a], [b]) => a.localeCompare(b)) })()
 
   const funnel = (
-      <div ref={wrap} style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '2px 0 0' }}>
+      <div ref={wrap} style={{ flex: 1, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '2px 0 0' }}>
       <div style={{ position: 'relative', width: box.w, height: box.h }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
           <path className={state === 'done' ? undefined : 'pm-path'} d={PATH} fill="none" stroke={HUE.aware} strokeOpacity=".45" strokeWidth="1.8" strokeDasharray="3 5" />
@@ -198,11 +199,11 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
             </div>
             <div style={{ fontSize: Math.round(11 * k), color: C.mute, fontWeight: 600, marginTop: 4 }}>{state === 'draft' ? (s?.add != null ? `+${about(s.add)} ${s.unit} · estimate` : 'nothing planned') : state === 'on' ? `so far · ${s?.unit ?? ''}` : `the month · ${s?.unit ?? ''}`}</div>
           </div>) })}
-        {state !== 'done' && RING.slice(0, 4).map((p, i) => { const s = stageOf[p.stage]; if (!s?.lever) return null; const y = (p.cy + RING[i + 1].cy) / 2; return <span key={p.stage} className="pm-num" style={{ position: 'absolute', left: '50%', top: `${y / H * 100}%`, transform: 'translate(-50%,-50%)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap', maxWidth: '52%', overflow: 'hidden', textOverflow: 'ellipsis', animationDelay: `${300 + i * 90}ms` }}>{s.lever}</span> })}
+        {state !== 'done' && RING.slice(0, 4).map((p, i) => { const s = stageOf[p.stage]; if (!s?.lever) return null; const y = (p.cy + RING[i + 1].cy) / 2; const kk = box.w / W; return <span key={p.stage} className="pm-num" style={{ position: 'absolute', left: '50%', top: `${y / H * 100}%`, transform: 'translate(-50%,-50%)', fontSize: Math.max(10, Math.round(12 * kk)), fontWeight: 700, padding: `${Math.max(3, Math.round(5 * kk))}px ${Math.max(7, Math.round(11 * kk))}px`, borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap', maxWidth: '52%', overflow: 'hidden', textOverflow: 'ellipsis', animationDelay: `${300 + i * 90}ms` }}>{s.lever}</span> })}
         {state !== 'done' && RING.map((p, i) => {
           const beads = on.filter((s) => s.stage === p.stage).reduce<Slot[]>((acc, s) => (acc.some((x) => x.kind === s.kind) ? acc : [...acc, s]), []).slice(0, 4)
           return beads.map((b, j) => { /* on the ring's OUTER side, clear of the levers in the middle and the number opposite */ const right = p.cx > W / 2; const deg = right ? [-30, 30, 90, 150][j] : [210, 150, 90, 30][j]; const ang = deg * Math.PI / 180; const x = p.cx + Math.cos(ang) * p.r * .98, y = p.cy + Math.sin(ang) * p.r * .98; return (
-            <span key={b.kind} className="pm-bead" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', left: `${x / W * 100}%`, top: `${y / H * 100}%`, width: 28, height: 28, borderRadius: 99, background: '#fff', border: `1.6px solid ${HUE[p.stage]}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', ['--c2' as string]: HUE[p.stage], cursor: 'pointer', animationDelay: `${500 + i * 120 + j * 70}ms` }}><span style={{ width: 16, display: 'block' }}><Drawing spec={{ scene: SCENE[b.kind] }} now={b.status === 'done'} name="" rating="" t={(s) => s} /></span></span>) })
+            <span key={b.kind} className="pm-bead" onClick={() => setOpen(p.stage)} style={{ position: 'absolute', left: `${x / W * 100}%`, top: `${y / H * 100}%`, width: Math.max(20, Math.round(28 * box.w / W)), height: Math.max(20, Math.round(28 * box.w / W)), borderRadius: 99, background: '#fff', border: `1.6px solid ${HUE[p.stage]}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', ['--c2' as string]: HUE[p.stage], cursor: 'pointer', animationDelay: `${500 + i * 120 + j * 70}ms` }}><span style={{ width: Math.max(12, Math.round(16 * box.w / W)), display: 'block' }}><Drawing spec={{ scene: SCENE[b.kind] }} now={b.status === 'done'} name="" rating="" t={(s) => s} /></span></span>) })
         })}
       </div>
       </div>
@@ -221,66 +222,62 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const prevMonth = (mm: string) => { const [y, mo] = mm.split('-').map(Number); return `${mo === 1 ? y - 1 : y}-${String(mo === 1 ? 12 : mo - 1).padStart(2, '0')}` }
   const go = (mm: string) => { window.location.href = `/dashboard/plan?clientId=${clientId}&month=${mm}` }
 
+  const summary = getting.slice(0, 4).map(([n, w]) => `${n} ${w}`).join(' · ') + (m.creator && on.some((x) => x.kind === 'creator') ? ` · ${m.creator.name.split(' ')[0]}` : '')
   return (
-    <div className="cr" style={{ padding: '4px 16px 84px', color: C.ink, maxWidth: 480, margin: '0 auto' }}>
+    <div className="cr" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '2px 16px 0', boxSizing: 'border-box', color: C.ink, maxWidth: 480, margin: '0 auto', width: '100%' }}>
       <style>{DRAW_CSS}{`.pm-ring{cursor:pointer}@keyframes pm-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}.pm-in{animation:pm-in .24s cubic-bezier(.2,.7,.2,1)}@keyframes pm-flow{to{stroke-dashoffset:-16}}.pm-path{animation:pm-flow 1.6s linear infinite}@keyframes pm-pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}70%{transform:translate(-50%,-50%) scale(1.12)}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}.pm-bead{animation:pm-pop .5s cubic-bezier(.2,.7,.2,1) both}@keyframes pm-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.pm-num{animation:pm-up .6s cubic-bezier(.2,.7,.2,1) both}.pm-drawer{transition:transform .32s cubic-bezier(.2,.7,.2,1)}.pm-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}.pm-chips::-webkit-scrollbar{display:none}@media(prefers-reduced-motion:reduce){.pm-in,.pm-path,.pm-bead,.pm-num{animation:none}.pm-drawer{transition:none}}`}</style>
 
-      {/* the month you are in, and the ones either side */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 2, gap: 8 }}>
+      {/* the month and its subject on the left; the lean on the right, the way Home keeps its range */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flex: 'none' }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <button type="button" aria-label="The month before" onClick={() => go(prevMonth(m.month))} style={{ width: 28, height: 28, border: 0, background: 'none', color: C.faint, display: 'grid', placeItems: 'center', cursor: 'pointer', marginLeft: -8 }}><ChevronLeft size={20} /></button>
-            <h1 style={h1}>{title}</h1>
-            <button type="button" aria-label="The month after" onClick={() => go(monthAfter(m.month))} style={{ width: 28, height: 28, border: 0, background: 'none', color: C.faint, display: 'grid', placeItems: 'center', cursor: 'pointer' }}><ChevronRight size={20} /></button>
-          </div>
+          <h1 style={h1}>{title}</h1>
           {editing
-            ? <input autoFocus defaultValue={m.subject ?? ''} placeholder="What is this month about? Fall menu, Halloween" maxLength={80} onBlur={(e) => saveSubject(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }} style={{ display: 'block', marginTop: 6, width: '100%', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '6px 10px', borderRadius: 10, border: `1px solid ${C.ink}`, color: C.ink, boxSizing: 'border-box' }} />
-            : <small onClick={() => setEditing(true)} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 4, lineHeight: 1.35, cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{state === 'draft' ? <>{m.subject ?? m.thesis}<span style={{ color: C.faint }}> · edit</span></> : subtitle}</small>}
+            ? <input autoFocus defaultValue={m.subject ?? ''} placeholder="Fall menu, Halloween…" maxLength={80} onBlur={(e) => saveSubject(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }} style={{ display: 'block', marginTop: 4, width: '100%', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '5px 10px', borderRadius: 10, border: `1px solid ${C.ink}`, color: C.ink, boxSizing: 'border-box' }} />
+            : <small onClick={() => { if (state === 'draft') setEditing(true) }} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 3, lineHeight: 1.3, cursor: state === 'draft' ? 'text' : 'default', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{state === 'draft' ? (m.subject ?? <span style={{ color: C.faint }}>What is {name} about? Tap to say.</span>) : subtitle}</small>}
         </div>
-        <button type="button" onClick={() => { setTab('money'); setDrawer(true) }} style={{ textAlign: 'right', flex: 'none', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', padding: 0 }}><b style={{ display: 'block', fontSize: 20, letterSpacing: '-.03em' }}>{dollars(m.total)}</b><small style={{ fontSize: 11, color: C.mute, fontWeight: 600 }}>{state === 'done' ? 'billed' : state === 'on' ? 'as approved' : 'after approval'}</small></button>
+        {state === 'draft' && (
+          <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 99, background: '#f2f2f5', flex: 'none' }}>
+            {([['seen', 'Seen'], ['asis', 'As is'], ['in', 'In']] as [Lean, string][]).map(([kk, l]) => <button key={kk} type="button" disabled={busy != null} onClick={() => relean(kk)} style={{ fontSize: 11.5, fontWeight: 800, padding: '6px 9px', borderRadius: 99, border: 0, background: lean === kk ? '#fff' : 'transparent', color: lean === kk ? C.ink : C.mute, boxShadow: lean === kk ? '0 1px 3px rgba(0,0,0,.12)' : 'none', font: 'inherit', cursor: 'pointer' }}>{busy === 'lean' && lean === kk ? <Loader2 size={11} className="mvp-spin" /> : l}</button>)}
+          </div>
+        )}
       </div>
 
-      {/* the season: this month and the two after it, the holidays on them */}
+      {/* the season: this month and the two after it, with their holidays. Also how you move between months. */}
       {data.season?.length > 1 && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flex: 'none' }}>
           {data.season.map((sm) => { const here = sm.month === m.month; const st = sm.status === 'started' ? 'on' : sm.status === 'done' ? 'done' : 'draft'; return (
-            <button key={sm.month} type="button" onClick={() => { if (!here) go(sm.month) }} style={{ flex: 1, minWidth: 0, textAlign: 'left', font: 'inherit', border: `1.5px solid ${here ? C.ink : C.line}`, background: here ? C.ink : '#fff', color: here ? '#fff' : C.ink, borderRadius: 12, padding: '7px 9px', cursor: here ? 'default' : 'pointer' }}>
+            <button key={sm.month} type="button" onClick={() => { if (!here) go(sm.month) }} style={{ flex: 1, minWidth: 0, textAlign: 'left', font: 'inherit', border: 0, background: here ? C.ink : '#f6f6f8', color: here ? '#fff' : C.ink, borderRadius: 12, padding: '6px 9px', cursor: here ? 'default' : 'pointer' }}>
               <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}><b style={{ fontSize: 12.5 }}>{MONTH_NAME(sm.month).slice(0, 3)}</b><small style={{ fontSize: 10, fontWeight: 700, color: here ? 'rgba(255,255,255,.7)' : st === 'on' ? C.greenDk : C.mute }}>{st === 'on' ? 'on' : st === 'done' ? 'done' : sm.total ? dollars(sm.total) : ''}</small></span>
-              <span style={{ display: 'block', fontSize: 11, marginTop: 2, color: here ? 'rgba(255,255,255,.75)' : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sm.occasions.length ? sm.occasions.map((o) => `${o.emoji} ${o.name}`).join(' · ') : sm.subject ?? `${sm.pieces} pieces`}</span>
+              <span style={{ display: 'block', fontSize: 11, marginTop: 1, color: here ? 'rgba(255,255,255,.75)' : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sm.occasions.length ? sm.occasions.map((o) => `${o.emoji} ${o.name}`).join(' · ') : sm.subject ?? `${sm.pieces} pieces`}</span>
             </button>) })}
         </div>
       )}
 
       {funnel}
 
-      {/* one line of what you get, one line of what it needs, the lean, and Start */}
-      <div className="pm-chips" style={{ marginTop: 6 }}>
-        {getting.map(([n, w, k]) => <span key={w} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '5px 9px 5px 5px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 20, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}
-        {m.creator && on.some((x) => x.kind === 'creator') && <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 99, background: '#f6f6f8' }}>{m.creator.name.split(' ')[0]}</span>}
+      <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', lineHeight: 1.35, flex: 'none', padding: '2px 0 0', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{advice}</div>
+      {data.off && <div style={{ marginTop: 4, fontSize: 12, color: '#8a5a0c', fontWeight: 600, textAlign: 'center', flex: 'none' }}>Not switched on yet. The team has to run one update first.</div>}
+      {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 4, textAlign: 'center', flex: 'none' }}>{err}</div>}
+      {started && <div className="pm-in" style={{ marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '8px 12px', fontSize: 12.5, lineHeight: 1.4, flex: 'none' }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
+      <div style={{ flex: 'none', padding: '8px 0 calc(72px + env(safe-area-inset-bottom))' }}>
+        {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, marginTop: 0, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
+          : state === 'on' ? <a href={`/dashboard/campaigns?clientId=${clientId}`} style={{ ...cta, marginTop: 0, textDecoration: 'none' }}><span>See it on Coming up</span><ArrowRight size={18} /></a>
+          : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, marginTop: 0, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><span style={{ fontWeight: 600, opacity: .8 }}>{dollars(m.total)}</span><ArrowRight size={18} /></span></button>}
       </div>
-      <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{advice}{needs.length > 0 && state === 'draft' ? <> Needs you {needs.length} times.</> : null}</div>
-      {data.off && <div style={{ marginTop: 8, fontSize: 12.5, color: '#8a5a0c', fontWeight: 600, lineHeight: 1.45, textAlign: 'center' }}>The monthly plan is not switched on yet. The team has to run one update first.</div>}
-      {state === 'draft' && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          {([['seen', 'Seen'], ['asis', 'As is'], ['in', 'In']] as [Lean, string][]).map(([k, l]) => <button key={k} type="button" disabled={busy != null} onClick={() => relean(k)} style={{ flex: 1, textAlign: 'center', fontSize: 12.5, fontWeight: 800, padding: '9px 0', borderRadius: 99, border: `1.5px solid ${lean === k ? C.ink : C.line}`, background: lean === k ? C.ink : '#fff', color: lean === k ? '#fff' : C.ink, font: 'inherit', cursor: 'pointer' }}>{busy === 'lean' && lean === k ? <Loader2 size={12} className="mvp-spin" /> : l}</button>)}
-        </div>
-      )}
-      {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 8, textAlign: 'center' }}>{err}</div>}
-      {started && <div className="pm-in" style={{ marginTop: 10, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date. Every paid piece waits for your OK.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
-      {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, marginTop: 10, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
-        : state === 'on' ? <a href={`/dashboard/campaigns?clientId=${clientId}`} style={{ ...cta, marginTop: 10, textDecoration: 'none' }}><span>See it on Coming up</span><ArrowRight size={18} /></a>
-        : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, marginTop: 10, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><ArrowRight size={18} /></button>}
 
       {/* the drawer: pieces, days, money. Rests on the bottom edge; pull it up. Portaled to the
          body so 'fixed' means the screen, not the shell's transformed frame. */}
       {mounted && createPortal(<>
       {drawer && <div onClick={() => setDrawer(false)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(20,22,26,.25)' }} />}
-      <div className="pm-drawer" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 71, display: 'flex', justifyContent: 'center', transform: drawer ? 'none' : 'translateY(calc(100% - 64px))', pointerEvents: 'none' }}>
+      <div className="pm-drawer" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 71, display: 'flex', justifyContent: 'center', transform: drawer ? 'none' : 'translateY(calc(100% - 66px - env(safe-area-inset-bottom)))', pointerEvents: 'none' }}>
         <div className="cr" style={{ width: '100%', maxWidth: 480, height: '76dvh', background: '#fff', borderRadius: '22px 22px 0 0', boxShadow: '0 -8px 30px rgba(0,0,0,.10)', display: 'flex', flexDirection: 'column', pointerEvents: 'auto', boxSizing: 'border-box' }}
           onTouchStart={(e) => { dragY.current = e.touches[0].clientY }} onTouchEnd={(e) => { const y0 = dragY.current; dragY.current = null; if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; if (dy < -30) setDrawer(true); else if (dy > 30) setDrawer(false) }}>
           <style>{DRAW_CSS}</style>
-          <button type="button" onClick={() => setDrawer((v) => !v)} aria-label={drawer ? 'Close' : 'Open'} style={{ border: 0, background: 'none', padding: '8px 0 0', cursor: 'pointer', width: '100%' }}><span style={{ display: 'block', width: 38, height: 4, borderRadius: 99, background: '#d9d9de', margin: '0 auto' }} /></button>
-          <div style={{ display: 'flex', gap: 4, padding: '8px 14px 8px', background: '#f2f2f5', margin: '6px 16px 0', borderRadius: 12 }}>
+          <button type="button" onClick={() => setDrawer((v) => !v)} aria-label={drawer ? 'Close' : 'Open'} style={{ border: 0, background: 'none', padding: '8px 16px 0', cursor: 'pointer', width: '100%', font: 'inherit', color: C.ink, textAlign: 'left' }}>
+            <span style={{ display: 'block', width: 38, height: 4, borderRadius: 99, background: '#d9d9de', margin: '0 auto' }} />
+            {!drawer && <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px' }}><span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{summary}</span><span style={{ fontSize: 12.5, fontWeight: 700, color: C.greenDk, display: 'inline-flex', alignItems: 'center', gap: 2, flex: 'none' }}>Details <ChevronRight size={14} /></span></span>}
+          </button>
+          <div style={{ display: drawer ? 'flex' : 'none', gap: 4, padding: '8px 14px 8px', background: '#f2f2f5', margin: '6px 16px 0', borderRadius: 12 }}>
             {([['pieces', 'Pieces'], ['days', 'Days'], ['money', 'Money'], ['rhythm', 'Rhythm']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setDrawer(true) }} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 0', borderRadius: 9, border: 0, background: tab === k ? '#fff' : 'transparent', color: tab === k ? C.ink : C.mute, boxShadow: tab === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px calc(24px + env(safe-area-inset-bottom))', overscrollBehavior: 'contain' }}>
