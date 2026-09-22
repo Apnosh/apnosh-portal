@@ -54,7 +54,7 @@ const about = (n: number | null) => (n == null ? '—' : n >= 10000 ? `${Math.ro
 const people = (n: number | null, max: number) => (n == null || n <= 0 ? 3 : Math.max(3, Math.min(max, Math.round(6 * Math.log10(n + 1)))))
 const weekOf = (iso: string) => { const d = dt(iso); d.setDate(d.getDate() - d.getDay()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
-export default function PlanMonthPage({ clientId, month: monthParam }: { clientId: string; month: string | null }) {
+export default function PlanMonthPage({ clientId, month: monthParam, navBottom = 0, extraTabs = [] }: { clientId: string; month: string | null; /** px the bottom nav takes, so the drawer rests above it */ navBottom?: number; /** more drawer tabs from the page around it (the calendar, the campaigns that ran) */ extraTabs?: { key: string; label: string; render: () => React.ReactNode }[] }) {
   const [data, setData] = useState<Read | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -68,7 +68,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const [editing, setEditing] = useState(false)
   const [day, setDay] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
-  const [tab, setTab] = useState<'pieces' | 'days' | 'money' | 'rhythm'>('pieces')
+  const [tab, setTab] = useState<string>('pieces')
   const [rh, setRh] = useState<Rhythm | null>(null)
   /* the funnel fits the screen like Home: as tall as the room between the header and the
      bottom block, never wider than the page */
@@ -220,7 +220,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   )
   const allMonth = (s: Slot) => s.kind === 'taste' || s.kind === 'review' || s.kind === 'team'
   const prevMonth = (mm: string) => { const [y, mo] = mm.split('-').map(Number); return `${mo === 1 ? y - 1 : y}-${String(mo === 1 ? 12 : mo - 1).padStart(2, '0')}` }
-  const go = (mm: string) => { window.location.href = `/dashboard/plan?clientId=${clientId}&month=${mm}` }
+  const go = (mm: string) => { window.location.href = `${window.location.pathname}?clientId=${clientId}&month=${mm}` }
 
   const summary = getting.slice(0, 4).map(([n, w]) => `${n} ${w}`).join(' · ') + (m.creator && on.some((x) => x.kind === 'creator') ? ` · ${m.creator.name.split(' ')[0]}` : '')
   return (
@@ -259,9 +259,9 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
       {data.off && <div style={{ marginTop: 4, fontSize: 12, color: '#8a5a0c', fontWeight: 600, textAlign: 'center', flex: 'none' }}>Not switched on yet. The team has to run one update first.</div>}
       {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 4, textAlign: 'center', flex: 'none' }}>{err}</div>}
       {started && <div className="pm-in" style={{ marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '8px 12px', fontSize: 12.5, lineHeight: 1.4, flex: 'none' }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
-      <div style={{ flex: 'none', padding: '8px 0 calc(72px + env(safe-area-inset-bottom))' }}>
-        {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, marginTop: 0, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
-          : state === 'on' ? <a href={`/dashboard/campaigns?clientId=${clientId}`} style={{ ...cta, marginTop: 0, textDecoration: 'none' }}><span>See it on Coming up</span><ArrowRight size={18} /></a>
+      <div style={{ flex: 'none', padding: navBottom ? '8px 0 74px' : '8px 0 calc(72px + env(safe-area-inset-bottom))' }}>
+        {state === 'done' ? <a href={`?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, marginTop: 0, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
+          : state === 'on' ? <a href={`/dashboard?clientId=${clientId}`} style={{ ...cta, marginTop: 0, textDecoration: 'none' }}><span>See it on Home</span><ArrowRight size={18} /></a>
           : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, marginTop: 0, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><span style={{ fontWeight: 600, opacity: .8 }}>{dollars(m.total)}</span><ArrowRight size={18} /></span></button>}
       </div>
 
@@ -269,8 +269,8 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
          body so 'fixed' means the screen, not the shell's transformed frame. */}
       {mounted && createPortal(<>
       {drawer && <div onClick={() => setDrawer(false)} style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(20,22,26,.25)' }} />}
-      <div className="pm-drawer" style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 71, display: 'flex', justifyContent: 'center', transform: drawer ? 'none' : 'translateY(calc(100% - 66px - env(safe-area-inset-bottom)))', pointerEvents: 'none' }}>
-        <div className="cr" style={{ width: '100%', maxWidth: 480, height: '76dvh', background: '#fff', borderRadius: '22px 22px 0 0', boxShadow: '0 -8px 30px rgba(0,0,0,.10)', display: 'flex', flexDirection: 'column', pointerEvents: 'auto', boxSizing: 'border-box' }}
+      <div className="pm-drawer" style={{ position: 'fixed', left: 0, right: 0, bottom: navBottom ? `calc(${navBottom}px + env(safe-area-inset-bottom))` : 0, zIndex: 71, display: 'flex', justifyContent: 'center', transform: drawer ? 'none' : `translateY(calc(100% - 66px${navBottom ? '' : ' - env(safe-area-inset-bottom)'}))`, pointerEvents: 'none' }}>
+        <div className="cr" style={{ width: '100%', maxWidth: 480, height: navBottom ? `calc(76dvh - ${navBottom}px)` : '76dvh', background: '#fff', borderRadius: navBottom ? 22 : '22px 22px 0 0', boxShadow: '0 -8px 30px rgba(0,0,0,.10)', display: 'flex', flexDirection: 'column', pointerEvents: 'auto', boxSizing: 'border-box' }}
           onTouchStart={(e) => { dragY.current = e.touches[0].clientY }} onTouchEnd={(e) => { const y0 = dragY.current; dragY.current = null; if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; if (dy < -30) setDrawer(true); else if (dy > 30) setDrawer(false) }}>
           <style>{DRAW_CSS}</style>
           <button type="button" onClick={() => setDrawer((v) => !v)} aria-label={drawer ? 'Close' : 'Open'} style={{ border: 0, background: 'none', padding: '8px 16px 0', cursor: 'pointer', width: '100%', font: 'inherit', color: C.ink, textAlign: 'left' }}>
@@ -278,7 +278,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
             {!drawer && <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px' }}><span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{summary}</span><span style={{ fontSize: 12.5, fontWeight: 700, color: C.greenDk, display: 'inline-flex', alignItems: 'center', gap: 2, flex: 'none' }}>Details <ChevronRight size={14} /></span></span>}
           </button>
           <div style={{ display: drawer ? 'flex' : 'none', gap: 4, padding: '8px 14px 8px', background: '#f2f2f5', margin: '6px 16px 0', borderRadius: 12 }}>
-            {([['pieces', 'Pieces'], ['days', 'Days'], ['money', 'Money'], ['rhythm', 'Rhythm']] as const).map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setDrawer(true) }} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 0', borderRadius: 9, border: 0, background: tab === k ? '#fff' : 'transparent', color: tab === k ? C.ink : C.mute, boxShadow: tab === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
+            {([['pieces', 'Pieces'], ...(extraTabs.some((t) => t.key === 'calendar') ? [] : [['days', 'Days']]), ['money', 'Money'], ['rhythm', 'Rhythm'], ...extraTabs.map((t) => [t.key, t.label])] as [string, string][]).map(([k, l]) => <button key={k} type="button" onClick={() => { setTab(k); setDrawer(true) }} style={{ flex: 1, font: 'inherit', fontSize: extraTabs.length ? 12 : 13, fontWeight: 700, padding: '7px 0', borderRadius: 9, border: 0, background: tab === k ? '#fff' : 'transparent', color: tab === k ? C.ink : C.mute, boxShadow: tab === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px calc(24px + env(safe-area-inset-bottom))', overscrollBehavior: 'contain' }}>
             {tab === 'pieces' && weeks.map(([wk, rows]) => {
@@ -313,6 +313,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
               <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Posts, the taste, the review ask and the team card are free. Nothing is charged today; each paid piece is approved before it is charged.</div>
               {state === 'draft' && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>{MONTH_NAME(monthAfter(m.month))} drafts itself near the end of {name}. Nothing starts without you.</div>}
             </>}
+            {extraTabs.map((t) => tab === t.key ? <div key={t.key} style={{ margin: '0 -16px' }}>{t.render()}</div> : null)}
             {tab === 'rhythm' && (() => { const r = rh ?? data.rhythm; const step = (k: keyof Rhythm, lo: number, hi: number) => (v: number) => setRh({ ...r, [k]: Math.max(lo, Math.min(hi, v)) }); const rows: [keyof Rhythm, string, string, number, number][] = [['posts_week', 'Posts', 'a week', 0, 7], ['graphics_week', 'Graphics', 'a week', 0, 3], ['reels_month', 'Reels', 'a month', 0, 8], ['shoots_month', 'Shoot days', 'a month', 0, 2], ['creator_quarter', 'Creator visits', 'a quarter', 0, 3]]; const dirty = rh != null && JSON.stringify(rh) !== JSON.stringify(data.rhythm); return (
               <>
                 <div style={{ fontSize: 13, color: C.mute, marginTop: 12, lineHeight: 1.45 }}>Set once. Every month starts from this, and the holidays add their own pieces on top. {data.rhythmSet ? 'This is yours.' : 'This is our read of your budget until you change it.'}</div>

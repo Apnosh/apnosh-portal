@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
+import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, loadHomePlan, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,10 +32,22 @@ export async function GET(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   const admin = createAdminClient()
+  if (sp.get('light') === '1') {
+    /* Home's read: the running month's beads and planned rings, nothing drafted */
+    const home = await loadHomePlan(admin, clientId).catch(() => null)
+    return NextResponse.json({ plan: home }, { headers: { 'Cache-Control': 'no-store' } })
+  }
   const [probe, probe267] = await Promise.all([admin.from('plan_months').select('id').limit(1), admin.from('announcements').select('id').limit(1)])
   /* Start books a shoot day and a creator, which live on announcements (267). Off until both are in. */
   const off = !!probe.error || !!probe267.error
-  const month = monthOk(sp.get('month')) ? sp.get('month')! : nextMonth()
+  /* Plan ahead opens on the first month that has not started, this month included */
+  let month = monthOk(sp.get('month')) ? sp.get('month')! : new Date().toISOString().slice(0, 7)
+  if (!monthOk(sp.get('month')) && !off) {
+    /* a month with fewer than ten days left is not worth planning; start from the next one */
+    const today = new Date(); const daysLeft = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - today.getDate()
+    if (daysLeft < 10) month = nextOf(month)
+    for (let i = 0; i < 3; i++) { const { data: r } = await admin.from('plan_months').select('status').eq('client_id', clientId).eq('month', month).maybeSingle(); if (!r || r.status === 'draft') break; month = nextOf(month) }
+  }
   const saved = off ? null : await loadMonth(admin, clientId, month)
   const edits = parseEdits({ lean: sp.get('lean') ?? undefined, subject: sp.get('subject') ?? undefined, drop: sp.get('drop') ?? undefined, add: sp.get('add') ?? undefined })
   const pre: Pre | null = off ? null : await preload(admin, clientId)

@@ -1,22 +1,10 @@
-'use client'
 /**
- * /dashboard/plan — the month ahead, drawn as the Home funnel (owner 2026-09-19, "let's try it").
+ * /dashboard/plan — the month moved to the Plan ahead tab (owner 2026-09-22). Old links follow.
  */
-import { Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { useClient } from '@/lib/client-context'
-import MvpShell from '@/components/mvp/mvp-shell'
-import PlanMonthPage from '@/components/mvp/plan/plan-month-page'
+import { redirect } from 'next/navigation'
 
-export default function Page() { return <Suspense fallback={null}><Inner /></Suspense> }
-function Inner() {
-  const { client, loading } = useClient()
-  const sp = useSearchParams()
-  const q = sp.get('clientId') ? `?clientId=${sp.get('clientId')}` : ''
-  if (loading || !client?.id) return null
-  return (
-    <MvpShell active="create" title="The month" back={`/dashboard/campaigns${q}`} focus fit>
-      <PlanMonthPage clientId={client.id} month={sp.get('month')} />
-    </MvpShell>
-  )
+export default async function PlanPage({ searchParams }: { searchParams: Promise<{ clientId?: string; month?: string }> }) {
+  const { clientId, month } = await searchParams
+  const q = [clientId ? `clientId=${encodeURIComponent(clientId)}` : '', month ? `month=${encodeURIComponent(month)}` : ''].filter(Boolean).join('&')
+  redirect(`/dashboard/campaigns${q ? `?${q}` : ''}`)
 }

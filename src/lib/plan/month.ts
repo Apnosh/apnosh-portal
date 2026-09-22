@@ -36,6 +36,7 @@ const ymd = (d: Date) => d.toISOString().slice(0, 10)
 const addDays = (iso: string, n: number) => ymd(new Date(Date.parse(iso + 'T12:00:00Z') + n * 86400000))
 const dow = (iso: string) => new Date(iso + 'T12:00:00Z').getUTCDay()
 export const nextOf = (m: string): string => { const [y, mo] = m.split('-').map(Number); return `${mo === 12 ? y + 1 : y}-${String(mo === 12 ? 1 : mo + 1).padStart(2, '0')}` }
+export const prevOf = (m: string): string => { const [y, mo] = m.split('-').map(Number); return `${mo === 1 ? y - 1 : y}-${String(mo === 1 ? 12 : mo - 1).padStart(2, '0')}` }
 export const nextMonth = (): string => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + 1); return d.toISOString().slice(0, 7) }
 const monthDays = (month: string): string[] => { const [y, m] = month.split('-').map(Number); const out: string[] = []; for (let d = 1; d <= 31; d++) { const iso = `${month}-${String(d).padStart(2, '0')}`; const dt = new Date(iso + 'T12:00:00Z'); if (dt.getUTCMonth() !== m - 1 || dt.getUTCFullYear() !== y) break; out.push(iso) } return out }
 
@@ -350,3 +351,40 @@ export async function mintDueSlots(admin: Admin): Promise<{ minted: number; erro
   }
   return { minted, errors }
 }
+
+/* ── Home's read (owner 2026-09-22, "incorporate it with the home dashboard"): the month that is
+   running, or the one that just ran, without drafting anything. Home draws its pieces as beads
+   on the rings, the planned ring dashed behind the real one, and one line of what happened. ── */
+export interface HomeBead { stage: Stage; kind: SlotKind; status: string; label: string; date: string; href: string | null }
+export interface HomePlan { month: string; status: 'started' | 'done'; planned: Record<Stage, number | null>; beads: HomeBead[]; counts: { done: number; minted: number; planned: number }; elapsed: number; days: number; recap: string | null; total: number }
+export async function loadHomePlan(admin: Admin, clientId: string): Promise<HomePlan | null> {
+  const thisMonth = ymd(new Date()).slice(0, 7)
+  const { data: rows, error } = await admin.from('plan_months').select('id, month, status, planned, total_cents').eq('client_id', clientId).in('month', [prevOf(thisMonth), thisMonth, nextOf(thisMonth)]).in('status', ['started', 'done'])
+  if (error || !rows?.length) return null
+  /* the running month wins; otherwise the month that just finished, for its recap */
+  const pick = (rows as { id: string; month: string; status: string; planned: Record<string, { planned: number | null }>; total_cents: number }[])
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .find((r) => r.status === 'started' && r.month >= thisMonth) ?? (rows as { id: string; month: string; status: string; planned: Record<string, { planned: number | null }>; total_cents: number }[]).find((r) => r.status === 'started') ?? (rows as { id: string; month: string; status: string; planned: Record<string, { planned: number | null }>; total_cents: number }[]).find((r) => r.status === 'done' && r.month === prevOf(thisMonth))
+  if (!pick) return null
+  const { data: slots } = await admin.from('plan_slots').select('stage, kind, status, label, date, ref').eq('plan_month_id', pick.id).neq('status', 'removed').order('date')
+  const sl = ((slots ?? []) as { stage: Stage; kind: SlotKind; status: string; label: string | null; date: string; ref: { href?: string } | null }[])
+  /* one bead per kind per ring: the nearest coming piece, or the last done one */
+  const beads: HomeBead[] = []
+  for (const st of ['aware', 'interest', 'action', 'order', 'keep'] as Stage[]) {
+    const kinds = [...new Set(sl.filter((x) => x.stage === st).map((x) => x.kind))]
+    for (const k of kinds.slice(0, 4)) { const mine = sl.filter((x) => x.stage === st && x.kind === k); const b = mine.find((x) => x.status === 'planned' || x.status === 'minted') ?? mine[mine.length - 1]; beads.push({ stage: st, kind: k, status: b.status, label: b.label ?? k, date: b.date, href: b.ref?.href ?? null }) }
+  }
+  const planned = Object.fromEntries((['aware', 'interest', 'action', 'order', 'keep'] as Stage[]).map((st) => [st, pick.planned?.[st]?.planned ?? null])) as Record<Stage, number | null>
+  const days = monthDays(pick.month); const today = ymd(new Date())
+  const elapsed = days.filter((d) => d <= today).length
+  let recap: string | null = null
+  if (pick.status === 'done') {
+    const actual = await loadActual(clientId, pick.month)
+    if (actual) {
+      const best = (Object.keys(planned) as Stage[]).map((st) => ({ st, d: actual[st] != null && planned[st] ? (actual[st]! - planned[st]!) / planned[st]! : null })).filter((x) => x.d != null).sort((a, b) => Math.abs(b.d!) - Math.abs(a.d!))[0]
+      if (best) recap = `${STAGE_LABEL[best.st]} ${best.d! >= 0 ? 'beat' : 'missed'} the ${MONTH_WORD(pick.month)} plan by ${Math.round(Math.abs(best.d!) * 100)}%.`
+    }
+  }
+  return { month: pick.month, status: pick.status as 'started' | 'done', planned, beads, counts: { done: sl.filter((x) => x.status === 'done').length, minted: sl.filter((x) => x.status === 'minted').length, planned: sl.filter((x) => x.status === 'planned').length }, elapsed, days: days.length, recap, total: Number(pick.total_cents) || 0 }
+}
+const MONTH_WORD = (m: string) => new Date(m + '-01T12:00:00Z').toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' })

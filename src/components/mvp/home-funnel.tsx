@@ -23,6 +23,7 @@
  */
 
 import { HUES, STAGE_HUES } from './hues'
+import { Drawing, DRAW_CSS, type Scene } from './create/drawings'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Bell, MessageCircle, CalendarDays } from 'lucide-react'
@@ -125,6 +126,7 @@ export type FunnelRange = '7d' | '30d' | '90d' | '12m' | 'custom'
  * reading "Últimos 7 días" in a tab three words wide. */
 const RANGES: [FunnelRange, string, string][] = [['7d', 'Last 7 days', '7 days'], ['30d', 'Last 30 days', '30 days'], ['90d', 'Last 90 days', '90 days'], ['12m', 'Last year', '1 year'], ['custom', 'Custom', 'Custom']]
 
+export interface HomePlanView { month: string; status: 'started' | 'done'; /** per Home stage index 0..4 */ planned: (number | null)[]; beads: { stage: number; scene: Scene; status: string; label: string }[]; counts: { done: number; minted: number; planned: number }; elapsed: number; days: number; recap: string | null; href: string }
 export interface HomeFunnelProps {
   businessName?: string
   period?: string
@@ -166,6 +168,8 @@ export interface HomeFunnelProps {
   onCStart?: (v: string) => void
   onCEnd?: (v: string) => void
   loading?: boolean
+  /** the month on Home (owner 2026-09-22): the running month's pieces as beads on the rings, the planned ring dashed behind the real one, one line of what happened */
+  plan?: HomePlanView | null
 }
 
 /* A realistic market/cafe profile (Yellow Bee-ish) as the mock default. */
@@ -387,6 +391,7 @@ export default function HomeFunnel({
   onCStart,
   onCEnd,
   loading = false,
+  plan = null,
 }: HomeFunnelProps) {
   const { client: bellClient } = useClient()
   const bellCounts = useInboxCounts(bellClient?.id)
@@ -402,6 +407,7 @@ export default function HomeFunnel({
   const particlesRef = useRef<Traveler[]>([])
   const seededRef = useRef(false) // first seed = flow-IN (circles start empty, fill); later reseeds seat in place (stay full)
   const rDispRef = useRef<number[]>([])
+  const [cssW, setCssW] = useState(400)
   const numDispRef = useRef<number[]>([]) // eased ledger numbers → count-up on load, smooth cross-fade on range change
   const entranceRef = useRef(0)           // 0→~1.5s considered draw-in; gates ring fade, number count-up, crowd cascade
   const pressRef = useRef<{ i: number }>({ i: -1 }) // which stage is under the thumb (-1 = none)
@@ -803,6 +809,9 @@ export default function HomeFunnel({
       ctx.lineWidth = lw; ctx.setLineDash(dash || [])
       ctx.strokeStyle = `rgba(${ringStr},${baseA * eIn})`; ctx.stroke(); ctx.setLineDash([])
       ctx.restore()
+      /* the month's planned ring (owner 2026-09-22): dashed, faint, in the stage's own hue, sized
+         against the real count so actual-versus-plan reads without a number */
+      { const pl = plan?.planned[i]; if (pl != null && pl > 0 && s.count != null && s.count > 0) { const ratio = Math.max(0.6, Math.min(1.3, Math.sqrt(pl / s.count))); const [sr, sg, sb] = stageRgb(i); ctx.save(); ctx.beginPath(); ctx.arc(ox, oy, r * ratio, 0, 7); ctx.lineWidth = 1.2; ctx.setLineDash([4, 5]); ctx.strokeStyle = `rgba(${sr},${sg},${sb},${0.45 * eIn})`; ctx.stroke(); ctx.setLineDash([]); ctx.restore() } }
 
       // a bright core dot at the orb's centre (the mockup's lit bead) — night only
       if (dark) {
@@ -943,7 +952,7 @@ export default function HomeFunnel({
       ctx.globalAlpha = 1
     }
     ctx.textAlign = 'left'
-  }, [C, T, theme, layout, stages, effH, rAt, flowTop, flowBot, loading])
+  }, [C, T, theme, layout, stages, effH, rAt, flowTop, flowBot, loading, plan])
 
   const resize = useCallback(() => {
     const cv = canvasRef.current
@@ -951,6 +960,7 @@ export default function HomeFunnel({
     const cssW = cv.clientWidth || 400
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     geom.current.W = cssW
+    setCssW(cssW)
     cv.width = cssW * dpr
     cv.height = effH * dpr
     cv.style.height = `${effH}px`
@@ -1304,6 +1314,26 @@ export default function HomeFunnel({
         style={{ display: 'block', position: 'absolute', top: 0, left: 0, zIndex: 0, width: '100%', height: effH, cursor: 'pointer', opacity: loading ? 0.5 : 1, transition: 'opacity .2s' }}
         aria-label={T('Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.')}
       />
+      {/* THE MONTH ON HOME (owner 2026-09-22): its pieces as beads on the rings they push, coloured by
+          state (coming: white; with the team: tinted; done: greyed), and one pill for the month itself.
+          HTML over the canvas so the drawings stay the app's own; the same geometry as the rings. */}
+      {plan && !loading && (
+        <div className="cr" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
+          <style>{DRAW_CSS}</style>
+          {layout.map((L, i) => {
+            const ox = Math.round(cssW * SPINE_X) + L.dx, oy = L.y, r = L.r
+            const right = L.dx > 0
+            const mine = plan.beads.filter((b) => b.stage === i).slice(0, 4)
+            const hue = HUES[STAGE_HUES[Math.max(0, Math.min(4, i))]][1]
+            return mine.map((b, j) => { const deg = right ? [-30, 30, 90, 150][j] : [210, 150, 90, 30][j]; const a = deg * Math.PI / 180; const x = ox + Math.cos(a) * r * 0.98, y = oy + Math.sin(a) * r * 0.98; const sz = Math.max(18, Math.min(24, Math.round(r * 0.34))); return (
+              <Link key={`${i}-${b.scene}-${j}`} href={plan.href} aria-label={b.label} style={{ position: 'absolute', left: x, top: y, width: sz, height: sz, transform: 'translate(-50%,-50%)', borderRadius: 99, background: b.status === 'minted' ? `${hue}1f` : '#fff', border: `1.4px solid ${hue}`, display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.10)', pointerEvents: 'auto', ['--c2' as string]: hue, opacity: b.status === 'done' ? .7 : 1 }}><span style={{ width: Math.round(sz * 0.58), display: 'block' }}><Drawing spec={{ scene: b.scene }} now={b.status === 'done'} name="" rating="" t={(x) => x} /></span></Link>) })
+          })}
+          <Link href={plan.href} style={{ position: 'absolute', left: 12, top: headerH + 2, pointerEvents: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, padding: '6px 11px', borderRadius: 99, background: theme === 'dark' ? 'rgba(255,255,255,.1)' : 'rgba(240,241,240,.85)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: C.ink, textDecoration: 'none', maxWidth: 'calc(100% - 24px)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ width: 7, height: 7, borderRadius: 99, background: plan.status === 'started' ? C.greenDk : C.mute, flex: 'none' }} />
+            {plan.status === 'done' && plan.recap ? plan.recap : `${new Date(plan.month + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' })}, on · day ${plan.elapsed} of ${plan.days}${plan.counts.done ? ` · ${plan.counts.done} done` : ''}${plan.counts.minted ? ` · ${plan.counts.minted} with the team` : ''}`}
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
@@ -1466,6 +1496,20 @@ export function HomeFunnelLive({ clientId, height, fill, fillReserve, onVisibili
   /* starts TRUE: the very first render (before the effect fires) must already
    * paint the skeleton, never a frame of nothing */
   const [loading, setLoading] = useState(true)
+  /* the month on Home: the running month's pieces and planned rings (light read; nothing drafted) */
+  const [plan, setPlan] = useState<HomePlanView | null>(null)
+  useEffect(() => {
+    if (!clientId) return
+    let alive = true
+    fetch(`/api/dashboard/plan-month?clientId=${clientId}&light=1`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!alive || !j?.plan) return
+      const p = j.plan as { month: string; status: 'started' | 'done'; planned: Record<string, number | null>; beads: { stage: string; kind: string; status: string; label: string }[]; counts: { done: number; minted: number; planned: number }; elapsed: number; days: number; recap: string | null }
+      const IDX: Record<string, number> = { aware: 0, interest: 1, action: 2, order: 3, keep: 4 }
+      const SCENE: Record<string, Scene> = { post: 'post', graphic: 'graphic', reel: 'reel', photos: 'photos', creator: 'creator', boost: 'boost', print: 'print', offer: 'offer', review: 'review', taste: 'dish', sign: 'sticky', team: 'grid' }
+      setPlan({ month: p.month, status: p.status, planned: [0, 1, 2, 3, 4].map((i) => { const k = Object.keys(IDX).find((kk) => IDX[kk] === i)!; return p.planned[k] ?? null }), beads: p.beads.map((b) => ({ stage: IDX[b.stage] ?? 0, scene: SCENE[b.kind] ?? 'post', status: b.status, label: b.label })), counts: p.counts, elapsed: p.elapsed, days: p.days, recap: p.recap, href: `/dashboard/campaigns?clientId=${clientId}&month=${p.month}` })
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [clientId])
   /* the last numbers this phone saw for this client + range: painted at once on the next visit,
      then the fresh load cross-fades over them (owner 2026-09-05: "the home page loading in the numbers") */
   const cacheKey = clientId ? `hf-last:${clientId}:${range}${range === 'custom' ? `:${cStart}:${cEnd}` : ''}` : null
@@ -1542,7 +1586,7 @@ export function HomeFunnelLive({ clientId, height, fill, fillReserve, onVisibili
   if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={(() => { const o = tickFor?.(range); if (!o) return data.yoy; const base = data.yoy ?? { awareness: null, interest: null, actions: null, orders: null }; return { awareness: o.awareness ?? base.awareness, interest: o.interest ?? base.interest, actions: o.actions ?? base.actions, orders: o.orders ?? base.orders } })()} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} fillReserve={fillReserve} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
+      <HomeFunnel plan={plan} views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={(() => { const o = tickFor?.(range); if (!o) return data.yoy; const base = data.yoy ?? { awareness: null, interest: null, actions: null, orders: null }; return { awareness: o.awareness ?? base.awareness, interest: o.interest ?? base.interest, actions: o.actions ?? base.actions, orders: o.orders ?? base.orders } })()} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} fillReserve={fillReserve} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time

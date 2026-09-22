@@ -721,7 +721,7 @@ export default function CreatePage() {
   const [influencersOpen, setInfluencersOpen] = useState(false)
   function quickGo(x: Quick) {
     if ('announce' in x.to) { goAnnounce(x.to.announce); return }
-    if ('plan' in x.to) { router.push(`/dashboard/plan${clientId ? `?clientId=${clientId}` : ''}`); return }
+    if ('plan' in x.to) { router.push(`/dashboard/campaigns${clientId ? `?clientId=${clientId}` : ''}`); return }
     if ('reply' in x.to) { setReplying(true); return }
     if ('reviews' in x.to) { setReviewing(true); return }
     if ('shoot' in x.to) { setShootOpen(true); return }

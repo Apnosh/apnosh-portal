@@ -47,7 +47,7 @@ export default function BottomNav({ active }: { active: NavKey }) {
   return (
     <nav className="mvp-nav" style={{ position: 'absolute', left: 12, right: 12, bottom: `max(${NAV_BOTTOM}px, env(safe-area-inset-bottom))`, zIndex: 5, overflow: 'visible', borderRadius: 999, background: 'rgba(255,255,255,0.88)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', border: `1px solid ${C.line}`, boxShadow: '0 1px 2px rgba(0,0,0,.06), 0 12px 34px rgba(0,0,0,.16)', height: NAV_HEIGHT, display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', padding: '0 6px' }}>
       <Item href="/dashboard" label="Home" on={active === 'home'}><HomeIcon /></Item>
-      <Item href="/dashboard/campaigns" label="Campaigns" on={active === 'campaigns'}><CalendarDays /></Item>
+      <Item href="/dashboard/campaigns" label="Plan ahead" on={active === 'campaigns'}><CalendarDays /></Item>
       {/* Create is a tab like the others now (owner 2026-09-11), not a floating disc */}
       <Item href="/dashboard/campaigns/new" label="Create" on={active === 'create'} big><Plus /></Item>
       <Item href="/dashboard/messages" label="Inbox" on={active === 'messages' || active === 'inbox'}><MessageCircle /></Item>
