@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
     listPieces(admin, clientId, today, addDays(today, 45)).catch(() => [] as Piece[]),
   ])
   const needs: NeedItem[] = []
+  const openSoon: Piece[] = []
   for (const it of inbox) {
     if (it.kind === 'approval') needs.push({ id: `inbox:${it.id}`, kind: 'approve', title: it.title, detail: it.detail ?? (it.status ?? ''), action: 'Approve', href: it.href, when: it.whenIso })
     else if (it.kind === 'post_review') needs.push({ id: `inbox:${it.id}`, kind: 'see', title: it.title, detail: it.detail ?? '', action: 'See it', href: it.href, when: it.whenIso })
@@ -43,9 +44,12 @@ export async function GET(req: NextRequest) {
   }
   for (const p of pieces) {
     if (p.state === 'needs' && p.source === 'request') needs.push({ id: p.id, kind: 'pay', title: p.label, detail: 'Waiting on payment before the team starts', action: 'Pay', href: p.href ?? '/dashboard/requests', when: p.date })
-    if (p.source === 'slot' && p.fill === 'open' && p.date && p.date >= today && p.date <= addDays(today, 7) && p.state === 'coming') needs.push({ id: p.id, kind: 'fill', title: `An open ${p.kind === 'reel' ? 'Reel' : p.kind} slot`, detail: `${nice(p.date)} · the team fills it a week out if you leave it`, action: 'Fill it', href: `/dashboard/campaigns/calendar?month=${p.month}`, when: p.date, slotId: p.slotId, slotKind: p.kind, slotDate: p.date })
+    /* open slots the owner can still fill: past the lock (three days out) and inside the week the
+       team would otherwise fill; one line for all of them, not one per slot */
+    if (p.source === 'slot' && p.fill === 'open' && p.date && p.date > addDays(today, 3) && p.date <= addDays(today, 8) && p.state === 'coming') openSoon.push(p)
     if ((p.kind === 'photos' || p.kind === 'creator') && p.date && p.date >= today && p.date <= addDays(today, 3) && p.state !== 'done') needs.push({ id: `there:${p.id}`, kind: 'there', title: p.kind === 'photos' ? 'Be there for the shoot' : `Host ${p.label.replace(/ visits$/, '')}`, detail: `${nice(p.date)} · ${p.kind === 'photos' ? 'dishes ready to plate, about two hours' : 'a table for two, the meal on the house'}`, action: null, href: p.href ?? '/dashboard/campaigns/calendar', when: p.date })
   }
+  if (openSoon.length) { const first = openSoon.sort((a, b) => a.date!.localeCompare(b.date!))[0]; needs.push({ id: 'open-soon', kind: 'fill', title: openSoon.length === 1 ? `An open ${first.kind === 'reel' ? 'Reel' : first.kind} slot` : `${openSoon.length} open slots this week`, detail: openSoon.length === 1 ? `${nice(first.date!)} · the team fills it if you leave it` : `${openSoon.map((p) => nice(p.date!)).join(', ')} · the team fills them if you leave them`, action: openSoon.length === 1 ? 'Fill it' : 'Fill them', href: `/dashboard/campaigns/calendar?month=${first.month}`, when: first.date, slotId: first.slotId, slotKind: first.kind, slotDate: first.date ?? undefined }) }
   const rank: Record<NeedItem['kind'], number> = { approve: 0, see: 1, pay: 2, there: 3, fill: 4, reconnect: 5, task: 6 }
   needs.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.when ?? '9').localeCompare(b.when ?? '9'))
   const week = pieces.filter((p) => p.date && p.date >= today && p.date <= addDays(today, 7) && p.state !== 'done' && p.state !== 'draft' && p.state !== 'stopped')
