@@ -1,19 +1,22 @@
 'use client'
 
 /**
- * /dashboard/campaigns — the Campaigns board, full-screen owner experience.
- * Wired to real campaigns via GET /api/campaigns; see mvp-campaigns.tsx. Shows
- * shipped / live / done only — unshipped drafts live on the Orders tab.
+ * /dashboard/campaigns — everything ordered or planned, by month, by campaign, or as what is
+ * coming (owner 2026-09-22). See src/components/mvp/campaigns/campaigns-page.tsx. The older
+ * cards and the calendar grid live at /dashboard/campaigns/calendar.
  */
-
-import MvpCampaigns from '@/components/mvp/mvp-campaigns'
+import { Suspense } from 'react'
+import { useClient } from '@/lib/client-context'
 import MvpShell from '@/components/mvp/mvp-shell'
+import CampaignsPage from '@/components/mvp/campaigns/campaigns-page'
 
-export default function CampaignsPage() {
-  /* the top row says Campaigns (owner 2026-09-11); the calendar is a row on the page, not a tab up here */
+export default function Page() { return <Suspense fallback={null}><Inner /></Suspense> }
+function Inner() {
+  const { client, loading } = useClient()
+  if (loading || !client?.id) return null
   return (
     <MvpShell active="campaigns" title="Campaigns">
-      <MvpCampaigns />
+      <CampaignsPage clientId={client.id} />
     </MvpShell>
   )
 }
