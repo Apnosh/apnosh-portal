@@ -39,8 +39,8 @@ export async function listPieces(admin: Admin, clientId: string, from: string, t
   /* ── the plan's months in range, and their slots ── */
   const months = await admin.from('plan_months').select('id, month, status, thesis').eq('client_id', clientId).gte('month', from.slice(0, 7)).lte('month', to.slice(0, 7)).then((r) => (r.error ? [] : ((r.data ?? []) as { id: string; month: string; status: string; thesis: string | null }[]).map((m) => ({ ...m, subject: m.thesis && !/^Get |^More people/i.test(m.thesis) ? m.thesis : null }))))
   if (months.length) {
-    let { data: slots } = await admin.from('plan_slots').select('id, plan_month_id, date, stage, kind, label, options, cents, status, ref, why, fill, subject, campaign').in('plan_month_id', months.map((m) => m.id)).neq('status', 'removed').neq('status', 'rolled')
-    if (!slots) ({ data: slots } = await admin.from('plan_slots').select('id, plan_month_id, date, stage, kind, label, options, cents, status, ref, why').in('plan_month_id', months.map((m) => m.id)).neq('status', 'removed').neq('status', 'rolled')) // before 272
+    let slots: unknown[] | null = (await admin.from('plan_slots').select('id, plan_month_id, date, stage, kind, label, options, cents, status, ref, why, fill, subject, campaign').in('plan_month_id', months.map((m) => m.id)).neq('status', 'removed').neq('status', 'rolled')).data
+    if (!slots) slots = (await admin.from('plan_slots').select('id, plan_month_id, date, stage, kind, label, options, cents, status, ref, why').in('plan_month_id', months.map((m) => m.id)).neq('status', 'removed').neq('status', 'rolled')).data // before 272
     for (const s of (slots ?? []) as { id: string; plan_month_id: string; date: string; kind: string; label: string | null; options: Record<string, unknown>; cents: number; status: string; ref: { kind?: string; id?: string | null; href?: string } | null; fill?: 'open' | 'set' | 'locked' | 'done'; subject?: string | null; campaign?: string | null }[]) {
       const pm = months.find((m) => m.id === s.plan_month_id)!
       const occ = typeof s.options?.occasion === 'string' ? OCCASIONS.find((o) => o.id === s.options.occasion) : null
