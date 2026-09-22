@@ -18,7 +18,7 @@ import { Mark } from './mark'
 import { Drawing, DRAW_CSS, type Scene } from './create/drawings'
 import MvpCampaigns from './mvp-campaigns'
 
-interface Need { id: string; kind: 'approve' | 'see' | 'pay' | 'there' | 'fill' | 'reconnect' | 'task'; title: string; detail: string; action: string | null; href: string; when: string | null; slotId?: string; slotKind?: string; slotDate?: string }
+interface Need { id: string; kind: 'approve' | 'see' | 'pay' | 'there' | 'fill' | 'reconnect' | 'task'; scene?: string; title: string; detail: string; action: string | null; href: string; when: string | null; slotId?: string; slotKind?: string; slotDate?: string }
 interface Piece { id: string; kind: string; label: string; detail: string; date: string | null; state: string; href: string | null; source: string; group: { kind: string; label: string; emoji?: string }; fill?: string; subject?: string | null }
 interface Board { needs: Need[]; week: Piece[]; next: { month: string; status: string }; thisMonth: { month: string; status: string } }
 
@@ -61,7 +61,7 @@ export default function CampaignsBoard() {
       {board && board.needs.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '4px 2px 6px' }}>Nothing waiting on you.</div>}
       {board?.needs.map((n) => (
         <div key={n.id} onClick={() => router.push(n.href.includes('?') ? `${n.href}&clientId=${clientId}` : `${n.href}${q}`)} style={{ ...rowS, cursor: 'pointer' }}>
-          <span style={{ width: 30, flex: 'none', ['--c2' as string]: n.kind === 'reconnect' || n.kind === 'pay' ? '#d99a1e' : '#3b6fd4' }}><Drawing spec={{ scene: NEED_SCENE[n.kind] }} name="" rating="" t={(x) => x} /></span>
+          <span style={{ width: 30, flex: 'none', ['--c2' as string]: n.kind === 'reconnect' || n.kind === 'pay' ? '#d99a1e' : '#3b6fd4' }}><Drawing spec={{ scene: n.scene ? SCENE_OF(n.scene) : NEED_SCENE[n.kind] }} name="" rating="" t={(x) => x} /></span>
           <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span><small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.detail}</small></span>
           {n.action ? <span style={{ fontSize: 12, fontWeight: 800, padding: '6px 12px', borderRadius: 99, background: C.ink, color: '#fff', whiteSpace: 'nowrap', flex: 'none' }}>{n.action}</span> : n.when ? <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, background: '#fff4e0', color: '#8a5a0c', whiteSpace: 'nowrap', flex: 'none' }}>{inDays(n.when) <= 0 ? 'today' : inDays(n.when) === 1 ? 'tomorrow' : `in ${inDays(n.when)} days`}</span> : null}
         </div>
