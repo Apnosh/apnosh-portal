@@ -15,7 +15,7 @@
  * on its rings.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Check, Loader2, X, Plus, ChevronRight, LayoutList, CalendarDays } from 'lucide-react'
+import { ArrowRight, Check, Loader2, X, Plus, ChevronRight, ChevronLeft, LayoutList, CalendarDays } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, DRAW_CSS, type Scene } from '../create/drawings'
 
@@ -79,6 +79,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
   const [editing, setEditing] = useState(false)
   const [viewState, setViewState] = useState<'month' | 'list' | 'money' | 'rhythm' | 'upcoming' | 'week'>(mode === 'campaigns' ? 'week' : 'month')
   const view = viewProp ?? viewState
+  const [week, setWeek] = useState<string | null>(null)
   const setView = (v: typeof viewState) => { setViewState(v); if ((v === 'week' || v === 'month') && onView) onView(v) }
   const [day, setDay] = useState<string | null>(null)
   const [addMenu, setAddMenu] = useState<string | null>(null)
@@ -97,7 +98,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
   const qs = (o: Record<string, string | undefined>) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&')
   const load = (l = lean, d = drop, a = add, sub = subject) => fetch(`/api/dashboard/plan-month?${qs({ clientId, month: monthParam ?? undefined, lean: l, subject: sub ?? undefined, drop: d.join(',') || undefined, add: a.map((x) => `${x.kind}:${x.date ?? ''}`).join(',') || undefined })}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not read the month'); setData(j as Read); setLean((j as Read).month.lean); if ((j as Read).month.subject && subject == null) setSubject((j as Read).month.subject) }).catch((e) => setErr(e instanceof Error ? e.message : 'Could not read the month'))
   useEffect(() => { load() }, [clientId, monthParam]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { const mm = data?.month?.month; if (mode === 'campaigns' && mm && !day) { const t = new Date().toISOString().slice(0, 10); const d0 = t.startsWith(mm) ? t : `${mm}-01`; setDay(d0) } }, [mode, data?.month?.month]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const mm = data?.month?.month; if (mode === 'campaigns' && mm && !day) { const t = new Date().toISOString().slice(0, 10); const d0 = t.startsWith(mm) ? t : `${mm}-01`; setDay(d0); setWeek(weekOf(d0)) } }, [mode, data?.month?.month]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const el = stripRef.current?.querySelector<HTMLElement>(`[data-month="${data?.month.month}"]`); if (el && stripRef.current) stripRef.current.scrollLeft = Math.max(0, el.offsetLeft - 16) }, [data?.month.month])
   const m = data?.month ?? null
   /* everything else already on the calendar that month: scheduled posts, shoots, tasks */
@@ -307,9 +308,12 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
         const first = `${m.month}-01`; const lastDay = `${m.month}-${String(data.days).padStart(2, '0')}`
         const starts: string[] = []; for (let w = weekOf(first); w <= lastDay; ) { starts.push(w); const d = dt(w); d.setDate(d.getDate() + 7); w = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
         const inMonth = (iso: string) => iso.slice(0, 7) === m.month
+        const cur = week && starts.includes(week) ? week : starts.find((w) => { const d = dt(w); d.setDate(d.getDate() + 6); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` >= today }) ?? starts[0]
+        const at = starts.indexOf(cur)
+        const step = (n: number) => { const i = at + n; if (i >= 0 && i < starts.length) { setWeek(starts[i]); return } const d = dt(cur); d.setDate(d.getDate() + n * 7 + 3); go(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`) }
         return (
           <div className="pm-in">
-            {starts.map((wk) => {
+            {[cur].map((wk) => {
               const days = Array.from({ length: 7 }, (_, i) => { const d = dt(wk); d.setDate(d.getDate() + i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }).filter(inMonth)
               const a = dt(days[0]), b = dt(days[days.length - 1])
               const label = a.getDate() === b.getDate() ? `${MO[a.getMonth()]} ${a.getDate()}` : `${MO[a.getMonth()]} ${a.getDate()} to ${b.getDate()}`
@@ -320,11 +324,13 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
               const occs = data.season.find((sm) => sm.month === m.month)?.occasions.filter((o) => days.includes(o.date)) ?? []
               const addDay = days.includes(today) ? today : days.find((d) => d >= today) ?? days[0]
               return (
-                <div key={wk} style={{ marginTop: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <b style={{ flex: 1, fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: past ? C.faint : C.ink }}>{label}{current ? <span style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, marginLeft: 8, verticalAlign: 'middle' }}>this week</span> : null}{occs.length ? <span style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.mute, marginLeft: 8 }}>{occs.map((o) => `${o.emoji} ${o.name}`).join(' · ')}</span> : null}</b>
+                <div key={wk} style={{ marginTop: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button type="button" aria-label="The week before" onClick={() => step(-1)} style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink, flex: 'none' }}><ChevronLeft size={15} /></button>
+                    <b style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: past ? C.faint : C.ink }}>{label}{current ? <span style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, marginLeft: 8, verticalAlign: 'middle' }}>this week</span> : null}{occs.length ? <span style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.mute, marginLeft: 8 }}>{occs.map((o) => `${o.emoji} ${o.name}`).join(' · ')}</span> : null}</b>
+                    <button type="button" aria-label="The week after" onClick={() => step(1)} style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink, flex: 'none' }}><ChevronRight size={15} /></button>
                     {state !== 'done' && !past && <div style={{ position: 'relative' }}>
-                      <button type="button" aria-label={`Add in the week of ${label}`} onClick={() => { setDay(addDay); setAddMenu((v) => (v === wk ? null : wk)) }} style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Plus size={15} /></button>
+                      <button type="button" aria-label={`Add in the week of ${label}`} onClick={() => { setDay(addDay); setAddMenu((v) => (v === wk ? null : wk)) }} style={{ width: 30, height: 30, borderRadius: 99, border: 0, background: C.ink, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#fff', marginLeft: 4 }}><Plus size={15} /></button>
                       {addMenu === wk && <div className="pm-in" style={{ position: 'absolute', right: 0, top: 36, zIndex: 5, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.12)', minWidth: 210, overflow: 'hidden' }}>
                         {([['order', 'Order something', 'a graphic, a Reel, a boost · priced'], ['quick', 'Quick add', 'pencil it in, ship it later'], ['note', 'A note', 'just for you']] as const).map(([k, l, sub]) => <button key={k} type="button" onClick={() => { setAddMenu(null); setDay(addDay); if (k === 'order') setAdding(addDay); else if (k === 'quick') setPencil({ date: addDay, kind: 'post', subject: '' }); else setNoteDraft('') }} style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', border: 0, background: 'none', padding: '10px 14px', cursor: 'pointer', color: C.ink, fontSize: 13.5, fontWeight: 700, borderBottom: `0.5px solid ${C.line}` }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{sub}</small></button>)}
                       </div>}
