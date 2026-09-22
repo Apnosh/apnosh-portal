@@ -22,7 +22,8 @@ import { Drawing, DRAW_CSS, type Scene } from '../create/drawings'
 type Stage = 'aware' | 'interest' | 'action' | 'order' | 'keep'
 type Kind = 'post' | 'graphic' | 'reel' | 'photos' | 'creator' | 'boost' | 'print' | 'offer' | 'review' | 'taste' | 'sign' | 'team'
 type Lean = 'seen' | 'asis' | 'in'
-interface Slot { id?: string; date: string; stage: Stage; kind: Kind; label: string; options: Record<string, unknown>; cents: number; status: string; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null }
+type Fill = 'open' | 'set' | 'locked' | 'done'
+interface Slot { fill?: Fill; subject?: string | null; campaign?: string | null; id?: string; date: string; stage: Stage; kind: Kind; label: string; options: Record<string, unknown>; cents: number; status: string; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null }
 interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; add: number | null; basis: string | null; unit: string; lever: string | null; levers: string[] }
 interface Tile { kind: Kind; stage: Stage; label: string; cents: number; date: string; why: string | null }
 interface Month { month: string; status: string; thesis: string; subject: string | null; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: { usualReach: number | null; reelLift: number | null; reviews30: number | null; budgetCents: number | null; locations: number }; tiles: Tile[] }
@@ -30,6 +31,10 @@ interface Rhythm { posts_week: number; graphics_week: number; reels_month: numbe
 interface SeasonMonth { month: string; status: string; total: number; subject: string | null; pieces: number; occasions: { id: string; name: string; emoji: string; date: string }[] }
 interface Read { month: Month; off: boolean; actual: Record<Stage, number | null> | null; elapsed: number; days: number; next: string; season: SeasonMonth[]; rhythm: Rhythm; rhythmSet: boolean }
 interface CalEvent { id: string; kind: string; title: string; startIso: string; status: string; href?: string }
+interface Extra { id: string; kind: string; label: string; detail: string; date: string | null; state: string; cents: number | null; href: string | null; source: string }
+const FILL_WORD: Record<Fill, [string, string, string]> = { open: ['open', '#fff', '#6e6e73'], set: ['set', '#f2f2f5', '#6e6e73'], locked: ['with the team', '#eaf7f3', '#2e9a78'], done: ['done', '#f2f2f5', '#aeaeb2'] }
+const SLOT_KINDS: Kind[] = ['post', 'graphic', 'reel']
+const KIND_WORD: Record<string, string> = { post: 'post', graphic: 'graphic', reel: 'Reel', photos: 'shoot day' }
 
 const HUE: Record<Stage, string> = { aware: '#2e9a78', interest: '#3b6fd4', action: '#6a39de', order: '#d99a1e', keep: '#0f97a8' }
 const SCENE: Record<Kind, Scene> = { post: 'post', graphic: 'graphic', reel: 'reel', photos: 'photos', creator: 'creator', boost: 'boost', print: 'print', offer: 'offer', review: 'review', taste: 'dish', sign: 'sticky', team: 'grid' }
@@ -43,12 +48,13 @@ const niceDate = (iso: string) => { const d = dt(iso); return `${WD[d.getDay()]}
 const dollars = (c: number) => `$${Math.round(c / 100).toLocaleString()}`
 const about = (n: number | null) => (n == null ? '—' : n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(Math.round(n / 100) / 10).toFixed(1)}k` : n >= 100 ? String(Math.round(n / 10) * 10) : String(Math.round(n)))
 const fmt = (n: number | null) => (n == null ? '—' : n >= 10000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString())
+const prevOf = (m: string) => { const [y, mo] = m.split('-').map(Number); return `${mo === 1 ? y - 1 : y}-${String(mo === 1 ? 12 : mo - 1).padStart(2, '0')}` }
 const monthAfter = (m: string) => { const [y, mo] = m.split('-').map(Number); return `${mo === 12 ? y + 1 : y}-${String(mo === 12 ? 1 : mo + 1).padStart(2, '0')}` }
 const MONTH_NAME = (m: string) => new Date(m + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' })
 const weekOf = (iso: string) => { const d = dt(iso); d.setDate(d.getDate() - d.getDay()); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const allMonth = (s: Slot) => s.kind === 'taste' || s.kind === 'review' || s.kind === 'team'
 
-export default function PlanMonthPage({ clientId, month: monthParam, historyHref }: { clientId: string; month: string | null; /** where the campaigns that already ran live */ historyHref?: string }) {
+export default function PlanMonthPage({ clientId, month: monthParam, historyHref, mode = 'plan' }: { clientId: string; month: string | null; /** where the campaigns that already ran live */ historyHref?: string; /** plan = Plan ahead (drafting); campaigns = the actual month: no lean, no estimates, fill / swap / push / scrap on slots, Order history */ mode?: 'plan' | 'campaigns' }) {
   const [data, setData] = useState<Read | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -62,6 +68,10 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
   const [view, setView] = useState<'month' | 'list' | 'money' | 'rhythm'>('month')
   const [day, setDay] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
+  const [filling, setFilling] = useState<Slot | null>(null)
+  const [swap, setSwap] = useState<{ kind: Kind; subject: string; days: { id: string; date: string; fill: Fill; subject: string | null }[] | null; pick: string | null; old: 'push' | 'scrap'; from?: string } | null>(null)
+  const [extras, setExtras] = useState<Extra[]>([])
+  const [moved, setMoved] = useState<string | null>(null)
   const [rh, setRh] = useState<Rhythm | null>(null)
   const [events, setEvents] = useState<CalEvent[]>([])
   const qs = (o: Record<string, string | undefined>) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&')
@@ -74,6 +84,11 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
     const [y, mo] = m.month.split('-').map(Number); const last = new Date(y, mo, 0).getDate()
     fetch(`/api/dashboard/calendar?clientId=${clientId}&from=${m.month}-01T00:00:00&to=${m.month}-${String(last).padStart(2, '0')}T23:59:59`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.events) setEvents((j.events as CalEvent[]).filter((e) => !e.id.startsWith('plan-'))) }).catch(() => {})
   }, [clientId, m?.month]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (mode !== 'campaigns' || !m) return
+    const [y, mo] = m.month.split('-').map(Number); const last = new Date(y, mo, 0).getDate()
+    fetch(`/api/dashboard/pieces?clientId=${clientId}&from=${m.month}-01&to=${m.month}-${String(last).padStart(2, '0')}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j?.pieces) setExtras((j.pieces as Extra[]).filter((p) => p.source !== 'slot' && p.source !== 'free' && p.source !== 'campaign')) }).catch(() => {})
+  }, [clientId, m?.month, mode]) // eslint-disable-line react-hooks/exhaustive-deps
   const stageOf = useMemo(() => Object.fromEntries((m?.stages ?? []).map((s) => [s.stage, s])) as Record<Stage, StagePlan | undefined>, [m])
   const on = (m?.slots ?? []).filter((s) => s.status !== 'removed' && s.status !== 'rolled')
   const state: 'draft' | 'on' | 'done' = !m ? 'draft' : m.status === 'done' || (m.status === 'started' && data != null && data.elapsed >= data.days) ? 'done' : m.status === 'started' ? 'on' : 'draft'
@@ -101,6 +116,10 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
     if (live) { setBusy(t.kind); await post({ action: 'add', kind: t.kind, date: when }); setBusy(null); setAdding(null); return }
     const a = [...add, { kind: t.kind, date: when }]; setAdd(a); setBusy(t.kind); await load(lean, drop, a); setBusy(null); setAdding(null)
   }
+  const locked = (x: Slot) => x.fill === 'locked' || x.fill === 'done' || x.status === 'done' || (() => { const d = dt(x.date); d.setDate(d.getDate() - 3); return d.toISOString().slice(0, 10) <= new Date().toISOString().slice(0, 10) })()
+  const lockDay = (x: Slot) => { const d = dt(x.date); d.setDate(d.getDate() - 3); return `${WD[d.getDay()]} ${d.getDate()}` }
+  const move = async (body: Record<string, unknown>, key: string) => { setBusy(key); const j = await post(body); setBusy(null); if (j?.ok) { setFilling(null); setSwap(null); setDay(null); if (typeof j.pushedTo === 'string') setMoved(`The old idea moved to ${niceDate(j.pushedTo)}.`); else if (typeof j.to === 'string') setMoved(`Moved to ${niceDate(j.to)}.`) } return j }
+  const openSwap = async (kind: Kind, from?: string) => { setSwap({ kind, subject: '', days: null, pick: null, old: 'push', from }); const j = await post({ action: 'days', kind }); setSwap((w) => (w ? { ...w, days: (j?.days ?? []) as { id: string; date: string; fill: Fill; subject: string | null }[], pick: from ? ((j?.days ?? []) as { id: string; date: string }[]).find((d) => d.date === from)?.id ?? null : null } : w)) }
   const start = async () => { setBusy('start'); const j = await post({ action: 'start', lean, drop, add, subject }); if (j?.ok) { setStarted({ minted: j.minted, errors: j.errors ?? [] }); setConfirm(false); load() } setBusy(null) }
   const go = (mm: string) => { window.location.href = `${window.location.pathname}?clientId=${clientId}&month=${mm}` }
 
@@ -144,13 +163,14 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
   const firstDow = dt(`${m.month}-01`).getDay()
   const today = new Date().toISOString().slice(0, 10)
   const eventsOn = (iso: string) => events.filter((e) => e.startIso.slice(0, 10) === iso)
+  const extrasOn = (iso: string) => extras.filter((e) => e.date === iso)
 
   return (
     <div className="cr" style={{ padding: '2px 16px 0', color: C.ink, maxWidth: 480, margin: '0 auto', boxSizing: 'border-box' }}>
       <style>{DRAW_CSS}{`@keyframes pm-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}.pm-in{animation:pm-in .24s cubic-bezier(.2,.7,.2,1)}.pm-day:active{transform:scale(.96)}@media(prefers-reduced-motion:reduce){.pm-in{animation:none}}`}</style>
 
       {/* the lean: three ways to tilt the month, each saying what it changes */}
-      {state === 'draft' && (
+      {state === 'draft' && mode === 'plan' && (
         <div style={{ marginTop: 6 }}>
           <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 99, background: '#f2f2f5' }}>
             {LEANS.map(([kk, l]) => <button key={kk} type="button" disabled={busy != null} onClick={() => relean(kk)} style={{ flex: 1, fontSize: 12.5, fontWeight: 800, padding: '7px 0', borderRadius: 99, border: 0, background: lean === kk ? '#fff' : 'transparent', color: lean === kk ? C.ink : C.mute, boxShadow: lean === kk ? '0 1px 3px rgba(0,0,0,.12)' : 'none', font: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}>{busy === 'lean' && lean === kk ? <Loader2 size={11} className="mvp-spin" /> : l}</button>)}
@@ -161,26 +181,32 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
       {/* the season: this month and the two after it. Tap to move. */}
       {data.season?.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          {data.season.map((sm) => { const here = sm.month === m.month; const st = sm.status === 'started' ? 'on' : sm.status === 'done' ? 'done' : 'draft'; return (
+          {(mode === 'campaigns' ? [{ month: prevOf(m.month), status: 'prev', total: 0, subject: null, pieces: 0, occasions: [] } as SeasonMonth, ...data.season] : data.season).map((sm) => { const here = sm.month === m.month; const st = sm.status === 'started' ? 'on' : sm.status === 'done' || sm.status === 'prev' ? 'done' : 'draft'; return (
             <button key={sm.month} type="button" onClick={() => { if (!here) go(sm.month) }} style={{ flex: 1, minWidth: 0, textAlign: 'left', font: 'inherit', border: 0, background: here ? C.ink : '#f6f6f8', color: here ? '#fff' : C.ink, borderRadius: 12, padding: '7px 9px', cursor: here ? 'default' : 'pointer' }}>
-              <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}><b style={{ fontSize: 12.5 }}>{MONTH_NAME(sm.month).slice(0, 3)}</b><small style={{ fontSize: 10, fontWeight: 700, color: here ? 'rgba(255,255,255,.7)' : st === 'on' ? C.greenDk : C.mute }}>{st === 'on' ? 'on' : st === 'done' ? 'done' : sm.total ? dollars(sm.total) : ''}</small></span>
-              <span style={{ display: 'block', fontSize: 11, marginTop: 1, color: here ? 'rgba(255,255,255,.75)' : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sm.occasions.length ? sm.occasions.map((o) => `${o.emoji} ${o.name}`).join(' · ') : sm.subject ?? `${sm.pieces} pieces`}</span>
+              <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 }}><b style={{ fontSize: 12.5 }}>{MONTH_NAME(sm.month).slice(0, 3)}</b><small style={{ fontSize: 10, fontWeight: 700, color: here ? 'rgba(255,255,255,.7)' : st === 'on' ? C.greenDk : C.mute }}>{st === 'on' ? (sm.total ? dollars(sm.total) : 'on') : st === 'done' ? (sm.status === 'prev' ? 'ran' : 'done') : sm.total ? dollars(sm.total) : 'plan it'}</small></span>
+              <span style={{ display: 'block', fontSize: 11, marginTop: 1, color: here ? 'rgba(255,255,255,.75)' : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sm.status === 'prev' ? 'last month' : sm.occasions.length ? sm.occasions.map((o) => `${o.emoji} ${o.name}`).join(' · ') : sm.subject ?? (sm.pieces ? `${sm.pieces} pieces` : 'nothing yet')}</span>
             </button>) })}
         </div>
       )}
 
       {/* what the month adds: one row, estimates */}
-      {state === 'draft' && (
+      {state === 'draft' && mode === 'plan' && (
         <div style={{ display: 'flex', gap: 4, marginTop: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
           {(['aware', 'interest', 'action', 'order', 'keep'] as Stage[]).map((st) => { const s = stageOf[st]; return <span key={st} style={{ flex: '1 0 auto', textAlign: 'center', padding: '6px 8px', borderRadius: 12, background: '#f6f6f8', minWidth: 0 }}><b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15, letterSpacing: '-.02em', color: HUE[st] }}>{s?.add != null ? `+${about(s.add)}` : '—'}</b><small style={{ display: 'block', fontSize: 9.5, fontWeight: 700, color: C.mute, letterSpacing: '.03em', textTransform: 'uppercase', marginTop: 1 }}>{STAGE_WORD[st]}</small></span> })}
         </div>
       )}
-      {state !== 'draft' && data.actual && (
+      {state !== 'draft' && mode === 'plan' && data.actual && (
         <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
           {(['aware', 'interest', 'action', 'order', 'keep'] as Stage[]).map((st) => { const s = stageOf[st]; const a = data.actual?.[st] ?? null; return <span key={st} style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRadius: 12, background: '#f6f6f8', minWidth: 0 }}><b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15, letterSpacing: '-.02em', color: HUE[st] }}>{fmt(a)}</b><small style={{ display: 'block', fontSize: 9.5, fontWeight: 700, color: C.mute, marginTop: 1 }}>of {about(s?.planned ?? null)}</small></span> })}
         </div>
       )}
-      {state === 'draft' && <div style={{ fontSize: 11, color: C.mute, marginTop: 4, textAlign: 'center' }}>Estimates from your own posts, not a promise. Tap a day to see what is on it.</div>}
+      {state === 'draft' && mode === 'plan' && <div style={{ fontSize: 11, color: C.mute, marginTop: 4, textAlign: 'center' }}>Estimates from your own posts, not a promise. Tap a day to see what is on it.</div>}
+
+      {mode === 'campaigns' && state === 'on' && (
+        <button type="button" onClick={() => openSwap('post')} style={{ ...cta, marginTop: 12, height: 46 }}><span>Something came up</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, opacity: .85 }}>put it on the soonest day <ArrowRight size={16} /></span></button>
+      )}
+      {mode === 'campaigns' && state === 'draft' && <a href={`/dashboard/plan?clientId=${clientId}&month=${m.month}`} style={{ ...cta, marginTop: 12, height: 46, textDecoration: 'none' }}><span>Plan {name}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, opacity: .85 }}>{on.length ? 'drafted, not started' : 'nothing on it yet'} <ArrowRight size={16} /></span></a>}
+      {moved && <div className="pm-in" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textAlign: 'center' }}>{moved}</div>}
 
       {/* the view */}
       <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: '#f2f2f5', marginTop: 12 }}>
@@ -204,18 +230,34 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
                 <button key={iso} type="button" className="pm-day" onClick={() => setDay(iso)} style={{ font: 'inherit', border: 0, background: here.length || ev.length ? '#fff' : '#fafafb', boxShadow: here.length || ev.length ? '0 1px 2px rgba(0,0,0,.05), 0 0 0 0.5px #e6e6ea' : 'inset 0 0 0 0.5px #eeeef1', color: past ? C.faint : C.ink, borderRadius: 12, padding: '6px 3px 5px', cursor: 'pointer', minHeight: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, transition: 'transform .12s' }}>
                   <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1, width: 20, height: 20, borderRadius: 99, display: 'grid', placeItems: 'center', background: isToday ? C.ink : 'transparent', color: isToday ? '#fff' : undefined }}>{occ ? occ.emoji : i + 1}</span>
                   <span style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2, width: '100%' }}>
-                    {rest.slice(0, 3).map((x) => <span key={x.id ?? `${x.kind}:${x.date}`} style={{ width: 18, display: 'block', opacity: x.status === 'done' ? .55 : 1, ['--c2' as string]: HUE[x.stage] }}><Drawing spec={{ scene: SCENE[x.kind] }} now={x.status === 'done'} name="" rating="" t={(y) => y} /></span>)}
+                    {rest.slice(0, 3).map((x) => x.fill === 'open' && state !== 'draft' ? <span key={x.id ?? `${x.kind}:${x.date}`} title="open, yours to fill" style={{ width: 18, height: 18, borderRadius: 6, border: '1.5px dashed #c9c9d0', display: 'block', boxSizing: 'border-box' }} /> : <span key={x.id ?? `${x.kind}:${x.date}`} style={{ width: 18, display: 'block', position: 'relative', opacity: x.status === 'done' ? .55 : 1, ['--c2' as string]: HUE[x.stage] }}><Drawing spec={{ scene: SCENE[x.kind] }} now={x.status === 'done'} name="" rating="" t={(y) => y} />{(x.fill === 'locked' || x.status === 'minted') && x.status !== 'done' && <span style={{ position: 'absolute', right: -3, top: -3, width: 7, height: 7, borderRadius: 99, background: C.greenDk, border: '1.5px solid #fff' }} />}</span>)}
                     {rest.length > 3 && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.mute, alignSelf: 'center' }}>+{rest.length - 3}</span>}
                   </span>
-                  <span style={{ display: 'flex', gap: 2, height: 5, marginTop: 'auto' }}>{posts.map((x) => <span key={x.id ?? x.date} style={{ width: 5, height: 5, borderRadius: 99, background: HUE.aware, opacity: x.status === 'done' ? .4 : .8 }} />)}{ev.slice(0, 3).map((e) => <span key={e.id} style={{ width: 5, height: 5, borderRadius: 99, background: '#c9c9d0' }} />)}</span>
+                  <span style={{ display: 'flex', gap: 2, height: 5, marginTop: 'auto' }}>{posts.map((x) => <span key={x.id ?? x.date} style={{ width: 5, height: 5, borderRadius: 99, boxSizing: 'border-box', ...(x.fill === 'open' && state !== 'draft' ? { border: '1px dashed #b0b0b6' } : { background: HUE.aware, opacity: x.status === 'done' ? .4 : .8 }) }} />)}{ev.slice(0, 3).map((e) => <span key={e.id} style={{ width: 5, height: 5, borderRadius: 99, background: '#c9c9d0' }} />)}{extrasOn(iso).slice(0, 2).map((e) => <span key={e.id} style={{ width: 5, height: 5, borderRadius: 99, background: HUE.action }} />)}</span>
                 </button>)
             })}
           </div>
-          <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 10.5, color: C.mute, fontWeight: 600, justifyContent: 'center', flexWrap: 'wrap' }}><span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 99, background: HUE.aware, marginRight: 4, verticalAlign: 'middle' }} />a post</span><span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 99, background: '#c9c9d0', marginRight: 4, verticalAlign: 'middle' }} />already on your calendar</span><span>a drawing is a piece</span></div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 10.5, color: C.mute, fontWeight: 600, justifyContent: 'center', flexWrap: 'wrap' }}><span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 99, background: HUE.aware, marginRight: 4, verticalAlign: 'middle' }} />a post</span><span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 99, background: '#c9c9d0', marginRight: 4, verticalAlign: 'middle' }} />already on your calendar</span><span>a drawing is a piece</span>{mode === 'campaigns' && state === 'on' && <><span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, border: '1.5px dashed #c9c9d0', marginRight: 4, verticalAlign: 'middle' }} />open, yours</span><span><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 99, background: C.greenDk, marginRight: 4, verticalAlign: 'middle' }} />with the team</span></>}</div>
         </div>
       )}
 
-      {view === 'list' && (
+      {view === 'list' && mode === 'campaigns' && state !== 'draft' && (() => {
+        const kinds: [Kind, string][] = [['photos', 'Shoot day'], ['graphic', 'Graphics'], ['reel', 'Reels'], ['post', 'Posts'], ['creator', 'Creator visit'], ['boost', 'Boosts']]
+        const plan = on.filter((x) => !x.campaign); const camps = on.filter((x) => x.campaign)
+        const groups = [...new Set(camps.map((x) => x.campaign))].map((c) => ({ id: c!, ps: camps.filter((x) => x.campaign === c), occ: data.season.find((sm) => sm.month === m.month)?.occasions.find((o) => o.id === c) }))
+        return (
+          <div className="pm-in">
+            <div style={k2}>The plan · {name} · plan rate</div>
+            {kinds.map(([k, l]) => { const xs = plan.filter((x) => x.kind === k); if (!xs.length) return null; const openN = xs.filter((x) => x.fill === 'open').length; const setN = xs.filter((x) => x.fill === 'set').length; const withTeam = xs.filter((x) => x.fill === 'locked' || x.status === 'minted').length; const doneN = xs.filter((x) => x.status === 'done').length; const cents = xs.reduce((a, x) => a + x.cents, 0); return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0 }}>{xs.length > 1 ? `${xs.length} ${l.toLowerCase()}` : l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{[doneN ? `${doneN} done` : '', withTeam && openN ? `${withTeam} with the team` : '', setN ? `${setN} set` : ''].filter(Boolean).join(' · ') || (xs[0].subject ?? (openN ? 'yours to fill' : ''))}{k === 'post' && openN ? ' · filled a week out' : ''}</small></span>{openN > 0 ? <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, border: '1.5px dashed #c9c9d0', color: C.mute, whiteSpace: 'nowrap' }}>{openN} open</span> : withTeam ? <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap' }}>with the team</span> : null}<span style={{ fontSize: 12.5, color: cents ? C.ink : C.mute, fontWeight: 700, width: 46, textAlign: 'right' }}>{cents ? dollars(cents) : 'Free'}</span></div>) })}
+            {groups.length > 0 && <><div style={k2}>Campaigns · one-off</div>{groups.map((g) => <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 30, height: 30, borderRadius: 9, background: '#f6f6f8', display: 'grid', placeItems: 'center', fontSize: 16, flex: 'none' }}>{g.occ?.emoji ?? '✦'}</span><span style={{ flex: 1, minWidth: 0 }}>{g.occ?.name ?? g.id}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{g.ps.length} piece{g.ps.length === 1 ? '' : 's'} · {g.ps.map((x) => `${KIND_WORD[x.kind] ?? x.kind} ${niceDate(x.date)}`).join(', ')}</small></span><span style={{ fontSize: 12.5, fontWeight: 700, width: 46, textAlign: 'right', color: C.mute }}>{g.ps.reduce((a, x) => a + x.cents, 0) ? dollars(g.ps.reduce((a, x) => a + x.cents, 0)) : 'slots'}</span></div>)}</>}
+            {extras.length > 0 && <><div style={k2}>Also this month</div>{extras.map((e) => <a key={e.id} href={e.href ? (e.href.includes('?') ? `${e.href}&clientId=${clientId}` : `${e.href}?clientId=${clientId}`) : '#'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE.action }}><Drawing spec={{ scene: (SCENE as Record<string, Scene>)[e.kind] ?? 'else' }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{e.date ? `${niceDate(e.date)} · ` : ''}{e.detail}</small></span><span style={{ fontSize: 12.5, fontWeight: 700, color: e.cents ? C.ink : C.mute }}>{e.cents ? dollars(e.cents) : ''}</span></a>)}</>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 14, fontWeight: 800 }}><span>{name}</span><span>{dollars(m.total)}</span></div>
+            {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Order history</span><ChevronRight size={16} color={C.faint} /></a>}
+          </div>
+        )
+      })()}
+      {view === 'list' && !(mode === 'campaigns' && state !== 'draft') && (
         <div className="pm-in">
           {weeks.map(([wk, rows]) => {
             const posts = rows.filter((s) => s.kind === 'post'); const rest = rows.filter((s) => s.kind !== 'post')
@@ -230,7 +272,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
           })}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 14, fontWeight: 800 }}><span>{name}</span><span>{dollars(m.total)}</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>{getting.map(([n, w, k]) => <span key={w} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '5px 9px 5px 5px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 20, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}</div>
-          {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Your campaigns</span><ChevronRight size={16} color={C.faint} /></a>}
+          {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>{mode === 'campaigns' ? 'Order history' : 'Your campaigns'}</span><ChevronRight size={16} color={C.faint} /></a>}
         </div>
       )}
 
@@ -286,11 +328,11 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
       {started && <div className="pm-in" style={{ marginTop: 10, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date. Every paid piece waits for your OK.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
 
       {/* Start: a bar that stays at the bottom while you scroll */}
-      <div style={{ position: 'sticky', bottom: 0, padding: '12px 0 12px', background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, #fff 30%)', marginTop: 14 }}>
+      {!(mode === 'campaigns' && state !== 'done') && <div style={{ position: 'sticky', bottom: 0, padding: '12px 0 12px', background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, #fff 30%)', marginTop: 14 }}>
         {state === 'done' ? <a href={`?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
           : state === 'on' ? <a href={`/dashboard?clientId=${clientId}`} style={{ ...cta, textDecoration: 'none' }}><span>See it on Home</span><ArrowRight size={18} /></a>
           : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><span style={{ fontWeight: 600, opacity: .8 }}>{dollars(m.total)}</span><ArrowRight size={18} /></span></button>}
-      </div>
+      </div>}
 
       {/* a day, tapped */}
       {day && (() => { const here = on.filter((x) => x.date === day && !allMonth(x)); const ev = eventsOn(day); const occ = data.season.find((s) => s.month === m.month)?.occasions.find((o) => o.date === day); return (
@@ -300,11 +342,71 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
             <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 6px' }}><span style={{ width: 34 }} /><span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600 }}>{occ ? `${occ.emoji} ${occ.name} · ` : ''}{niceDate(day)}</span><button type="button" onClick={() => setDay(null)} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button></div>
             {here.length === 0 && ev.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '8px 0' }}>Nothing planned this day.</div>}
-            {here.map((s) => row(s, `${s.options.emoji ? `${s.options.emoji} ` : ''}${s.kind === 'post' ? 'A post' : s.label}`, s.why ?? (s.kind === 'post' ? 'From the shoot, for your OK' : ''), s.cents, s.stage, s.kind, s.status === 'planned' && s.kind !== 'post'))}
+            {here.map((s) => {
+              const isSlot = mode === 'campaigns' && state === 'on' && SLOT_KINDS.includes(s.kind) && s.status !== 'done'
+              const f: Fill = s.fill ?? 'set'; const lk = locked(s)
+              const sub = isSlot ? (f === 'open' ? 'open · yours to fill' : `${s.subject ?? s.why ?? ''}${!lk ? ` · locks ${lockDay(s)}` : ''}`) : (s.why ?? (s.kind === 'post' ? 'From the shoot, for your OK' : ''))
+              return (
+                <div key={s.id ?? `${s.kind}:${s.date}`}>
+                  {row(s, `${s.options.emoji ? `${s.options.emoji} ` : ''}${s.kind === 'post' ? 'A post' : s.label}`, sub, s.cents, s.stage, s.kind, mode === 'plan' && s.status === 'planned' && s.kind !== 'post')}
+                  {isSlot && !lk && f === 'open' && <button type="button" disabled={busy != null} onClick={() => setFilling(s)} style={{ ...cta, height: 42, marginTop: 6, fontSize: 13.5 }}><span>Fill it</span><span style={{ fontWeight: 600, opacity: .8 }}>uses your slot</span></button>}
+                  {isSlot && !lk && f !== 'open' && <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <button type="button" disabled={busy != null} onClick={() => { setDay(null); openSwap(s.kind, s.date) }} style={{ ...cta, flex: 1, height: 40, fontSize: 13, justifyContent: 'center' }}>Swap</button>
+                    <button type="button" disabled={busy != null} onClick={() => move({ action: 'push', slotId: s.id }, `push:${s.id}`)} style={{ ...cta, flex: 1, height: 40, fontSize: 13, justifyContent: 'center', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{busy === `push:${s.id}` ? <Loader2 size={13} className="mvp-spin" /> : 'Push back'}</button>
+                    <button type="button" disabled={busy != null} onClick={() => move({ action: 'scrap', slotId: s.id }, `scrap:${s.id}`)} style={{ ...cta, flex: 1, height: 40, fontSize: 13, justifyContent: 'center', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{busy === `scrap:${s.id}` ? <Loader2 size={13} className="mvp-spin" /> : 'Scrap'}</button>
+                  </div>}
+                  {isSlot && lk && <div style={{ fontSize: 11.5, color: C.mute, padding: '4px 0 2px' }}>{f === 'open' ? 'The team is filling this one now; it is too close to change.' : 'Locked: the team has it. Add something else instead.'}</div>}
+                </div>
+              )
+            })}
+            {extrasOn(day).length > 0 && <><div style={k2}>Also this day</div>{extrasOn(day).map((e) => <a key={e.id} href={e.href ? (e.href.includes('?') ? `${e.href}&clientId=${clientId}` : `${e.href}?clientId=${clientId}`) : '#'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE.action }}><Drawing spec={{ scene: (SCENE as Record<string, Scene>)[e.kind] ?? 'else' }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{e.detail}</small></span><small style={{ color: C.mute, fontSize: 11.5 }}>{e.state === 'team' ? 'with the team' : e.state === 'needs' ? 'needs you' : e.state}</small></a>)}</>}
             {ev.length > 0 && <><div style={k2}>Already on your calendar</div>{ev.map((e) => <a key={e.id} href={e.href ?? '#'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ width: 7, height: 7, borderRadius: 99, background: '#c9c9d0', flex: 'none' }} /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</span><small style={{ color: C.mute, fontSize: 11.5 }}>{e.status}</small></a>)}</>}
             {state !== 'done' && <button type="button" onClick={() => { setAdding(day); setDay(null) }} style={{ ...cta, marginTop: 14, justifyContent: 'center', gap: 8 }}><Plus size={16} /> Add something on {niceDate(day)}</button>}
           </div>
         </div>) })()}
+
+      {/* fill an open slot: one line is enough */}
+      {filling && (
+        <div role="dialog" aria-modal="true" onClick={() => setFilling(null)} style={sheet}>
+          <div className="cr pm-in" onClick={(e) => e.stopPropagation()} style={sheetIn}>
+            <style>{DRAW_CSS}</style>
+            <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 6px' }}><span style={{ width: 34 }} /><span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600 }}>Fill · {KIND_WORD[filling.kind] ?? filling.kind}, {niceDate(filling.date)}</span><button type="button" onClick={() => setFilling(null)} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button></div>
+            <form onSubmit={(e) => { e.preventDefault(); const v = (new FormData(e.currentTarget).get('subject') as string) ?? ''; if (v.trim()) move({ action: 'fill', slotId: filling.id, subject: v }, 'fill') }}>
+              <textarea name="subject" autoFocus rows={3} placeholder="What is it about? The new soups, a $12 lunch, the patio on Fridays…" maxLength={160} style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 15, padding: '12px 14px', borderRadius: 14, border: `1px solid ${C.line}`, resize: 'none', color: C.ink }} />
+              <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6 }}>Leave it and the team fills it on {lockDay({ ...filling, date: (() => { const d = dt(filling.date); d.setDate(d.getDate() - 4); return d.toISOString().slice(0, 10) })() })}, with the plan's own idea.</div>
+              <button type="submit" disabled={busy != null} style={{ ...cta, marginTop: 12, justifyContent: 'center', gap: 8 }}>{busy === 'fill' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} Fill it · uses your slot</button>
+            </form>
+            <div style={{ fontSize: 12, color: C.mute, marginTop: 10, textAlign: 'center' }}>A proper announcement? <a href={`/dashboard/announce?clientId=${clientId}`} style={{ color: C.greenDk, fontWeight: 700, textDecoration: 'none' }}>Announce it</a> and it takes this slot.</div>
+          </div>
+        </div>
+      )}
+
+      {/* something came up: put it on the soonest day that can take it (the queue's swap) */}
+      {swap && (
+        <div role="dialog" aria-modal="true" onClick={() => setSwap(null)} style={sheet}>
+          <div className="cr pm-in" onClick={(e) => e.stopPropagation()} style={sheetIn}>
+            <style>{DRAW_CSS}</style>
+            <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 10px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 6px' }}><span style={{ width: 34 }} /><span style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600 }}>Something came up</span><button type="button" onClick={() => setSwap(null)} aria-label="Close" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></button></div>
+            <div style={{ display: 'flex', gap: 6 }}>{SLOT_KINDS.map((k) => <button key={k} type="button" onClick={() => openSwap(k, swap.from)} style={{ flex: 1, font: 'inherit', fontSize: 12.5, fontWeight: 800, padding: '8px 0', borderRadius: 99, border: `1.5px solid ${swap.kind === k ? C.ink : C.line}`, background: swap.kind === k ? C.ink : '#fff', color: swap.kind === k ? '#fff' : C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 18, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{k === 'reel' ? 'A Reel' : k === 'graphic' ? 'A graphic' : 'A post'}</button>)}</div>
+            <textarea value={swap.subject} onChange={(e) => setSwap({ ...swap, subject: e.target.value })} rows={2} placeholder="What is it? The pumpkin latte is back, a Friday patio party…" maxLength={160} style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 15, padding: '12px 14px', borderRadius: 14, border: `1px solid ${C.line}`, resize: 'none', color: C.ink, marginTop: 10 }} />
+            <div style={k2}>The soonest day that can take it</div>
+            {swap.days == null && <div style={{ padding: 12, textAlign: 'center', color: C.mute }}><Loader2 size={16} className="mvp-spin" /></div>}
+            {swap.days?.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '8px 0' }}>No open {KIND_WORD[swap.kind]} slot left this month or next. Add an extra below.</div>}
+            {swap.days?.map((d) => { const picked = swap.pick === d.id; return (
+              <button key={d.id} type="button" onClick={() => setSwap({ ...swap, pick: d.id })} style={{ width: '100%', textAlign: 'left', font: 'inherit', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 14, border: `1.5px solid ${picked ? C.ink : C.line}`, background: '#fff', marginTop: 6, cursor: 'pointer', color: C.ink }}>
+                <span style={{ width: 22, height: 22, borderRadius: 7, flex: 'none', ...(d.fill === 'open' ? { border: '1.5px dashed #c9c9d0' } : { background: '#f2f2f5' }) }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700 }}>{niceDate(d.date)}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{d.fill === 'open' ? 'open · nothing to move' : `set · "${d.subject}" would move or go`}</small></span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, background: d.fill === 'open' ? '#eaf7f3' : '#f2f2f5', color: d.fill === 'open' ? C.greenDk : C.mute }}>{d.fill === 'open' ? 'free slot' : 'swap'}</span>
+              </button>) })}
+            {(() => { const d = swap.days?.find((x) => x.id === swap.pick); return d && d.fill !== 'open' ? (
+              <div style={{ marginTop: 10 }}><div style={k2}>And "{d.subject}"</div><div style={{ display: 'flex', gap: 6, marginTop: 6 }}>{([['push', 'Push it back', 'to the next open slot'], ['scrap', 'Scrap the idea', 'the slot stays yours']] as const).map(([k, l, sub]) => <button key={k} type="button" onClick={() => setSwap({ ...swap, old: k })} style={{ flex: 1, textAlign: 'left', font: 'inherit', padding: '9px 11px', borderRadius: 12, border: `1.5px solid ${swap.old === k ? C.ink : C.line}`, background: '#fff', cursor: 'pointer', color: C.ink, fontSize: 13, fontWeight: 700 }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11 }}>{sub}</small></button>)}</div></div>) : null })()}
+            <button type="button" disabled={busy != null || !swap.pick || !swap.subject.trim()} onClick={() => { const d = swap.days?.find((x) => x.id === swap.pick); if (!d) return; move(d.fill === 'open' ? { action: 'fill', slotId: d.id, subject: swap.subject } : { action: 'swap', slotId: d.id, subject: swap.subject, old: swap.old }, 'swap') }} style={{ ...cta, marginTop: 14, justifyContent: 'center', gap: 8, opacity: swap.pick && swap.subject.trim() ? 1 : .5 }}>{busy === 'swap' ? <Loader2 size={16} className="mvp-spin" /> : <Check size={16} />} {(() => { const d = swap.days?.find((x) => x.id === swap.pick); return d ? `Use ${niceDate(d.date)} · free` : 'Pick a day' })()}</button>
+            <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Or <button type="button" onClick={() => { setSwap(null); setAdding(`${m.month}-15`) }} style={{ font: 'inherit', border: 0, background: 'none', color: C.greenDk, fontWeight: 700, cursor: 'pointer', padding: 0 }}>add an extra</button> at the one-off price, any day.</div>
+          </div>
+        </div>
+      )}
 
       {/* add something, on a day */}
       {adding && (() => { const tiles = m.tiles ?? []; const groups = (['aware', 'interest', 'action', 'keep'] as Stage[]).map((st) => [st, tiles.filter((t) => t.stage === st)] as const).filter(([, ts]) => ts.length); return (

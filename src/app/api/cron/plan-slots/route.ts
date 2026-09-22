@@ -5,7 +5,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mintDueSlots, draftMonth, saveMonth, nextMonth } from '@/lib/plan/month'
+import { mintDueSlots, settleDueSlots, draftMonth, saveMonth, nextMonth } from '@/lib/plan/month'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,6 +24,7 @@ export async function GET(req: Request) {
     const admin = createAdminClient()
     const probe = await admin.from('plan_months').select('id').limit(1)
     if (probe.error) return NextResponse.json({ ok: true, off: true })
+    const settled = await settleDueSlots(admin).catch(() => ({ filled: 0, locked: 0 }))
     const r = await mintDueSlots(admin)
     /* months that have run are done; their client gets next month drafted */
     const thisMonth = new Date().toISOString().slice(0, 7)
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
       const { data: has } = await admin.from('plan_months').select('id').eq('client_id', p.client_id).eq('month', nm).maybeSingle()
       if (!has && p.created_by) { const d = await draftMonth(admin, p.client_id, nm, 'asis'); if (await saveMonth(admin, p.client_id, p.created_by, d, 'draft')) seeded++ }
     }
-    return NextResponse.json({ ok: true, ...r, closed, seeded })
+    return NextResponse.json({ ok: true, ...r, ...settled, closed, seeded })
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : 'failed' }, { status: 500 })
   }

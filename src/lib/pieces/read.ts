@@ -24,7 +24,7 @@ import { CREATOR_GATE_KIND } from '@/lib/marketplace/creator-schedule'
 type Admin = ReturnType<typeof createAdminClient>
 export type PieceState = 'needs' | 'coming' | 'team' | 'live' | 'done' | 'stopped' | 'draft'
 export interface PieceGroup { kind: 'occasion' | 'month' | 'announce' | 'campaign' | 'other'; id: string; label: string; emoji?: string }
-export interface Piece { id: string; source: 'request' | 'booking' | 'post' | 'slot' | 'free' | 'campaign'; kind: string; label: string; detail: string; date: string | null; allMonth: boolean; state: PieceState; cents: number | null; href: string | null; group: PieceGroup; month: string | null; /** a planned piece the plan still owns: can be taken off */ drop?: { month: string; key: string } | null }
+export interface Piece { fill?: 'open' | 'set' | 'locked' | 'done'; subject?: string | null; slotId?: string; id: string; source: 'request' | 'booking' | 'post' | 'slot' | 'free' | 'campaign'; kind: string; label: string; detail: string; date: string | null; allMonth: boolean; state: PieceState; cents: number | null; href: string | null; group: PieceGroup; month: string | null; /** a planned piece the plan still owns: can be taken off */ drop?: { month: string; key: string } | null }
 
 const KIND_OF_TYPE: Record<string, string> = { graphic: 'graphic', video: 'reel', photos: 'photos', print: 'print', social: 'post', logo: 'brand', website: 'site', email: 'email', ads: 'ad', menu: 'menu', copy: 'post', other: 'else' }
 const LABEL_OF_TYPE: Record<string, string> = { graphic: 'Graphic', video: 'Video', photos: 'Shoot day', print: 'Print', social: 'Posts', logo: 'Branding', website: 'Website', email: 'Email', ads: 'Ads', menu: 'Menu', copy: 'Copy', other: 'Request' }
@@ -39,15 +39,15 @@ export async function listPieces(admin: Admin, clientId: string, from: string, t
   /* ── the plan's months in range, and their slots ── */
   const months = await admin.from('plan_months').select('id, month, status, thesis').eq('client_id', clientId).gte('month', from.slice(0, 7)).lte('month', to.slice(0, 7)).then((r) => (r.error ? [] : ((r.data ?? []) as { id: string; month: string; status: string; thesis: string | null }[]).map((m) => ({ ...m, subject: m.thesis && !/^Get |^More people/i.test(m.thesis) ? m.thesis : null }))))
   if (months.length) {
-    const { data: slots } = await admin.from('plan_slots').select('id, plan_month_id, date, stage, kind, label, options, cents, status, ref, why').in('plan_month_id', months.map((m) => m.id)).neq('status', 'removed').neq('status', 'rolled')
-    for (const s of (slots ?? []) as { id: string; plan_month_id: string; date: string; kind: string; label: string | null; options: Record<string, unknown>; cents: number; status: string; ref: { kind?: string; id?: string | null; href?: string } | null }[]) {
+    const { data: slots } = await admin.from('plan_slots').select('id, plan_month_id, date, stage, kind, label, options, cents, status, ref, why, fill, subject, campaign').in('plan_month_id', months.map((m) => m.id)).neq('status', 'removed').neq('status', 'rolled')
+    for (const s of (slots ?? []) as { id: string; plan_month_id: string; date: string; kind: string; label: string | null; options: Record<string, unknown>; cents: number; status: string; ref: { kind?: string; id?: string | null; href?: string } | null; fill?: 'open' | 'set' | 'locked' | 'done'; subject?: string | null; campaign?: string | null }[]) {
       const pm = months.find((m) => m.id === s.plan_month_id)!
       const occ = typeof s.options?.occasion === 'string' ? OCCASIONS.find((o) => o.id === s.options.occasion) : null
       const group: PieceGroup = occ ? { kind: 'occasion', id: occ.id, label: occ.name, emoji: occ.emoji } : { kind: 'month', id: pm.month, label: pm.subject ?? MONTH_NAME(pm.month) }
       const allMonth = s.kind === 'taste' || s.kind === 'review' || s.kind === 'team' || s.kind === 'sign'
       if (s.ref?.id && (s.ref.kind === 'request' || s.ref.kind === 'booking')) { groupOf.set(`${s.ref.kind}:${s.ref.id}`, group); continue } // the request or booking carries it
       const draft = pm.status === 'draft'
-      out.push({ id: `slot:${s.id}`, source: allMonth ? 'free' : 'slot', kind: s.kind, label: s.label ?? s.kind, detail: '', date: allMonth ? null : s.date, allMonth, state: draft ? 'draft' : s.status === 'done' ? 'done' : 'coming', cents: s.cents || null, href: `/dashboard/plan?month=${pm.month}`, group, month: pm.month, drop: s.status === 'planned' && !draft ? { month: pm.month, key: s.id } : null })
+      out.push({ slotId: s.id, fill: s.fill ?? (s.status === 'done' ? 'done' : s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel' ? 'open' : 'set'), subject: s.subject ?? null, id: `slot:${s.id}`, source: allMonth ? 'free' : 'slot', kind: s.kind, label: s.label ?? s.kind, detail: s.subject ?? (s.fill === 'open' || (!s.fill && (s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel')) ? 'open · yours to fill' : ''), date: allMonth ? null : s.date, allMonth, state: draft ? 'draft' : s.status === 'done' ? 'done' : 'coming', cents: s.cents || null, href: `/dashboard/plan?month=${pm.month}`, group, month: pm.month, drop: s.status === 'planned' && !draft ? { month: pm.month, key: s.id } : null })
     }
   }
 

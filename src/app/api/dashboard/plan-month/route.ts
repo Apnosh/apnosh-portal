@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, loadHomePlan, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
+import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, loadHomePlan, fillSlot, swapSlot, pushSlot, scrapSlot, slotsThatCanTake, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,6 +32,13 @@ export async function GET(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   const admin = createAdminClient()
+  if (sp.get('history') === '1') {
+    const { data: rows } = await admin.from('plan_months').select('id, month, status, total_cents, started_at, thesis').eq('client_id', clientId).in('status', ['started', 'done']).order('month', { ascending: false }).limit(24)
+    const ids = ((rows ?? []) as { id: string }[]).map((r) => r.id)
+    const { data: slots } = ids.length ? await admin.from('plan_slots').select('plan_month_id, status').in('plan_month_id', ids).neq('status', 'removed') : { data: [] as unknown[] }
+    const months = ((rows ?? []) as { id: string; month: string; status: string; total_cents: number; started_at: string | null; thesis: string | null }[]).map((r) => ({ ...r, pieces: ((slots ?? []) as { plan_month_id: string; status: string }[]).filter((s) => s.plan_month_id === r.id).length, done: ((slots ?? []) as { plan_month_id: string; status: string }[]).filter((s) => s.plan_month_id === r.id && s.status === 'done').length }))
+    return NextResponse.json({ months }, { headers: { 'Cache-Control': 'no-store' } })
+  }
   if (sp.get('light') === '1') {
     /* Home's read: the running month's beads and planned rings, nothing drafted */
     const home = await loadHomePlan(admin, clientId).catch(() => null)
@@ -109,6 +116,23 @@ export async function POST(req: NextRequest) {
     if (up.error && /subject/i.test(up.error.message)) await admin.from('plan_months').update({ ...(subject ? { thesis: subject } : {}), updated_at: new Date().toISOString() }).eq('client_id', clientId).eq('month', month)
     const fresh = await loadMonth(admin, clientId, month)
     return NextResponse.json({ ok: true, month: fresh ? strip(fresh) : null })
+  }
+  /* the moves on a slot: fill, swap, push, scrap. Free; never on a locked slot. */
+  if (body.action === 'fill' || body.action === 'swap' || body.action === 'push' || body.action === 'scrap') {
+    const b = body as { slotId?: string; subject?: string; old?: string; campaign?: string | null }
+    if (!b.slotId) return NextResponse.json({ error: 'slotId required' }, { status: 400 })
+    const r = body.action === 'fill' ? await fillSlot(admin, clientId, b.slotId, String(b.subject ?? ''), b.campaign)
+      : body.action === 'swap' ? await swapSlot(admin, clientId, b.slotId, String(b.subject ?? ''), b.old === 'scrap' ? 'scrap' : 'push', b.campaign)
+      : body.action === 'push' ? await pushSlot(admin, clientId, b.slotId)
+      : await scrapSlot(admin, clientId, b.slotId)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 })
+    const fresh = await loadMonth(admin, clientId, month)
+    return NextResponse.json({ ...r, month: fresh ? strip(fresh) : null })
+  }
+  if (body.action === 'days') {
+    /* the queue's swap: which days can take this kind of thing, soonest first */
+    const kind = String((body as { kind?: string }).kind ?? 'post') as SlotKind
+    return NextResponse.json({ ok: true, days: await slotsThatCanTake(admin, clientId, kind) })
   }
   if (body.action === 'drop' || body.action === 'add') {
     const have = await loadMonth(admin, clientId, month)
