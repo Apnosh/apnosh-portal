@@ -720,7 +720,8 @@ export default function CreatePage() {
   const [adsOpen, setAdsOpen] = useState(false)
   const [influencersOpen, setInfluencersOpen] = useState(false)
   function quickGo(x: Quick) {
-    if ('announce' in x.to) { goAnnounce(x.to.announce); return }
+    /* Announce opens as a popup first (owner 2026-09-22); picking a kind goes to that kind's page */
+    if ('announce' in x.to) { if (x.to.announce === true) setAnnouncing(true); else goAnnounce(x.to.announce); return }
     if ('plan' in x.to) { router.push(`/dashboard/plan${clientId ? `?clientId=${clientId}` : ''}`); return }
     if ('reply' in x.to) { setReplying(true); return }
     if ('reviews' in x.to) { setReviewing(true); return }
@@ -1089,7 +1090,7 @@ export default function CreatePage() {
       {shootOpen && clientId && <ShootSheet clientId={clientId} onClose={() => setShootOpen(false)} onAnnounce={(k) => { setShootOpen(false); goAnnounce(k) }} />}
       {requesting && clientId && <RequestSheet clientId={clientId} type={requesting} onClose={() => setRequesting(null)} onAnnounce={(k) => { setRequesting(null); goAnnounce(k) }} />}
       {reviewing && clientId && <ReviewsSheet clientId={clientId} onClose={() => setReviewing(false)} onReply={() => { setReviewing(false); setReplying(true) }} />}
-      {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} initialKind={announcing === true ? undefined : announcing} onClose={() => setAnnouncing(false)} />}
+      {announcing && clientId && <AnnounceSheet clientId={clientId} hasGoogle={ctx?.hasGoogle ?? true} initialKind={announcing === true ? undefined : announcing} onClose={() => setAnnouncing(false)} onPick={(k) => { setAnnouncing(false); goAnnounce(k) }} />}
       {view.name !== 'browse' && view.name !== 'product' && (
         <button type="button" onClick={back} aria-label={T('Back')} style={{ display: 'none' }}><ChevronLeft /></button>
       )}
