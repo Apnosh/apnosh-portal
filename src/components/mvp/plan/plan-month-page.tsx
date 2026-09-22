@@ -205,7 +205,6 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
       {mode === 'campaigns' && state === 'on' && (
         <button type="button" onClick={() => openSwap('post')} style={{ ...cta, marginTop: 12, height: 46 }}><span>Something came up</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, opacity: .85, whiteSpace: 'nowrap' }}>find it a day <ArrowRight size={16} /></span></button>
       )}
-      {mode === 'campaigns' && state === 'draft' && <a href={`/dashboard/plan?clientId=${clientId}&month=${m.month}`} style={{ ...cta, marginTop: 12, height: 46, textDecoration: 'none' }}><span>Plan {name}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, opacity: .85, whiteSpace: 'nowrap' }}>{on.length ? 'not started' : 'nothing yet'} <ArrowRight size={16} /></span></a>}
       {moved && <div className="pm-in" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textAlign: 'center' }}>{moved}</div>}
 
       {/* the view */}
