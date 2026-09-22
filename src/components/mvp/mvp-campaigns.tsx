@@ -85,6 +85,7 @@ function tabOf(c: HuedCard): Exclude<Tab, 'all'> | null {
 
 export default function MvpCampaigns({ view: viewProp, embedded = false }: { view?: 'list' | 'calendar'; /** inside the Plan ahead drawer (owner 2026-09-22): no card, no calendar row, no page chrome */ embedded?: boolean } = {}) {
   const { client, loading: clientLoading } = useClient()
+  const router = useRouter()
   const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
   const [progress, setProgress] = useState<Record<string, CampaignProgress>>({})
   const [outcomes, setOutcomes] = useState<Record<string, CampaignOutcome>>({})
@@ -193,7 +194,7 @@ export default function MvpCampaigns({ view: viewProp, embedded = false }: { vie
         {/* The calendar is a row (owner 2026-09-11), where Orders used to be: tap it for the month
             view, tap again for the list. Orders keep their door on the More hub. */}
         {!empty && !embedded && (
-          <button type="button" onClick={() => setView(view === 'calendar' ? 'list' : 'calendar')} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 10, borderRadius: 12, width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
+          <button type="button" onClick={() => { if (viewProp) return; router.push(`/dashboard/campaigns/calendar${client?.id ? `?clientId=${client.id}` : ''}`) }} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 10, borderRadius: 12, width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
             <Mark hue="mint" size={36} bare>{view === 'calendar' ? <LayoutList size={18} /> : <CalendarDays size={18} />}</Mark>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink }}>{view === 'calendar' ? 'Campaigns' : 'Calendar'}</span>
             <ChevronRight size={17} color={C.faint} />

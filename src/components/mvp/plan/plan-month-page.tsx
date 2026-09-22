@@ -317,7 +317,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
               const days = Array.from({ length: 7 }, (_, i) => { const d = dt(wk); d.setDate(d.getDate() + i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }).filter(inMonth)
               const a = dt(days[0]), b = dt(days[days.length - 1])
               const label = a.getDate() === b.getDate() ? `${MO[a.getMonth()]} ${a.getDate()}` : `${MO[a.getMonth()]} ${a.getDate()} to ${b.getDate()}`
-              const past = days[days.length - 1] < today; const current = days.includes(today)
+              const past = days[days.length - 1] < today
               const here = on.filter((x) => x.date && days.includes(x.date) && !allMonth(x)).sort((x, y) => x.date.localeCompare(y.date))
               const ex = extras.filter((e) => e.source !== 'slot' && e.source !== 'free' && e.date && days.includes(e.date))
               const ev = events.filter((e) => days.includes(e.startIso.slice(0, 10)))
@@ -327,7 +327,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
                 <div key={wk} style={{ marginTop: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button type="button" aria-label="The week before" onClick={() => step(-1)} style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink, flex: 'none' }}><ChevronLeft size={15} /></button>
-                    <b style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: past ? C.faint : C.ink }}>{label}{current ? <span style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, marginLeft: 8, verticalAlign: 'middle' }}>this week</span> : null}{occs.length ? <span style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.mute, marginLeft: 8 }}>{occs.map((o) => `${o.emoji} ${o.name}`).join(' · ')}</span> : null}</b>
+                    <b style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: past ? C.faint : C.ink }}>{label}{occs.length ? <span style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: C.mute, marginLeft: 8 }}>{occs.map((o) => `${o.emoji} ${o.name}`).join(' · ')}</span> : null}</b>
                     <button type="button" aria-label="The week after" onClick={() => step(1)} style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink, flex: 'none' }}><ChevronRight size={15} /></button>
                     {state !== 'done' && !past && <div style={{ position: 'relative' }}>
                       <button type="button" aria-label={`Add in the week of ${label}`} onClick={() => { setDay(addDay); setAddMenu((v) => (v === wk ? null : wk)) }} style={{ width: 30, height: 30, borderRadius: 99, border: 0, background: C.ink, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#fff', marginLeft: 4 }}><Plus size={15} /></button>
