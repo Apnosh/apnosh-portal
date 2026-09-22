@@ -15,7 +15,7 @@
  * on its rings.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Check, Loader2, X, Plus, ChevronRight } from 'lucide-react'
+import { ArrowRight, Check, Loader2, X, Plus, ChevronRight, ChevronLeft, LayoutList, CalendarDays } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, DRAW_CSS, type Scene } from '../create/drawings'
 
@@ -77,9 +77,10 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
   const [started, setStarted] = useState<{ minted: number; errors: string[] } | null>(null)
   const [subject, setSubject] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
-  const [view, setView] = useState<'month' | 'list' | 'money' | 'rhythm' | 'upcoming'>(mode === 'campaigns' ? 'list' : 'month')
+  const [view, setView] = useState<'month' | 'list' | 'money' | 'rhythm' | 'upcoming' | 'week'>(mode === 'campaigns' ? 'week' : 'month')
+  const [week, setWeek] = useState<string | null>(null)
   const [day, setDay] = useState<string | null>(null)
-  const [addMenu, setAddMenu] = useState(false)
+  const [addMenu, setAddMenu] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
   const [filling, setFilling] = useState<Slot | null>(null)
@@ -95,7 +96,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
   const qs = (o: Record<string, string | undefined>) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&')
   const load = (l = lean, d = drop, a = add, sub = subject) => fetch(`/api/dashboard/plan-month?${qs({ clientId, month: monthParam ?? undefined, lean: l, subject: sub ?? undefined, drop: d.join(',') || undefined, add: a.map((x) => `${x.kind}:${x.date ?? ''}`).join(',') || undefined })}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not read the month'); setData(j as Read); setLean((j as Read).month.lean); if ((j as Read).month.subject && subject == null) setSubject((j as Read).month.subject) }).catch((e) => setErr(e instanceof Error ? e.message : 'Could not read the month'))
   useEffect(() => { load() }, [clientId, monthParam]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { const mm = data?.month?.month; if (mode === 'campaigns' && mm && !day) { const t = new Date().toISOString().slice(0, 10); setDay(t.startsWith(mm) ? t : `${mm}-01`) } }, [mode, data?.month?.month]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const mm = data?.month?.month; if (mode === 'campaigns' && mm && !day) { const t = new Date().toISOString().slice(0, 10); const d0 = t.startsWith(mm) ? t : `${mm}-01`; setDay(d0); setWeek(weekOf(d0)) } }, [mode, data?.month?.month]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const el = stripRef.current?.querySelector<HTMLElement>(`[data-month="${data?.month.month}"]`); if (el && stripRef.current) stripRef.current.scrollLeft = Math.max(0, el.offsetLeft - 16) }, [data?.month.month])
   const m = data?.month ?? null
   /* everything else already on the calendar that month: scheduled posts, shoots, tasks */
@@ -240,7 +241,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
 
       {/* the view */}
       <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: '#f2f2f5', marginTop: 12 }}>
-        {(mode === 'campaigns' ? ([['list', 'List'], ['month', 'Month']] as const) : ([['month', 'Month'], ['list', 'List'], ['money', 'Order'], ['rhythm', 'Rhythm']] as const)).map(([k, l]) => <button key={k} type="button" onClick={() => setView(k)} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '8px 0', borderRadius: 9, border: 0, background: view === k ? '#fff' : 'transparent', color: view === k ? C.ink : C.mute, boxShadow: view === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer' }}>{l}</button>)}
+        {(mode === 'campaigns' ? ([['week', 'Week'], ['month', 'Month']] as const) : ([['month', 'Month'], ['list', 'List'], ['money', 'Order'], ['rhythm', 'Rhythm']] as const)).map(([k, l]) => <button key={k} type="button" aria-label={l} title={l} onClick={() => setView(k)} style={{ flex: 1, font: 'inherit', fontSize: 13, fontWeight: 700, padding: '8px 0', borderRadius: 9, border: 0, background: view === k ? '#fff' : 'transparent', color: view === k ? C.ink : C.mute, boxShadow: view === k ? '0 1px 3px rgba(0,0,0,.10)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{mode === 'campaigns' ? (k === 'week' ? <LayoutList size={18} /> : <CalendarDays size={18} />) : l}</button>)}
       </div>
 
       {view === 'month' && (
@@ -272,9 +273,9 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <b style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, letterSpacing: '-.01em', flex: 1 }}>{occ ? `${occ.emoji} ${occ.name} · ` : ''}{niceDate(day)}</b>
                 {state !== 'done' && <div style={{ position: 'relative' }}>
-                  <button type="button" onClick={() => setAddMenu((v) => !v)} style={{ font: 'inherit', fontSize: 13, fontWeight: 800, padding: '7px 13px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Add <Plus size={14} /></button>
-                  {addMenu && <div className="pm-in" style={{ position: 'absolute', right: 0, top: 38, zIndex: 5, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.12)', minWidth: 210, overflow: 'hidden' }}>
-                    {([['order', 'Order something', 'a graphic, a Reel, a boost · priced'], ['quick', 'Quick add', 'pencil it in, ship it later'], ['note', 'A note', 'just for you']] as const).map(([k, l, sub]) => <button key={k} type="button" onClick={() => { setAddMenu(false); if (k === 'order') setAdding(day); else if (k === 'quick') setPencil({ date: day, kind: 'post', subject: '' }); else setNoteDraft('') }} style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', border: 0, background: 'none', padding: '10px 14px', cursor: 'pointer', color: C.ink, fontSize: 13.5, fontWeight: 700, borderBottom: `0.5px solid ${C.line}` }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{sub}</small></button>)}
+                  <button type="button" onClick={() => setAddMenu((v) => (v === day ? null : day))} style={{ font: 'inherit', fontSize: 13, fontWeight: 800, padding: '7px 13px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>Add <Plus size={14} /></button>
+                  {addMenu === day && <div className="pm-in" style={{ position: 'absolute', right: 0, top: 38, zIndex: 5, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.12)', minWidth: 210, overflow: 'hidden' }}>
+                    {([['order', 'Order something', 'a graphic, a Reel, a boost · priced'], ['quick', 'Quick add', 'pencil it in, ship it later'], ['note', 'A note', 'just for you']] as const).map(([k, l, sub]) => <button key={k} type="button" onClick={() => { setAddMenu(null); if (k === 'order') setAdding(day); else if (k === 'quick') setPencil({ date: day, kind: 'post', subject: '' }); else setNoteDraft('') }} style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', border: 0, background: 'none', padding: '10px 14px', cursor: 'pointer', color: C.ink, fontSize: 13.5, fontWeight: 700, borderBottom: `0.5px solid ${C.line}` }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{sub}</small></button>)}
                   </div>}
                 </div>}
               </div>
@@ -303,23 +304,59 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
         </div>
       )}
 
-      {view === 'list' && mode === 'campaigns' && state !== 'draft' && (() => {
-        const kinds: [Kind, string][] = [['photos', 'Shoot day'], ['graphic', 'Graphics'], ['reel', 'Reels'], ['post', 'Posts'], ['creator', 'Creator visit'], ['boost', 'Boosts']]
-        const plan = on.filter((x) => !x.campaign); const camps = on.filter((x) => x.campaign)
-        const groups = [...new Set(camps.map((x) => x.campaign))].map((c) => ({ id: c!, ps: camps.filter((x) => x.campaign === c), occ: data.season.find((sm) => sm.month === m.month)?.occasions.find((o) => o.id === c) }))
+      {view === 'week' && mode === 'campaigns' && (() => {
+        const wk = week ?? weekOf(day ?? `${m.month}-01`)
+        const days = Array.from({ length: 7 }, (_, i) => { const d = dt(wk); d.setDate(d.getDate() + i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })
+        const a = dt(days[0]), b = dt(days[6])
+        const label = a.getMonth() === b.getMonth() ? `${MO[a.getMonth()]} ${a.getDate()} to ${b.getDate()}` : `${MO[a.getMonth()]} ${a.getDate()} to ${MO[b.getMonth()]} ${b.getDate()}`
+        const shift = (n: number) => { const d = dt(wk); d.setDate(d.getDate() + n * 7); const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; const inMonth = days.map((x) => x.slice(0, 7)); const target = iso.slice(0, 7); if (target !== m.month && !inMonth.includes(target)) { const mid = new Date(d); mid.setDate(mid.getDate() + 3); const mm = `${mid.getFullYear()}-${String(mid.getMonth() + 1).padStart(2, '0')}`; if (mm !== m.month) { go(mm); return } } setWeek(iso) }
+        const today = new Date().toISOString().slice(0, 10)
         return (
           <div className="pm-in">
-            <div style={k2}>The plan · {name}</div>
-            {kinds.map(([k, l]) => { const xs = plan.filter((x) => x.kind === k); if (!xs.length) return null; const openN = xs.filter((x) => x.fill === 'open').length; const setN = xs.filter((x) => x.fill === 'set').length; const withTeam = xs.filter((x) => x.fill === 'locked' || x.status === 'minted').length; const doneN = xs.filter((x) => x.status === 'done').length; const cents = xs.reduce((a, x) => a + x.cents, 0); return (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0 }}>{xs.length > 1 ? `${xs.length} ${l.toLowerCase()}` : l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{[doneN ? `${doneN} done` : '', withTeam && openN ? `${withTeam} with the team` : '', setN ? `${setN} set` : ''].filter(Boolean).join(' · ') || (xs[0].subject ?? (openN ? 'yours to fill' : ''))}{k === 'post' && openN ? ' · filled a week out' : ''}</small></span>{openN > 0 ? <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, border: '1.5px dashed #c9c9d0', color: C.mute, whiteSpace: 'nowrap' }}>{openN} open</span> : withTeam ? <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, background: C.greenSoft, color: C.greenDk, whiteSpace: 'nowrap' }}>with the team</span> : doneN === xs.length ? <span style={{ fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 99, background: '#f2f2f5', color: C.faint, whiteSpace: 'nowrap' }}>done</span> : null}{showMoney && <span style={{ fontSize: 12.5, color: cents ? C.ink : C.mute, fontWeight: 700, width: 46, textAlign: 'right' }}>{cents ? dollars(cents) : 'Free'}</span>}</div>) })}
-            {groups.length > 0 && <><div style={k2}>Campaigns · one-off</div>{groups.map((g) => <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 30, height: 30, borderRadius: 9, background: '#f6f6f8', display: 'grid', placeItems: 'center', fontSize: 16, flex: 'none' }}>{g.occ?.emoji ?? '✦'}</span><span style={{ flex: 1, minWidth: 0 }}>{g.occ?.name ?? g.id}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{g.ps.length} piece{g.ps.length === 1 ? '' : 's'} · {g.ps.map((x) => `${KIND_WORD[x.kind] ?? x.kind} ${niceDate(x.date)}`).join(', ')}</small></span></div>)}</>}
-            {others.length > 0 && <><div style={k2}>Also this month</div>{others.map((e) => <a key={e.id} href={e.href ? (e.href.includes('?') ? `${e.href}&clientId=${clientId}` : `${e.href}?clientId=${clientId}`) : '#'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE.action }}><Drawing spec={{ scene: (SCENE as Record<string, Scene>)[e.kind] ?? 'else' }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{e.date ? `${niceDate(e.date)} · ` : ''}{e.detail}</small></span><small style={{ color: C.mute, fontSize: 11.5 }}>{e.state === 'team' ? 'with the team' : e.state === 'needs' ? 'needs you' : e.state}</small></a>)}</>}
-            <a href={`/dashboard/plan?clientId=${clientId}&month=${m.month}`} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Your rhythm and the next months<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>Plan ahead</small></span><ChevronRight size={16} color={C.faint} /></a>
-            {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Order history</span><ChevronRight size={16} color={C.faint} /></a>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
+              <button type="button" aria-label="The week before" onClick={() => shift(-1)} style={{ width: 32, height: 32, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={16} /></button>
+              <b style={{ flex: 1, textAlign: 'center', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, letterSpacing: '-.01em' }}>{label}</b>
+              <button type="button" aria-label="The week after" onClick={() => shift(1)} style={{ width: 32, height: 32, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><ChevronRight size={16} /></button>
+            </div>
+            {days.map((iso) => { const here = on.filter((x) => x.date === iso && !allMonth(x)); const ex = extrasOn(iso); const ev = eventsOn(iso); const isToday = iso === today; const past = iso < today; const occ = data.season.find((sm) => sm.month === iso.slice(0, 7))?.occasions.find((o) => o.date === iso); const outside = iso.slice(0, 7) !== m.month; return (
+              <div key={iso} style={{ marginTop: 14, opacity: outside ? .55 : 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 99, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, background: isToday ? C.ink : '#f6f6f8', color: isToday ? '#fff' : past ? C.faint : C.ink, flex: 'none' }}>{dt(iso).getDate()}</span>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: past && !isToday ? C.faint : C.ink }}>{WD[dt(iso).getDay()]}{occ ? <span style={{ fontWeight: 600, color: C.mute }}> · {occ.emoji} {occ.name}</span> : ''}</span>
+                  {state !== 'done' && !outside && <div style={{ position: 'relative' }}>
+                    <button type="button" aria-label={`Add on ${niceDate(iso)}`} onClick={() => { setDay(iso); setAddMenu((v) => (v === iso ? null : iso)) }} style={{ width: 30, height: 30, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Plus size={15} /></button>
+                    {addMenu === iso && <div className="pm-in" style={{ position: 'absolute', right: 0, top: 36, zIndex: 5, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.12)', minWidth: 210, overflow: 'hidden' }}>
+                      {([['order', 'Order something', 'a graphic, a Reel, a boost · priced'], ['quick', 'Quick add', 'pencil it in, ship it later'], ['note', 'A note', 'just for you']] as const).map(([k, l, sub]) => <button key={k} type="button" onClick={() => { setAddMenu(null); setDay(iso); if (k === 'order') setAdding(iso); else if (k === 'quick') setPencil({ date: iso, kind: 'post', subject: '' }); else setNoteDraft('') }} style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', border: 0, background: 'none', padding: '10px 14px', cursor: 'pointer', color: C.ink, fontSize: 13.5, fontWeight: 700, borderBottom: `0.5px solid ${C.line}` }}>{l}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{sub}</small></button>)}
+                    </div>}
+                  </div>}
+                </div>
+                {noteDraft != null && day === iso && <form onSubmit={(e) => { e.preventDefault(); if (noteDraft.trim()) move({ action: 'draft', kind: 'note', subject: noteDraft, date: iso }, 'note'); setNoteDraft(null) }} style={{ display: 'flex', gap: 6, marginTop: 8, marginLeft: 38 }}><input autoFocus value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="A note for this day" maxLength={160} style={{ flex: 1, font: 'inherit', fontSize: 14, padding: '9px 12px', borderRadius: 12, border: `1px solid ${C.line}`, color: C.ink }} /><button type="submit" disabled={busy != null || !noteDraft.trim()} style={{ font: 'inherit', fontSize: 13, fontWeight: 700, padding: '0 14px', borderRadius: 99, border: 0, background: C.ink, color: '#fff', cursor: 'pointer' }}>{busy === 'note' ? <Loader2 size={12} className="mvp-spin" /> : 'Keep'}</button></form>}
+                <div style={{ marginLeft: 38 }}>
+                  {here.length === 0 && ex.length === 0 && ev.length === 0 && <div style={{ fontSize: 12.5, color: C.faint, padding: '6px 0 2px' }}>—</div>}
+                  {here.map((s) => {
+                    const isSlot = state === 'on' && SLOT_KINDS.includes(s.kind) && s.status !== 'done'
+                    const f: Fill = s.fill ?? 'set'; const lk = locked(s)
+                    const sub = s.status === 'draft' ? (s.kind === 'note' ? 'a note' : `draft · ${KIND_WORD[s.kind] ?? s.kind}`) : isSlot ? (f === 'open' ? 'open · yours to fill' : `${s.subject ?? s.why ?? ''}${!lk ? ` · locks ${lockDay(s)}` : ''}`) : (s.why ?? '')
+                    return (
+                      <div key={s.id ?? `${s.kind}:${s.date}`}>
+                        <button type="button" onClick={() => setPiece(s)} style={{ width: '100%', textAlign: 'left', font: 'inherit', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: C.ink }}>{row(s, `${s.status === 'draft' ? (s.kind === 'note' ? '' : '✎ ') : ''}${s.options.emoji ? `${s.options.emoji} ` : ''}${s.kind === 'post' || s.kind === 'note' ? (s.subject ? s.subject.slice(0, 48) : 'A post') : s.label}`, sub, s.cents, s.stage, s.kind, false)}</button>
+                        {isSlot && !lk && f === 'open' && <button type="button" disabled={busy != null} onClick={() => setFilling(s)} style={{ ...cta, height: 38, marginTop: 6, fontSize: 12.5 }}><span>Fill it</span><span style={{ fontWeight: 600, opacity: .8 }}>uses your slot</span></button>}
+                        {isSlot && !lk && f !== 'open' && <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                          <button type="button" disabled={busy != null} onClick={() => openSwap(s.kind, s.date)} style={{ ...cta, flex: 1, height: 36, fontSize: 12.5, justifyContent: 'center' }}>Swap</button>
+                          <button type="button" disabled={busy != null} onClick={() => move({ action: 'push', slotId: s.id }, `push:${s.id}`)} style={{ ...cta, flex: 1, height: 36, fontSize: 12.5, justifyContent: 'center', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{busy === `push:${s.id}` ? <Loader2 size={13} className="mvp-spin" /> : 'Push back'}</button>
+                          <button type="button" disabled={busy != null} onClick={() => move({ action: 'scrap', slotId: s.id }, `scrap:${s.id}`)} style={{ ...cta, flex: 1, height: 36, fontSize: 12.5, justifyContent: 'center', background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{busy === `scrap:${s.id}` ? <Loader2 size={13} className="mvp-spin" /> : 'Scrap'}</button>
+                        </div>}
+                      </div>
+                    )
+                  })}
+                  {ex.map((e) => <a key={e.id} href={e.href ? (e.href.includes('?') ? `${e.href}&clientId=${clientId}` : `${e.href}?clientId=${clientId}`) : '#'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ width: 30, flex: 'none', ['--c2' as string]: HUE.action }}><Drawing spec={{ scene: (SCENE as Record<string, Scene>)[e.kind] ?? 'else' }} name="" rating="" t={(x) => x} /></span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5 }}>{e.detail}</small></span><small style={{ color: C.mute, fontSize: 11.5 }}>{e.state === 'team' ? 'with the team' : e.state === 'needs' ? 'needs you' : e.state}</small></a>)}
+                  {ev.map((e) => <a key={e.id} href={e.href ?? '#'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ width: 7, height: 7, borderRadius: 99, background: '#c9c9d0', flex: 'none' }} /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</span><small style={{ color: C.mute, fontSize: 11.5 }}>{e.status}</small></a>)}
+                </div>
+              </div>) })}
           </div>
         )
       })()}
-      {view === 'list' && !(mode === 'campaigns' && state !== 'draft') && (
+      {view === 'list' && mode === 'plan' && (
         <div className="pm-in">
           {weeks.map(([wk, rows]) => {
             const posts = rows.filter((s) => s.kind === 'post'); const rest = rows.filter((s) => s.kind !== 'post')
@@ -334,7 +371,7 @@ export default function PlanMonthPage({ clientId, month: monthParam, historyHref
           })}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 14, fontWeight: 800 }}><span>{name}</span><span>{dollars(m.total)}</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>{getting.map(([n, w, k]) => <span key={w} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '5px 9px 5px 5px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 20, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}</div>
-          {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>{mode === 'campaigns' ? 'Order history' : 'Your campaigns'}</span><ChevronRight size={16} color={C.faint} /></a>}
+          {historyHref && <a href={historyHref} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 14, fontWeight: 600, color: C.ink, textDecoration: 'none' }}><span style={{ flex: 1 }}>Your campaigns</span><ChevronRight size={16} color={C.faint} /></a>}
         </div>
       )}
 
