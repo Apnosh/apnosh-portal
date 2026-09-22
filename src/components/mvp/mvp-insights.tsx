@@ -1818,6 +1818,9 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
               {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
               {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
             </span>
+            {/* say what the number is (owner 2026-09-22): the slope inside this period, start to end,
+                not the change from the period before that the stage number above shows */}
+            <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, lineHeight: 1.35 }}>The dashed line's rise across this period, first day to last. Different from the number up top, which compares to the period before.</span>
           </>
         )}
       </div>
