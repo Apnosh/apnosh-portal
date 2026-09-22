@@ -1820,20 +1820,6 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
             </span>
           </>
         )}
-        {/* A mark nobody can read is decoration. Say what the ticks are, only
-            when there are some, and only mention bad ones when there are. */}
-        {reviewTicks.length > 0 && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.faint }}>
-            <span aria-hidden style={{ width: 2, height: 11, borderRadius: 2, background: C.faint }} />
-            {reviewTicks.length} review{reviewTicks.length === 1 ? '' : 's'} below the line
-            {reviewTicks.some((t) => t.bad) && (
-              <>
-                <span aria-hidden style={{ width: 2, height: 11, borderRadius: 2, background: C.coral, marginLeft: 3 }} />
-                <span style={{ color: C.coral }}>{reviewTicks.filter((t) => t.bad).length} poor</span>
-              </>
-            )}
-          </span>
-        )}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', touchAction: 'pan-y' }} role="img" aria-label="Stage trend: every day, the 7-day average, the prior period, and campaign go-live markers"
         onPointerDown={(e) => { const r = e.currentTarget.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * W; setPick(Math.max(0, Math.min(n - 1, Math.round((x - padL) / slot - 0.5)))) }}
