@@ -369,6 +369,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const isEvent = kind?.id === 'event'
   const required = kind ? kind.fields.filter((f) => !f.optional) : []
   const ready = required.every((f) => (a[f.key] ?? '').trim())
+  /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
+  const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
   const platforms = useMemo(() => Array.from(new Set((targets ?? []).filter((t) => chosen.has(t.accountId)).map((t) => t.platform))), [targets, chosen])
   const igChosen = platforms.includes('instagram')
   const hasIgFb = (targets ?? []).some((t) => (t.platform === 'instagram' || t.platform === 'facebook') && chosen.has(t.accountId))
@@ -465,6 +467,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
   const factsOut = (): Record<string, string> => {
     const facts: Record<string, string> = { ...a }
+    const extra = dishes.filter((d) => d.name.trim())
+    if (kind?.id === 'dish' && extra.length) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...extra]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${d.price})` : ''}${d.line ? ` — ${d.line}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
     if (tags.size) facts.tags = Array.from(tags).join(', ')
     if (kind?.limited) { if (limited && a.until) facts.until = longDate(a.until); else delete facts.until }
@@ -811,16 +815,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {media.map((m, i) => <div key={i} style={{ position: 'relative', flex: 'none', width: 96, height: 96, borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((_, j) => j !== i))} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button></div>)}
                     {media.length < 10 && <button type="button" onClick={() => fileRef.current?.click()} style={{ flex: 'none', width: 96, height: 96, borderRadius: 14, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute }}>{uploading ? <Loader2 size={18} className="mvp-spin" /> : <Plus size={20} />}</button>}
                   </div>
-                ) : simple ? (
-                  /* WHERE THE PICTURE COMES FROM (owner 2026-09-18): mine, licensed, a shoot, or not yet */
-                  <>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Got a photo or video?</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
-                      {([['mine', 'Use mine', 'Phone is fine', 'photos', '#2e9a78'], ['licensed', 'Licensed', 'Stock, your style', 'grid', '#3b6fd4'], ['shoot', 'A shoot', 'We come shoot', 'creator', '#6a39de'], ['none', 'Not yet', 'We design one', 'graphic', '#d99a1e']] as [string, string, string, Scene, string][]).map(([id, l, sm, sc, hu]) => { const on = (a.picsrc ?? 'none') === id && !(id === 'mine'); return <button key={id} type="button" onClick={() => { if (id === 'mine') { fileRef.current?.click(); return } setA((x) => ({ ...x, picsrc: id })) }} style={{ ...hv(hu), border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: on ? hexa(hu, 0.08) : '#fff', borderRadius: 14, padding: '9px 4px 8px', textAlign: 'center', font: 'inherit', color: C.ink, cursor: 'pointer' }}><span style={{ display: 'block', width: 34, margin: '0 auto 4px' }}>{uploading && id === 'mine' ? <Loader2 size={18} className="mvp-spin" /> : <Drawing spec={{ scene: sc }} name="" rating="" t={(s) => s} />}</span><b style={{ display: 'block', fontSize: 12, lineHeight: 1.15 }}>{l}</b><small style={{ display: 'block', color: C.mute, fontSize: 10.5, marginTop: 2 }}>{sm}</small></button> })}
-                    </div>
-                    {(a.picsrc === 'shoot' || a.picsrc === 'licensed') && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>{a.picsrc === 'shoot' ? 'A shoot day is added to the plan, priced by its list.' : 'The desk picks licensed photos in your style, no extra cost.'}</div>}
-                  </>
-                ) : (
+                ) : simple ? null : (
                   <button type="button" onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 118, borderRadius: 18, border: '1.5px dashed #c9c9d0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, cursor: 'pointer', font: 'inherit', color: C.ink }}>
                     {uploading ? <Loader2 size={22} className="mvp-spin" color={hue} /> : <><span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span><span style={{ textAlign: 'left' }}><b style={{ fontSize: 14 }}>Add a photo or video</b><small style={sub}>Optional. Every plan can make one.</small></span></>}
                   </button>
@@ -835,6 +830,25 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={f.key === 'what' && simple ? { ...input, fontSize: 20, fontWeight: 600, padding: '14px 14px', borderRadius: 16 } : input} />}
               </label>
             ))}
+            {kind.id === 'dish' && simple && (
+              <div style={{ marginTop: 10 }}>
+                {dishes.map((d, i) => (
+                  <div key={i} style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', marginTop: 8, position: 'relative' }}>
+                    <button type="button" aria-label="Remove" onClick={() => setDishes((x) => x.filter((_, j) => j !== i))} style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer' }}><X size={11} /></button>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute }}>Dish {i + 2}</div>
+                    <input type="text" value={d.name} onChange={(e) => setDishes((x) => x.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)))} placeholder="What is it called?" style={{ ...input, marginTop: 6, fontWeight: 600 }} />
+                    <div style={{ display: 'flex', gap: 8 }}><input type="text" value={d.line} onChange={(e) => setDishes((x) => x.map((y, j) => (j === i ? { ...y, line: e.target.value } : y)))} placeholder="One line about it" style={{ ...input, flex: 1 }} /><input type="text" value={d.price} onChange={(e) => setDishes((x) => x.map((y, j) => (j === i ? { ...y, price: e.target.value } : y)))} placeholder="$14" style={{ ...input, width: 84 }} /></div>
+                  </div>
+                ))}
+                {dishes.length < 5 && <button type="button" onClick={() => setDishes((x) => [...x, { name: '', line: '', price: '' }])} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '10px 0 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} /> Another dish</button>}
+              </div>
+            )}
+            {/* THE PICTURE COMES LATER (owner 2026-09-22): the plan assumes and the graphic's own sheet lets them change where it comes from. Here, only a quiet way to attach one. */}
+            {kind.photo && simple && !media.length && (
+              <div style={{ marginTop: 12 }}>
+                <button type="button" onClick={() => fileRef.current?.click()} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '2px 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>{uploading ? <Loader2 size={13} className="mvp-spin" /> : <Plus size={13} />} Add a photo or video<span style={{ fontWeight: 500, color: C.faint }}>· optional</span></button>
+              </div>
+            )}
             {isEvent && (
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>Every week<small style={sub}>Same day, same time. We post each week</small></span><Switch on={weekly} set={setWeekly} /></div>
