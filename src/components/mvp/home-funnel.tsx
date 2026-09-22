@@ -1320,8 +1320,8 @@ export default function HomeFunnel({
             const ox = Math.round(cssW * SPINE_X) + L.dx, oy = L.y, r = L.r
             const right = L.dx > 0
             const sz = Math.max(18, Math.min(26, Math.round(r * 0.36)))
-            /* a short arc on the outer side, marks overlapping by a third */
-            const step = (sz * 0.66) / r
+            /* a short arc on the outer side, a clear gap between marks (owner 2026-09-22: not so close) */
+            const step = (sz * 1.3) / r
             const base = right ? -Math.PI * 0.22 : Math.PI + Math.PI * 0.22
             return brands.map((b, j) => { const a = base + (right ? 1 : -1) * j * step; const x = ox + Math.cos(a) * r, y = oy + Math.sin(a) * r; return (
               <span key={`${i}-${b}`} title={b} style={{ position: 'absolute', left: x, top: y, width: sz, height: sz, transform: 'translate(-50%,-50%)', borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.14)', display: 'grid', placeItems: 'center', zIndex: 10 - j }}><BrandOrMark provider={b} size={Math.round(sz * 0.68)} /></span>) })

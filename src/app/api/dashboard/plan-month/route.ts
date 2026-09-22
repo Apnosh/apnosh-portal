@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 const LEANS: Lean[] = ['seen', 'asis', 'in']
-const KINDS: SlotKind[] = ['post', 'graphic', 'reel', 'photos', 'creator', 'boost', 'print', 'offer', 'review', 'taste', 'sign', 'team']
+const KINDS: SlotKind[] = ['post', 'graphic', 'reel', 'photos', 'creator', 'boost', 'print', 'offer', 'review', 'taste', 'sign', 'team', 'note']
 const monthOk = (m: unknown): m is string => typeof m === 'string' && /^\d{4}-\d{2}$/.test(m)
 const parseEdits = (o: { lean?: unknown; subject?: unknown; drop?: unknown; add?: unknown }): Edits => ({
   lean: LEANS.includes(o.lean as Lean) ? (o.lean as Lean) : undefined,

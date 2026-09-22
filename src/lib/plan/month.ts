@@ -21,7 +21,7 @@ import { OCCASIONS } from '@/lib/design/occasions'
 
 type Admin = ReturnType<typeof createAdminClient>
 export type Stage = 'aware' | 'interest' | 'action' | 'order' | 'keep'
-export type SlotKind = 'post' | 'graphic' | 'reel' | 'photos' | 'creator' | 'boost' | 'print' | 'offer' | 'review' | 'taste' | 'sign' | 'team'
+export type SlotKind = 'post' | 'graphic' | 'reel' | 'photos' | 'creator' | 'boost' | 'print' | 'offer' | 'review' | 'taste' | 'sign' | 'team' | 'note'
 export type Lean = 'seen' | 'asis' | 'in'
 export interface Rhythm { posts_week: number; graphics_week: number; reels_month: number; shoots_month: number; creator_quarter: number }
 export type Fill = 'open' | 'set' | 'locked' | 'done'
@@ -31,7 +31,7 @@ export interface Month { month: string; status: string; /** the goal line, or th
 interface Facts { usualReach: number | null; reelLift: number | null; postsN: number; reviews30: number | null; slowDay: string | null; budgetCents: number | null; locations: number; goal: string | null; prices: { graphic: number; video: number; shoot: number; print: number } }
 
 export const STAGE_LABEL: Record<Stage, string> = { aware: 'Awareness', interest: 'Interest', action: 'Actions', order: 'Orders', keep: 'Reputation' }
-export const KIND_STAGE: Record<SlotKind, Stage> = { post: 'aware', boost: 'aware', creator: 'aware', reel: 'interest', graphic: 'interest', photos: 'interest', offer: 'action', taste: 'action', sign: 'action', print: 'action', review: 'keep', team: 'keep' }
+export const KIND_STAGE: Record<SlotKind, Stage> = { post: 'aware', boost: 'aware', creator: 'aware', reel: 'interest', graphic: 'interest', photos: 'interest', offer: 'action', taste: 'action', sign: 'action', print: 'action', review: 'keep', team: 'keep', note: 'aware' }
 const REACH_PER_DOLLAR = 150
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
 const addDays = (iso: string, n: number) => ymd(new Date(Date.parse(iso + 'T12:00:00Z') + n * 86400000))
@@ -536,6 +536,7 @@ export async function movePiece(admin: Admin, clientId: string, slotId: string, 
 export async function shipDraft(admin: Admin, clientId: string, slotId: string): Promise<{ ok: true; how: 'slot' | 'extra'; cents: number } | { ok: false; error: string }> {
   const s = await slotRow(admin, clientId, slotId); if (!s) return { ok: false, error: 'That one is not on your plan' }
   if (s.status !== 'draft') return { ok: false, error: 'Already shipped' }
+  if (s.kind === 'note') return { ok: false, error: 'A note is just for you; it does not ship.' }
   if (!s.subject) return { ok: false, error: 'Say what it is about first' }
   if (!s.date) return { ok: false, error: 'Put it on a day first' }
   /* an open slot of that kind that day takes it, free */
