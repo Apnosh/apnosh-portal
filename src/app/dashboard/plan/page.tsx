@@ -17,7 +17,7 @@ function Inner() {
   const q = sp.get('clientId') ? `?clientId=${sp.get('clientId')}` : ''
   if (loading || !client?.id) return null
   return (
-    <MvpShell active="create" title="Plan ahead" back={`/dashboard/campaigns/new${q}`}>
+    <MvpShell active="create" title="Plan ahead" back={`/dashboard/campaigns/new${q}`} solidTop>
       <PlanMonthPage clientId={client.id} month={sp.get('month')} historyHref={`/dashboard/campaigns${q}`} />
     </MvpShell>
   )

@@ -20,7 +20,7 @@ function Inner() {
   const q = sp.get('clientId') ? `?clientId=${sp.get('clientId')}` : ''
   const thisMonth = new Date().toISOString().slice(0, 7)
   return (
-    <MvpShell active="campaigns" title="Campaigns">
+    <MvpShell active="campaigns" title="Campaigns" solidTop>
       <PlanMonthPage clientId={client.id} month={sp.get('month') ?? thisMonth} mode="campaigns" historyHref={`/dashboard/campaigns/history${q}`} />
     </MvpShell>
   )
