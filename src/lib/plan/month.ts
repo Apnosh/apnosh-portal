@@ -25,7 +25,7 @@ export type SlotKind = 'post' | 'graphic' | 'reel' | 'photos' | 'creator' | 'boo
 export type Lean = 'seen' | 'asis' | 'in'
 export interface Rhythm { posts_week: number; graphics_week: number; reels_month: number; shoots_month: number; creator_quarter: number }
 export type Fill = 'open' | 'set' | 'locked' | 'done'
-export interface Slot { id?: string; date: string; stage: Stage; kind: SlotKind; label: string; options: Record<string, unknown>; cents: number; status: 'open' | 'planned' | 'minted' | 'done' | 'rolled' | 'removed'; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null; /** open = paid and blank; set = has a subject; locked = a maker has it or it is three days out; done */ fill?: Fill; /** what it is about, in the owner's words */ subject?: string | null; /** the one-off it belongs to: an occasion id, an announcement id */ campaign?: string | null; history?: { at: string; by: 'owner' | 'team'; what: string }[]; rate?: 'plan' | 'oneoff' }
+export interface Slot { id?: string; /** null only on an undated draft (the Ideas shelf) */ date: string; stage: Stage; kind: SlotKind; label: string; options: Record<string, unknown>; cents: number; status: 'open' | 'planned' | 'minted' | 'done' | 'rolled' | 'removed' | 'draft'; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null; /** open = paid and blank; set = has a subject; locked = a maker has it or it is three days out; done */ fill?: Fill; /** what it is about, in the owner's words */ subject?: string | null; /** the one-off it belongs to: an occasion id, an announcement id */ campaign?: string | null; history?: { at: string; by: 'owner' | 'team'; what: string }[]; rate?: 'plan' | 'oneoff' }
 export interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; /** what the plan adds, an estimate */ add: number | null; /** the arithmetic behind the estimate, in words */ basis: string | null; unit: string; lever: string | null; levers: string[] }
 export interface Month { month: string; status: string; /** the goal line, or the owner's own subject for the month ("Fall menu") once set */ thesis: string; subject: string | null; rhythm: Rhythm; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: Facts }
 interface Facts { usualReach: number | null; reelLift: number | null; postsN: number; reviews30: number | null; slowDay: string | null; budgetCents: number | null; locations: number; goal: string | null; prices: { graphic: number; video: number; shoot: number; print: number } }
@@ -305,7 +305,7 @@ export async function loadMonth(admin: Admin, clientId: string, month: string): 
   if (!row) return null
   const { data: slots } = await admin.from('plan_slots').select('*').eq('plan_month_id', row.id).neq('status', 'removed').order('date')
   const [facts, creator] = await Promise.all([loadFacts(admin, clientId), topCreator(admin, clientId, month)])
-  const sl: Slot[] = ((slots ?? []) as Record<string, unknown>[]).map((s) => ({ id: String(s.id), date: String(s.date), stage: s.stage as Stage, kind: s.kind as SlotKind, label: String(s.label ?? ''), options: (s.options ?? {}) as Record<string, unknown>, cents: Number(s.cents) || 0, status: s.status as Slot['status'], ref: (s.ref as Slot['ref']) ?? null, why: (s.why as string | null) ?? null, fill: (s.fill as Fill | undefined) ?? (s.status === 'done' ? 'done' : s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel' ? 'open' : 'set'), subject: (s.subject as string | null) ?? null, campaign: (s.campaign as string | null) ?? null, history: (s.history as Slot['history']) ?? [], rate: (s.rate as 'plan' | 'oneoff' | undefined) ?? 'plan' }))
+  const sl: Slot[] = ((slots ?? []) as Record<string, unknown>[]).map((s) => ({ id: String(s.id), date: s.date ? String(s.date) : '', stage: s.stage as Stage, kind: s.kind as SlotKind, label: String(s.label ?? ''), options: (s.options ?? {}) as Record<string, unknown>, cents: Number(s.cents) || 0, status: s.status as Slot['status'], ref: (s.ref as Slot['ref']) ?? null, why: (s.why as string | null) ?? null, fill: (s.fill as Fill | undefined) ?? (s.status === 'done' ? 'done' : s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel' ? 'open' : 'set'), subject: (s.subject as string | null) ?? null, campaign: (s.campaign as string | null) ?? null, history: (s.history as Slot['history']) ?? [], rate: (s.rate as 'plan' | 'oneoff' | undefined) ?? 'plan' }))
   const base = (row.baseline ?? { aware: null, interest: null, action: null, order: null, keep: null }) as Record<Stage, number | null>
   return { month, status: String(row.status), thesis: String(row.thesis ?? ''), subject: row.subject ? String(row.subject) : null, rhythm: row.rhythm as Rhythm, lean: row.lean as Lean, baseline: base, stages: planStages(sl, base, facts, creator), slots: sl, total: sl.filter((s) => s.status !== 'rolled').reduce((a, s) => a + s.cents, 0), budgetCents: facts.budgetCents, creator, facts }
 }
@@ -347,9 +347,9 @@ export async function mintDueSlots(admin: Admin): Promise<{ minted: number; erro
     const o = (s.options ?? {}) as Record<string, unknown>
     const kind = String(s.kind); const clientId = String(s.client_id); const userId = String(pm.created_by)
     const r = kind === 'graphic'
-      ? await createCreativeRequest({ clientId, userId, type: 'graphic', order: true, due_date: String(s.date), answers: { what: typeof s.subject === 'string' && s.subject ? String(s.subject) : `This week's graphic, ${String(s.date)}`, where: 'Instagram post, Facebook post', words: String(pm.thesis ?? ''), when: 'This week', notes: `From the monthly plan. ${o.from === 'shoot' ? 'Photos from the shoot day.' : ''}` }, design: { destinations: ['instagram-post', 'facebook-post'], tier: 2, photos: o.from === 'shoot' ? 'shoot' : 'none', dueDateISO: String(s.date) } })
+      ? await createCreativeRequest({ clientId, userId, type: 'graphic', order: true, due_date: String(s.date), answers: { what: typeof s.subject === 'string' && s.subject ? String(s.subject) : `This week's graphic, ${String(s.date)}`, where: Array.isArray(o.where) && o.where.length ? (o.where as string[]).map((w) => ({ post: 'Instagram post, Facebook post', story: 'Story', poster: 'Poster', menu: 'Menu board' } as Record<string, string>)[w] ?? w).join(', ') : 'Instagram post, Facebook post', ...(typeof o.look === 'string' ? { look: o.look } : {}), ...(o.priceOn === false ? { price: 'no price on it' } : {}), words: String(pm.thesis ?? ''), when: 'This week', notes: `From the monthly plan. ${o.from === 'shoot' ? 'Photos from the shoot day.' : ''}` }, design: { destinations: ['instagram-post', 'facebook-post'], tier: 2, photos: o.from === 'shoot' ? 'shoot' : 'none', dueDateISO: String(s.date) } })
       : kind === 'reel'
-      ? await createCreativeRequest({ clientId, userId, type: 'video', order: true, due_date: String(s.date), answers: { what: typeof s.subject === 'string' && s.subject ? String(s.subject) : `A Reel for ${String(s.date)}`, filming: 'Use clips and photos I have', count: 'Just 1', featuring: String(pm.thesis ?? ''), when: 'This week', notes: `From the monthly plan. ${o.filmed === 'shoot' ? 'Clips from the shoot day.' : ''} Style: ${String(o.style ?? 'dish')}.` } })
+      ? await createCreativeRequest({ clientId, userId, type: 'video', order: true, due_date: String(s.date), answers: { what: typeof s.subject === 'string' && s.subject ? String(s.subject) : `A Reel for ${String(s.date)}`, filming: o.filmed === 'shoot' ? 'From the shoot day' : o.filmed === 'creator' ? 'A creator films it' : 'Use clips and photos I have', ...(o.captions === false ? { captions: 'no captions' } : {}), count: 'Just 1', featuring: String(pm.thesis ?? ''), when: 'This week', notes: `From the monthly plan. ${o.filmed === 'shoot' ? 'Clips from the shoot day.' : ''} Style: ${String(o.style ?? 'dish')}.` } })
       : await createCreativeRequest({ clientId, userId, type: 'print', due_date: String(s.date), answers: { what: `${String(s.label ?? 'Table tent')}`, printing: 'Not sure', when: 'This week', notes: 'From the monthly plan, from this week\'s graphic.' } })
     if (r.ok) { await admin.from('plan_slots').update({ status: 'minted', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, updated_at: new Date().toISOString() }).eq('id', s.id); minted++ }
     else errors.push(`${kind} ${String(s.date)}: ${r.error}`)
@@ -483,4 +483,81 @@ export async function settleDueSlots(admin: Admin): Promise<{ filled: number; lo
   const ids = ((due ?? []) as { id: string }[]).map((r) => r.id)
   if (ids.length) await admin.from('plan_slots').update({ fill: 'locked', updated_at: new Date().toISOString() }).in('id', ids)
   return { filled, locked: ids.length }
+}
+
+/* ── DRAFTS AND THE PIECE SHEET (owner 2026-09-22) ──
+   A draft is an idea with a date (or none), not an order: status 'draft', nothing charged, the
+   team never sees it, the nightly fill ignores it. Ship it: an open slot of that kind that day
+   takes it, else it becomes an extra at the one-off price. Hold: a planned extra that is not with
+   the team goes back to draft. Update: subject, options, date. Move for a plan slot's idea: the
+   idea travels to another slot and this one goes back to open. */
+export type PieceOptions = Record<string, unknown>
+async function monthRowFor(admin: Admin, clientId: string, userId: string | null, month: string): Promise<string | null> {
+  const { data } = await admin.from('plan_months').select('id').eq('client_id', clientId).eq('month', month).maybeSingle()
+  if (data?.id) return String(data.id)
+  /* no month yet: a bare draft month holds the idea until Plan ahead draws it properly */
+  const { data: row } = await admin.from('plan_months').insert({ client_id: clientId, month, status: 'draft', thesis: null, rhythm: {}, lean: 'asis', baseline: {}, planned: {}, total_cents: 0, created_by: userId }).select('id').single()
+  return row?.id ? String(row.id) : null
+}
+export async function createDraft(admin: Admin, clientId: string, userId: string | null, o: { kind: SlotKind; subject: string; date: string | null; month: string; options?: PieceOptions }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const sub = o.subject.trim().slice(0, 160); if (!sub) return { ok: false, error: 'Say what it is about' }
+  const month = o.date ? o.date.slice(0, 7) : o.month
+  const pmId = await monthRowFor(admin, clientId, userId, month); if (!pmId) return { ok: false, error: 'Could not keep the idea' }
+  const { data, error } = await admin.from('plan_slots').insert({ plan_month_id: pmId, client_id: clientId, date: o.date, stage: KIND_STAGE[o.kind] ?? 'aware', kind: o.kind, label: sub.slice(0, 40), options: o.options ?? {}, cents: 0, status: 'draft', fill: 'set', subject: sub, rate: 'oneoff', history: [{ at: new Date().toISOString(), by: 'owner', what: 'pencilled in' }] }).select('id').single()
+  if (error) return { ok: false, error: /status|date/.test(error.message) ? 'Drafts are not switched on yet. The team has to run one update first.' : error.message }
+  return { ok: true, id: String(data.id) }
+}
+export async function updatePiece(admin: Admin, clientId: string, slotId: string, patch: { subject?: string; options?: PieceOptions; date?: string | null }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await slotRow(admin, clientId, slotId); if (!s) return { ok: false, error: 'That one is not on your plan' }
+  if (s.status !== 'draft' && isLocked(s)) return { ok: false, error: 'Locked: the team has it.' }
+  const up: Record<string, unknown> = {}
+  if (typeof patch.subject === 'string') { up.subject = patch.subject.trim().slice(0, 160) || null; up.fill = up.subject ? 'set' : 'open'; if (s.status === 'draft') up.label = String(up.subject ?? s.label).slice(0, 40) }
+  if (patch.options) up.options = { ...(s.options ?? {}), ...patch.options }
+  if (patch.date !== undefined) {
+    if (s.status !== 'draft' && (s as { rate?: string }).rate !== 'oneoff') return { ok: false, error: 'A plan slot stays where it is; its idea moves. Use Move.' }
+    up.date = patch.date
+    if (patch.date) { const pmId = await monthRowFor(admin, clientId, null, patch.date.slice(0, 7)); if (pmId) up.plan_month_id = pmId }
+  }
+  await writeSlot(admin, s, up as Partial<{ fill: Fill; subject: string | null; campaign: string | null; label: string | null }>, `edited${patch.date !== undefined ? ` · moved to ${patch.date ?? 'no date'}` : ''}`)
+  if (up.options || up.date !== undefined || up.plan_month_id) await admin.from('plan_slots').update({ ...(up.options ? { options: up.options } : {}), ...(up.date !== undefined ? { date: up.date } : {}), ...(up.plan_month_id ? { plan_month_id: up.plan_month_id } : {}) }).eq('id', s.id)
+  return { ok: true }
+}
+/** a plan slot's idea travels to another slot (open: fills it; set: swap, old idea pushed or scrapped); this slot goes back to open */
+export async function movePiece(admin: Admin, clientId: string, slotId: string, toSlotId: string, old: 'push' | 'scrap' = 'push'): Promise<{ ok: true; pushedTo: string | null } | { ok: false; error: string }> {
+  const s = await slotRow(admin, clientId, slotId); if (!s) return { ok: false, error: 'That one is not on your plan' }
+  if (isLocked(s)) return { ok: false, error: 'Locked: the team has it.' }
+  if (!s.subject) return { ok: false, error: 'Nothing to move: it is open' }
+  const r = await swapSlot(admin, clientId, toSlotId, s.subject, old, s.campaign)
+  if (!r.ok) return r
+  const to = await slotRow(admin, clientId, toSlotId); if (to && Object.keys(s.options ?? {}).length) await admin.from('plan_slots').update({ options: s.options }).eq('id', to.id)
+  await writeSlot(admin, s, { fill: 'open', subject: null, campaign: null }, `moved to ${to?.date ?? 'another day'}: ${s.subject}`)
+  return { ok: true, pushedTo: r.pushedTo }
+}
+export async function shipDraft(admin: Admin, clientId: string, slotId: string): Promise<{ ok: true; how: 'slot' | 'extra'; cents: number } | { ok: false; error: string }> {
+  const s = await slotRow(admin, clientId, slotId); if (!s) return { ok: false, error: 'That one is not on your plan' }
+  if (s.status !== 'draft') return { ok: false, error: 'Already shipped' }
+  if (!s.subject) return { ok: false, error: 'Say what it is about first' }
+  if (!s.date) return { ok: false, error: 'Put it on a day first' }
+  /* an open slot of that kind that day takes it, free */
+  const { data: open } = await admin.from('plan_slots').select('id, plan_month_id, client_id, date, kind, label, options, cents, status, ref, fill, subject, campaign, history').eq('client_id', clientId).eq('kind', s.kind).eq('date', s.date).eq('fill', 'open').in('status', ['planned', 'minted']).limit(1).maybeSingle()
+  if (open && !isLocked(open as SlotRow)) {
+    await writeSlot(admin, open as SlotRow, { fill: 'set', subject: s.subject, campaign: s.campaign }, `took the draft: ${s.subject}`)
+    if (Object.keys(s.options ?? {}).length) await admin.from('plan_slots').update({ options: s.options }).eq('id', (open as SlotRow).id)
+    await admin.from('plan_slots').delete().eq('id', s.id)
+    return { ok: true, how: 'slot', cents: 0 }
+  }
+  /* else an extra at the one-off price, approved before it is charged */
+  const facts = await loadFacts(admin, clientId)
+  const cents = s.kind === 'graphic' ? facts.prices.graphic : s.kind === 'reel' ? facts.prices.video : s.kind === 'photos' ? facts.prices.shoot : s.kind === 'print' ? facts.prices.print : s.kind === 'boost' ? Number(s.options?.cents) || 4000 : 0
+  await admin.from('plan_slots').update({ status: 'planned', rate: 'oneoff', cents, updated_at: new Date().toISOString() }).eq('id', s.id)
+  await writeSlot(admin, { ...s, status: 'planned' }, {}, `shipped as an extra${cents ? ` · $${Math.round(cents / 100)}` : ''}`)
+  return { ok: true, how: 'extra', cents }
+}
+export async function holdPiece(admin: Admin, clientId: string, slotId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await slotRow(admin, clientId, slotId); if (!s) return { ok: false, error: 'That one is not on your plan' }
+  if (s.status !== 'planned') return { ok: false, error: s.status === 'draft' ? 'Already a draft' : 'The team has it; it cannot go back to a draft.' }
+  if ((s as { rate?: string }).rate !== 'oneoff') return { ok: false, error: 'A plan slot cannot be a draft. Scrap its idea instead; the slot stays yours.' }
+  await admin.from('plan_slots').update({ status: 'draft', cents: 0, updated_at: new Date().toISOString() }).eq('id', s.id)
+  await writeSlot(admin, s, {}, 'held as a draft')
+  return { ok: true }
 }

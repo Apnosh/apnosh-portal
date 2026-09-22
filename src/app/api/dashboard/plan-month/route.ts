@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, loadHomePlan, fillSlot, swapSlot, pushSlot, scrapSlot, slotsThatCanTake, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
+import { draftMonth, loadMonth, startMonth, applyEdits, addTiles, loadActual, nextMonth, nextOf, saveMonth, preload, saveRhythm, loadRhythm, occasionsIn, loadHomePlan, fillSlot, swapSlot, pushSlot, scrapSlot, slotsThatCanTake, createDraft, updatePiece, movePiece, shipDraft, holdPiece, type Edits, type Lean, type SlotKind, type Month, type Pre } from '@/lib/plan/month'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -125,6 +125,20 @@ export async function POST(req: NextRequest) {
       : body.action === 'swap' ? await swapSlot(admin, clientId, b.slotId, String(b.subject ?? ''), b.old === 'scrap' ? 'scrap' : 'push', b.campaign)
       : body.action === 'push' ? await pushSlot(admin, clientId, b.slotId)
       : await scrapSlot(admin, clientId, b.slotId)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 })
+    const fresh = await loadMonth(admin, clientId, month)
+    return NextResponse.json({ ...r, month: fresh ? strip(fresh) : null })
+  }
+  /* drafts and the piece sheet */
+  if (body.action === 'draft' || body.action === 'update' || body.action === 'move' || body.action === 'ship' || body.action === 'hold') {
+    const b = body as { slotId?: string; toSlotId?: string; subject?: string; options?: Record<string, unknown>; date?: string | null; kind?: string; old?: string }
+    const dateOk = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : v === null ? null : undefined)
+    const r = body.action === 'draft' ? await createDraft(admin, clientId, access.userId, { kind: (KINDS.includes(String(b.kind) as SlotKind) ? String(b.kind) : 'post') as SlotKind, subject: String(b.subject ?? ''), date: dateOk(b.date) ?? null, month, options: b.options })
+      : !b.slotId ? { ok: false as const, error: 'slotId required' }
+      : body.action === 'update' ? await updatePiece(admin, clientId, b.slotId, { ...(typeof b.subject === 'string' ? { subject: b.subject } : {}), ...(b.options ? { options: b.options } : {}), ...(dateOk(b.date) !== undefined ? { date: dateOk(b.date) as string | null } : {}) })
+      : body.action === 'move' ? await movePiece(admin, clientId, b.slotId, String(b.toSlotId ?? ''), b.old === 'scrap' ? 'scrap' : 'push')
+      : body.action === 'ship' ? await shipDraft(admin, clientId, b.slotId)
+      : await holdPiece(admin, clientId, b.slotId)
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 })
     const fresh = await loadMonth(admin, clientId, month)
     return NextResponse.json({ ...r, month: fresh ? strip(fresh) : null })

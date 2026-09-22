@@ -22,7 +22,7 @@ import { campaignCardVM } from '@/lib/campaigns/view'
 import { CREATOR_GATE_KIND } from '@/lib/marketplace/creator-schedule'
 
 type Admin = ReturnType<typeof createAdminClient>
-export type PieceState = 'needs' | 'coming' | 'team' | 'live' | 'done' | 'stopped' | 'draft'
+export type PieceState = 'needs' | 'coming' | 'team' | 'live' | 'done' | 'stopped' | 'draft' | 'idea'
 export interface PieceGroup { kind: 'occasion' | 'month' | 'announce' | 'campaign' | 'other'; id: string; label: string; emoji?: string }
 export interface Piece { fill?: 'open' | 'set' | 'locked' | 'done'; subject?: string | null; slotId?: string; id: string; source: 'request' | 'booking' | 'post' | 'slot' | 'free' | 'campaign'; kind: string; label: string; detail: string; date: string | null; allMonth: boolean; state: PieceState; cents: number | null; href: string | null; group: PieceGroup; month: string | null; /** a planned piece the plan still owns: can be taken off */ drop?: { month: string; key: string } | null }
 
@@ -45,10 +45,10 @@ export async function listPieces(admin: Admin, clientId: string, from: string, t
       const pm = months.find((m) => m.id === s.plan_month_id)!
       const occ = typeof s.options?.occasion === 'string' ? OCCASIONS.find((o) => o.id === s.options.occasion) : null
       const group: PieceGroup = occ ? { kind: 'occasion', id: occ.id, label: occ.name, emoji: occ.emoji } : { kind: 'month', id: pm.month, label: pm.subject ?? MONTH_NAME(pm.month) }
-      const allMonth = s.kind === 'taste' || s.kind === 'review' || s.kind === 'team' || s.kind === 'sign'
+      const allMonth = (s.kind === 'taste' || s.kind === 'review' || s.kind === 'team' || s.kind === 'sign') && s.status !== 'draft'
       if (s.ref?.id && (s.ref.kind === 'request' || s.ref.kind === 'booking')) { groupOf.set(`${s.ref.kind}:${s.ref.id}`, group); continue } // the request or booking carries it
       const draft = pm.status === 'draft'
-      out.push({ slotId: s.id, fill: s.fill ?? (s.status === 'done' ? 'done' : s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel' ? 'open' : 'set'), subject: s.subject ?? null, id: `slot:${s.id}`, source: allMonth ? 'free' : 'slot', kind: s.kind, label: s.label ?? s.kind, detail: s.subject ?? (s.fill === 'open' || (!s.fill && (s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel')) ? 'open · yours to fill' : ''), date: allMonth ? null : s.date, allMonth, state: draft ? 'draft' : s.status === 'done' ? 'done' : 'coming', cents: s.cents || null, href: `/dashboard/plan?month=${pm.month}`, group, month: pm.month, drop: s.status === 'planned' && !draft ? { month: pm.month, key: s.id } : null })
+      out.push({ slotId: s.id, fill: s.fill ?? (s.status === 'done' ? 'done' : s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel' ? 'open' : 'set'), subject: s.subject ?? null, id: `slot:${s.id}`, source: allMonth ? 'free' : 'slot', kind: s.kind, label: s.label ?? s.kind, detail: s.subject ?? (s.fill === 'open' || (!s.fill && (s.kind === 'post' || s.kind === 'graphic' || s.kind === 'reel')) ? 'open · yours to fill' : ''), date: allMonth ? null : (s.date ?? null), allMonth, state: s.status === 'draft' ? 'idea' : draft ? 'draft' : s.status === 'done' ? 'done' : 'coming', cents: s.cents || null, href: `/dashboard/campaigns?month=${pm.month}`, group, month: pm.month, drop: s.status === 'planned' && !draft ? { month: pm.month, key: s.id } : null })
     }
   }
 
