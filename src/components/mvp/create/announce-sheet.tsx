@@ -831,14 +831,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </div>
             )}
-            {kind.fields.filter((f) => !(kind.id === 'dish' && simple && ['what', 'line', 'price'].includes(f.key))).filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && ((f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim())) || (f.optional && f.key !== 'price')))).map((f) => (
-              <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
-                {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
-                {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />
-                  : f.kind === 'long' ? <textarea rows={3} value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={{ ...input, resize: 'none', lineHeight: 1.45 }} />
-                  : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={f.key === 'what' && simple ? { ...input, fontSize: 20, fontWeight: 600, padding: '14px 14px', borderRadius: 16 } : input} />}
-              </label>
-            ))}
             {/* THE DISH FORM (owner 2026-09-22, "more like the form but designed better"): one dish or a few,
                the mint tile with the cloche as the hero, and one clean card per dish instead of labelled boxes. */}
             {kind.id === 'dish' && simple && (
@@ -870,6 +862,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </div>
             )}
+            {kind.fields.filter((f) => !(kind.id === 'dish' && simple && ['what', 'line', 'price'].includes(f.key))).filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && ((f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim())) || (f.optional && f.key !== 'price')))).map((f) => (
+              <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
+                {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
+                {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />
+                  : f.kind === 'long' ? <textarea rows={3} value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={{ ...input, resize: 'none', lineHeight: 1.45 }} />
+                  : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={f.key === 'what' && simple ? { ...input, fontSize: 20, fontWeight: 600, padding: '14px 14px', borderRadius: 16 } : input} />}
+              </label>
+            ))}
             {/* THE PICTURE COMES LATER (owner 2026-09-22): the plan assumes and the graphic's own sheet lets them change where it comes from. Here, only a quiet way to attach one. */}
             {kind.photo && simple && !media.length && (
               <div style={{ marginTop: 14, fontSize: 12.5, color: C.mute, textAlign: 'center' }}>We pick the photo. <button type="button" onClick={() => fileRef.current?.click()} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>{uploading ? 'Adding…' : 'Add your own'}</button></div>
