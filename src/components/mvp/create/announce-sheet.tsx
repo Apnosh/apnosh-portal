@@ -371,6 +371,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const ready = required.every((f) => (a[f.key] ?? '').trim())
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
+  const [many, setMany] = useState(false)
+  const dishCard = (v: string, set: (v: string) => void, ph: string, big?: boolean, money?: boolean) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: big ? '4px 0 2px' : '2px 0', borderTop: big ? 0 : `0.5px solid ${C.line}`, marginTop: big ? 0 : 6, paddingTop: big ? 4 : 9 }}>
+      {money && <span style={{ fontSize: 15, fontWeight: 700, color: v ? C.ink : C.faint }}>$</span>}
+      <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'none', font: 'inherit', padding: 0, color: C.ink, fontSize: big ? 20 : 14.5, fontWeight: big ? 700 : 500, fontFamily: big ? DISPLAY : undefined, letterSpacing: big ? '-.02em' : undefined, lineHeight: 1.3 }} />
+    </div>
+  )
   const platforms = useMemo(() => Array.from(new Set((targets ?? []).filter((t) => chosen.has(t.accountId)).map((t) => t.platform))), [targets, chosen])
   const igChosen = platforms.includes('instagram')
   const hasIgFb = (targets ?? []).some((t) => (t.platform === 'instagram' || t.platform === 'facebook') && chosen.has(t.accountId))
@@ -467,8 +474,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
   const factsOut = (): Record<string, string> => {
     const facts: Record<string, string> = { ...a }
-    const extra = dishes.filter((d) => d.name.trim())
-    if (kind?.id === 'dish' && extra.length) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...extra]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${d.price})` : ''}${d.line ? ` — ${d.line}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
+    const extra = many ? dishes.filter((d) => d.name.trim()) : []
+    const money = (v?: string) => (v && /^\d/.test(v.trim()) ? `$${v.trim()}` : (v ?? ''))
+    if (kind?.id === 'dish') facts.price = money(a.price)
+    if (kind?.id === 'dish' && extra.length) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: money(a.price) }, ...extra.map((d) => ({ ...d, price: money(d.price) }))]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${money(d.price)})` : ''}${d.line ? ` — ${d.line}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
     if (tags.size) facts.tags = Array.from(tags).join(', ')
     if (kind?.limited) { if (limited && a.until) facts.until = longDate(a.until); else delete facts.until }
@@ -822,7 +831,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </div>
             )}
-            {kind.fields.filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && ((f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim())) || (f.optional && f.key !== 'price')))).map((f) => (
+            {kind.fields.filter((f) => !(kind.id === 'dish' && simple && ['what', 'line', 'price'].includes(f.key))).filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && ((f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim())) || (f.optional && f.key !== 'price')))).map((f) => (
               <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
                 {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
                 {f.kind === 'date' ? <input type="date" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={input} />
@@ -830,24 +839,40 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={f.key === 'what' && simple ? { ...input, fontSize: 20, fontWeight: 600, padding: '14px 14px', borderRadius: 16 } : input} />}
               </label>
             ))}
+            {/* THE DISH FORM (owner 2026-09-22, "more like the form but designed better"): one dish or a few,
+               the mint tile with the cloche as the hero, and one clean card per dish instead of labelled boxes. */}
             {kind.id === 'dish' && simple && (
-              <div style={{ marginTop: 10 }}>
-                {dishes.map((d, i) => (
-                  <div key={i} style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', marginTop: 8, position: 'relative' }}>
-                    <button type="button" aria-label="Remove" onClick={() => setDishes((x) => x.filter((_, j) => j !== i))} style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer' }}><X size={11} /></button>
-                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute }}>Dish {i + 2}</div>
-                    <input type="text" value={d.name} onChange={(e) => setDishes((x) => x.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)))} placeholder="What is it called?" style={{ ...input, marginTop: 6, fontWeight: 600 }} />
-                    <div style={{ display: 'flex', gap: 8 }}><input type="text" value={d.line} onChange={(e) => setDishes((x) => x.map((y, j) => (j === i ? { ...y, line: e.target.value } : y)))} placeholder="One line about it" style={{ ...input, flex: 1 }} /><input type="text" value={d.price} onChange={(e) => setDishes((x) => x.map((y, j) => (j === i ? { ...y, price: e.target.value } : y)))} placeholder="$14" style={{ ...input, width: 84 }} /></div>
-                  </div>
-                ))}
-                {dishes.length < 5 && <button type="button" onClick={() => setDishes((x) => [...x, { name: '', line: '', price: '' }])} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '10px 0 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} /> Another dish</button>}
+              <div>
+                <div style={{ display: 'flex', background: '#f6f6f8', borderRadius: 99, padding: 3, marginTop: 2 }}>
+                  {([[false, 'One dish'], [true, 'A few dishes']] as const).map(([m, l]) => (
+                    <button key={l} type="button" onClick={() => { setMany(m); if (m && dishes.length === 0) setDishes([{ name: '', line: '', price: '' }]) }} style={{ flex: 1, height: 36, borderRadius: 99, border: 0, font: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: many === m ? '#fff' : 'transparent', color: many === m ? C.ink : C.mute, boxShadow: many === m ? '0 1px 3px rgba(0,0,0,.08)' : 'none', transition: 'background .15s' }}>{l}</button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 12, borderRadius: 22, background: 'var(--t1)', height: many ? 116 : 168, display: 'grid', placeItems: 'center', transition: 'height .2s' }}>
+                  <span style={{ width: many ? 104 : 150, transition: 'width .2s' }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
+                </div>
+                {[{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...(many ? dishes : [])].map((d, i) => {
+                  const set = (k: 'name' | 'line' | 'price') => (v: string) => (i === 0 ? setA((x) => ({ ...x, [k === 'name' ? 'what' : k]: v })) : setDishes((x) => x.map((y, j) => (j === i - 1 ? { ...y, [k]: v } : y))))
+                  return (
+                    <div key={i} style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '10px 14px 12px', marginTop: 10, background: '#fff', position: 'relative' }}>
+                      {many && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.greenDk }}>Dish {i + 1}</span>
+                        {i > 0 && <button type="button" aria-label="Remove" onClick={() => setDishes((x) => x.filter((_, j) => j !== i - 1))} style={{ width: 26, height: 26, borderRadius: 99, border: 0, background: '#f6f6f8', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer', marginRight: -6 }}><X size={12} /></button>}
+                      </div>}
+                      {dishCard(d.name, set('name'), 'What is it called?', true)}
+                      {dishCard(d.line, set('line'), 'A line about it')}
+                      {dishCard(d.price, set('price'), 'Price', false, true)}
+                    </div>
+                  )
+                })}
+                {many && dishes.length < 5 && (
+                  <button type="button" onClick={() => setDishes((x) => [...x, { name: '', line: '', price: '' }])} style={{ width: '100%', height: 52, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> Another dish</button>
+                )}
               </div>
             )}
             {/* THE PICTURE COMES LATER (owner 2026-09-22): the plan assumes and the graphic's own sheet lets them change where it comes from. Here, only a quiet way to attach one. */}
             {kind.photo && simple && !media.length && (
-              <div style={{ marginTop: 12 }}>
-                <button type="button" onClick={() => fileRef.current?.click()} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '2px 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>{uploading ? <Loader2 size={13} className="mvp-spin" /> : <Plus size={13} />} Add a photo or video<span style={{ fontWeight: 500, color: C.faint }}>· optional</span></button>
-              </div>
+              <div style={{ marginTop: 14, fontSize: 12.5, color: C.mute, textAlign: 'center' }}>We pick the photo. <button type="button" onClick={() => fileRef.current?.click()} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>{uploading ? 'Adding…' : 'Add your own'}</button></div>
             )}
             {isEvent && (
               <>
