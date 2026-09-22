@@ -25,7 +25,7 @@ type Lean = 'seen' | 'asis' | 'in'
 interface Slot { id?: string; date: string; stage: Stage; kind: Kind; label: string; options: Record<string, unknown>; cents: number; status: string; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null }
 interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; add: number | null; basis: string | null; unit: string; lever: string | null; levers: string[] }
 interface Tile { kind: Kind; stage: Stage; label: string; cents: number; date: string; why: string | null }
-interface Month { month: string; status: string; thesis: string; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: { usualReach: number | null; reelLift: number | null; reviews30: number | null; budgetCents: number | null; locations: number }; tiles: Tile[] }
+interface Month { month: string; status: string; thesis: string; subject: string | null; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: { usualReach: number | null; reelLift: number | null; reviews30: number | null; budgetCents: number | null; locations: number }; tiles: Tile[] }
 interface Read { month: Month; off: boolean; actual: Record<Stage, number | null> | null; elapsed: number; days: number; next: string }
 
 const HUE: Record<Stage, string> = { aware: '#2e9a78', interest: '#3b6fd4', action: '#6a39de', order: '#d99a1e', keep: '#0f97a8' }
@@ -37,6 +37,8 @@ const W = 430, H = 800, RTOP = 76
 const RING = ([1, .8, .7, .64, .6] as const).map((ratio, i) => { const lean = i % 2 === 0 ? 1 : -1; return { stage: (['aware', 'interest', 'action', 'order', 'keep'] as Stage[])[i], cx: W / 2 + lean * 72 * (i <= 1 ? 1.34 : 1), cy: 90 + i * 158, r: RTOP * ratio, side: (i % 2 === 0 ? 'L' : 'R') as 'L' | 'R' } })
 const PATH = RING.map((p, i) => (i === 0 ? `M${p.cx} ${p.cy}` : `C${RING[i - 1].cx} ${RING[i - 1].cy + 80} ${p.cx} ${p.cy - 80} ${p.cx} ${p.cy}`)).join(' ')
 const MAXP = [34, 18, 9, 5, 3]
+const KIND_STAGE: Record<Kind, Stage> = { post: 'aware', boost: 'aware', creator: 'aware', reel: 'interest', graphic: 'interest', photos: 'interest', offer: 'action', taste: 'action', sign: 'action', print: 'action', review: 'keep', team: 'keep' }
+const monthAfter = (m: string) => { const [y, mo] = m.split('-').map(Number); return `${mo === 12 ? y + 1 : y}-${String(mo === 12 ? 1 : mo + 1).padStart(2, '0')}` }
 const MONTH_NAME = (m: string) => new Date(m + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long' })
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -59,9 +61,12 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   const [open, setOpenRaw] = useState<Stage | null>(null)
   const [openBase, setOpenBase] = useState<number | null>(null)
   const [confirm, setConfirm] = useState(false)
+  const [subject, setSubject] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [day, setDay] = useState<string | null>(null)
   const [started, setStarted] = useState<{ minted: number; errors: string[] } | null>(null)
   const qs = (o: Record<string, string | undefined>) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v!)}`).join('&')
-  const load = (l = lean, d = drop, a = add) => fetch(`/api/dashboard/plan-month?${qs({ clientId, month: monthParam ?? undefined, lean: l, drop: d.join(',') || undefined, add: a.map((x) => `${x.kind}:${x.date ?? ''}`).join(',') || undefined })}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not read the month'); setData(j as Read); setLean((j as Read).month.lean) }).catch((e) => setErr(e instanceof Error ? e.message : 'Could not read the month'))
+  const load = (l = lean, d = drop, a = add, sub = subject) => fetch(`/api/dashboard/plan-month?${qs({ clientId, month: monthParam ?? undefined, lean: l, subject: sub ?? undefined, drop: d.join(',') || undefined, add: a.map((x) => `${x.kind}:${x.date ?? ''}`).join(',') || undefined })}`, { cache: 'no-store' }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not read the month'); setData(j as Read); setLean((j as Read).month.lean); if ((j as Read).month.subject && subject == null) setSubject((j as Read).month.subject) }).catch((e) => setErr(e instanceof Error ? e.message : 'Could not read the month'))
   useEffect(() => { load() }, [clientId, monthParam]) // eslint-disable-line react-hooks/exhaustive-deps
   const m = data?.month ?? null
   const stageOf = useMemo(() => Object.fromEntries((m?.stages ?? []).map((s) => [s.stage, s])) as Record<Stage, StagePlan | undefined>, [m])
@@ -73,6 +78,12 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
   /* the crowd: what is there now, and (lighter, arriving) what the month adds */
   const rings = useMemo<CrowdRing[]>(() => RING.map((p, i) => { const s = stageOf[p.stage]; const base = state === 'draft' ? s?.now ?? null : actual?.[p.stage] ?? s?.now ?? null; const n = people(base, MAXP[i]); const planned = people(s?.planned ?? null, MAXP[i]); return { cx: p.cx, cy: p.cy, r: p.r, n, color: HUE[p.stage], extra: state === 'draft' ? Math.max(0, planned - n) : 0 } }), [stageOf, actual, state])
 
+  const saveSubject = async (v: string) => {
+    const sub = v.trim().slice(0, 80) || null
+    setEditing(false); setSubject(sub)
+    if (live) { setBusy('subject'); await post({ action: 'subject', subject: sub }); setBusy(null); return }
+    setBusy('subject'); await load(lean, drop, add, sub); setBusy(null)
+  }
   const relean = (l: Lean) => { setLean(l); setBusy('lean'); load(l, drop, add).finally(() => setBusy(null)) }
   const dropSlot = async (s: Slot) => {
     if (live) { setBusy(s.id ?? ''); await post({ action: 'drop', key: s.id ?? `${s.kind}:${s.date}` }); setBusy(null); return }
@@ -92,7 +103,7 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
       return j
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not save it'); return null }
   }
-  const start = async () => { setBusy('start'); const j = await post({ action: 'start', lean, drop, add }); if (j?.ok) { setStarted({ minted: j.minted, errors: j.errors ?? [] }); setConfirm(false); load() } setBusy(null) }
+  const start = async () => { setBusy('start'); const j = await post({ action: 'start', lean, drop, add, subject }); if (j?.ok) { setStarted({ minted: j.minted, errors: j.errors ?? [] }); setConfirm(false); load() } setBusy(null) }
 
   const h1: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 28, fontWeight: 600, letterSpacing: '-.04em', lineHeight: .95, margin: 0 }
   const k2: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, margin: '18px 0 0' }
@@ -114,6 +125,21 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
     if (state === 'on') return <><b style={{ color: C.ink }}>Solid is what has happened so far.</b> Dashed is the plan.</>
     return <><b style={{ color: C.ink }}>{heavy ? 'Heavy at the top, thin at Actions.' : m.facts.reelLift ? `Your Reels do ${m.facts.reelLift}× your photos.` : 'Built from what you have.'}</b> {m.lean === 'in' ? 'Leaning in on the slow night.' : m.lean === 'seen' ? 'Leaning on being seen.' : 'Numbers are estimates from your own posts.'}</>
   })()
+  /* the month as deliverables, the owner's own part, and the money by kind */
+  const count = (k: Kind) => on.filter((x) => x.kind === k).length
+  const shoot = on.find((x) => x.kind === 'photos'); const creator = on.find((x) => x.kind === 'creator'); const offer = on.find((x) => x.kind === 'offer')
+  const photosN = shoot ? (((shoot.options.list as string[]) ?? []).length <= 2 ? 15 : ((shoot.options.list as string[]) ?? []).length <= 4 ? 25 : 40) : 0
+  const getting: [number, string, Kind][] = ([[count('post'), 'posts', 'post'], [count('graphic'), count('graphic') === 1 ? 'graphic' : 'graphics', 'graphic'], [count('reel'), count('reel') === 1 ? 'Reel' : 'Reels', 'reel'], [photosN, 'photos', 'photos'], [count('creator'), count('creator') === 1 ? 'creator post' : 'creator posts', 'creator'], [count('boost'), count('boost') === 1 ? 'boost' : 'boosts', 'boost'], [count('print'), count('print') === 1 ? 'table tent' : 'table tents', 'print']] as [number, string, Kind][]).filter(([n]) => n > 0)
+  const needs: [string, string][] = [
+    ...(shoot ? [[`Be there ${niceDate(shoot.date)} for the shoot`, 'Have the dishes ready to plate. About two hours.'] as [string, string]] : []),
+    ...(creator ? [[`Host ${creator.label.replace(/ visits$/, '')} on ${niceDate(creator.date)}`, 'A table for two, the meal on the house.'] as [string, string]] : []),
+    ...(count('post') ? [['Approve the posts once a week', 'A few minutes in Approvals. Nothing goes out without your OK.'] as [string, string]] : []),
+    ...(offer ? [[`Put the ${offer.label.toLowerCase()} on the board`, 'And tell the team the code.'] as [string, string]] : []),
+    ...(count('taste') ? [['A taste at the counter, the first week', 'One bite of the special for whoever is waiting.'] as [string, string]] : []),
+    ...(count('review') ? [['Ask happy tables for a review', 'The card says how. Two a week is plenty.'] as [string, string]] : []),
+  ]
+  const sum = (ks: Kind[]) => on.filter((x) => ks.includes(x.kind)).reduce((a, x) => a + x.cents, 0)
+  const byKind: [string, number, string][] = ([['The shoot day', sum(['photos']), 'Paid before the day'], ['Graphics, Reels and print', sum(['graphic', 'reel', 'print']), 'Each one as you approve it'], ['The creator', sum(['creator']), 'When they say yes'], ['Boosts', sum(['boost']), 'When the post runs']] as [string, number, string][]).filter(([, c]) => c > 0)
   /* the services, by week */
   const weeks = (() => { const g = new Map<string, Slot[]>(); for (const s of on) { const k = weekOf(s.date); g.set(k, [...(g.get(k) ?? []), s]) } return [...g.entries()].sort(([a], [b]) => a.localeCompare(b)) })()
 
@@ -122,7 +148,11 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
       <style>{DRAW_CSS}{`.pm-ring{cursor:pointer}@keyframes pm-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}.pm-in{animation:pm-in .24s cubic-bezier(.2,.7,.2,1)}@keyframes pm-flow{to{stroke-dashoffset:-16}}.pm-path{animation:pm-flow 1.6s linear infinite}@keyframes pm-pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}70%{transform:translate(-50%,-50%) scale(1.12)}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}.pm-bead{animation:pm-pop .5s cubic-bezier(.2,.7,.2,1) both}@keyframes pm-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.pm-num{animation:pm-up .6s cubic-bezier(.2,.7,.2,1) both}@media(prefers-reduced-motion:reduce){.pm-in,.pm-path,.pm-bead,.pm-num{animation:none}}`}</style>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 }}>
-        <h1 style={h1}>{title}<small style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 8, letterSpacing: 0, fontFamily: 'inherit', lineHeight: 1.35 }}>{subtitle}</small></h1>
+        <h1 style={{ ...h1, minWidth: 0, flex: 1 }}>{title}
+          {editing
+            ? <input autoFocus defaultValue={m.subject ?? ''} placeholder="What is this month about? Fall menu, Halloween" maxLength={80} onBlur={(e) => saveSubject(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }} style={{ display: 'block', marginTop: 8, width: '100%', font: 'inherit', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, letterSpacing: 0, padding: '6px 10px', borderRadius: 10, border: `1px solid ${C.ink}`, color: C.ink, boxSizing: 'border-box' }} />
+            : <small onClick={() => setEditing(true)} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginTop: 8, letterSpacing: 0, fontFamily: 'inherit', lineHeight: 1.35, cursor: 'text' }}>{state === 'draft' ? <>{m.subject ?? m.thesis}<span style={{ color: C.faint }}> · edit</span></> : subtitle}</small>}
+        </h1>
         <span style={{ textAlign: 'right', flex: 'none' }}><b style={{ display: 'block', fontSize: 20, letterSpacing: '-.03em' }}>{dollars(m.total)}</b><small style={{ fontSize: 11, color: C.mute, fontWeight: 600 }}>{state === 'done' ? 'billed' : state === 'on' ? 'as approved' : 'after approval'}</small></span>
       </div>
 
@@ -179,9 +209,36 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
       )}
       {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10, textAlign: 'center' }}>{err}</div>}
       {started && <div className="pm-in" style={{ marginTop: 12, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }}><b>{name} is on.</b> {started.minted} thing{started.minted === 1 ? '' : 's'} went to the team. Graphics and Reels follow a week before their date. Every paid piece waits for your OK.{started.errors.map((e, i) => <div key={i} style={{ color: '#8a5a0c', marginTop: 4 }}>{e}</div>)}</div>}
-      {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${data.next}`} style={{ ...cta, textDecoration: 'none' }}><span>Plan {MONTH_NAME(data.next)}</span><ArrowRight size={18} /></a>
+      {state === 'done' ? <a href={`/dashboard/plan?clientId=${clientId}&month=${monthAfter(m.month)}`} style={{ ...cta, textDecoration: 'none' }}><span>Plan {MONTH_NAME(monthAfter(m.month))}</span><ArrowRight size={18} /></a>
         : state === 'on' ? <a href={`/dashboard/campaigns?clientId=${clientId}`} style={{ ...cta, textDecoration: 'none' }}><span>See it on Coming up</span><ArrowRight size={18} /></a>
         : <button type="button" disabled={busy != null || data.off} onClick={() => setConfirm(true)} style={{ ...cta, opacity: data.off ? .5 : 1 }}><span>Start {name}</span><ArrowRight size={18} /></button>}
+
+      {state === 'draft' && <div style={{ fontSize: 11.5, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>{MONTH_NAME(monthAfter(m.month))} drafts itself near the end of {name}. Nothing starts without you.</div>}
+
+      {/* what you get: the month as deliverables */}
+      <div style={k2}>What you get</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+        {getting.map(([n, w, k]) => <span key={w} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, padding: '6px 10px 6px 6px', borderRadius: 99, background: '#f6f6f8', ['--c2' as string]: HUE[KIND_STAGE[k]] }}><span style={{ width: 22, display: 'block' }}><Drawing spec={{ scene: SCENE[k] }} name="" rating="" t={(x) => x} /></span>{n} {w}</span>)}
+      </div>
+
+      {/* what we need from you: the owner's side of the deal */}
+      {needs.length > 0 && <>
+        <div style={k2}>What we need from you</div>
+        {needs.map(([t, d], i) => <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ width: 22, height: 22, borderRadius: 99, background: C.greenSoft, color: C.greenDk, display: 'grid', placeItems: 'center', flex: 'none', fontSize: 11, fontWeight: 800 }}>{i + 1}</span><span>{t}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{d}</small></span></div>)}
+      </>}
+
+      {/* the days: one month, a dot per piece, coloured by the ring it pushes */}
+      <div style={k2}>The days</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginTop: 8, textAlign: 'center' }}>
+        {WD.map((w) => <span key={w} style={{ fontSize: 10, fontWeight: 700, color: C.faint, padding: '2px 0' }}>{w[0]}</span>)}
+        {Array.from({ length: dt(`${m.month}-01`).getDay() }).map((_, i) => <span key={`b${i}`} />)}
+        {Array.from({ length: data.days }).map((_, i) => { const iso = `${m.month}-${String(i + 1).padStart(2, '0')}`; const here = on.filter((x) => x.date === iso && !(x.kind === 'taste' || x.kind === 'review' || x.kind === 'team')); const sel = day === iso; const past = state !== 'draft' && i + 1 <= data.elapsed; return (
+          <button key={iso} type="button" onClick={() => setDay(sel ? null : iso)} style={{ font: 'inherit', border: 0, background: sel ? C.ink : 'transparent', color: sel ? '#fff' : past ? C.faint : C.ink, borderRadius: 10, padding: '4px 0 3px', cursor: 'pointer', minHeight: 36 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>{i + 1}</span>
+            <span style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 3, height: 5 }}>{here.slice(0, 4).map((x, j) => <span key={j} style={{ width: 5, height: 5, borderRadius: 99, background: sel ? '#fff' : HUE[x.stage], opacity: x.kind === 'post' ? .45 : 1 }} />)}</span>
+          </button>) })}
+      </div>
+      {day && (() => { const here = on.filter((x) => x.date === day); return <div className="pm-in" style={{ marginTop: 8, fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 12, background: '#f6f6f8' }}>{niceDate(day)}: {here.length ? here.map((x) => x.kind === 'post' ? 'a post' : x.label).join(', ') : 'nothing planned'}</div> })()}
 
       {/* the services, by week: the receipt for the total */}
       <div style={k2}>{state === 'draft' ? 'In the month' : state === 'on' ? 'The month' : 'What ran'}</div>
@@ -205,8 +262,12 @@ export default function PlanMonthPage({ clientId, month: monthParam }: { clientI
           </div>
         )
       })}
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0', fontSize: 14, fontWeight: 800 }}><span>{name}</span><span>{dollars(m.total)}</span></div>
-      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 2 }}>Posts, the taste, the review ask and the team card are free. Each paid piece is approved before it is charged.</div>
+      {/* the money: against the budget, by kind, and when each is paid */}
+      <div style={k2}>The money</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}><b style={{ fontFamily: DISPLAY, fontSize: 28, letterSpacing: '-.03em', fontWeight: 600 }}>{dollars(m.total)}</b>{m.budgetCents ? <span style={{ fontSize: 12.5, color: m.total > m.budgetCents ? '#c92d32' : C.mute, fontWeight: 700 }}>of your {dollars(m.budgetCents)} a month</span> : null}</div>
+      {m.budgetCents ? <div style={{ height: 6, borderRadius: 99, background: '#eeeef1', marginTop: 8, overflow: 'hidden' }}><div style={{ width: `${Math.min(100, m.total / m.budgetCents * 100)}%`, height: '100%', background: m.total > m.budgetCents ? '#c92d32' : C.greenDk, borderRadius: 99 }} /></div> : null}
+      {byKind.map(([label, cents, when]) => <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: `0.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 600 }}><span style={{ flex: 1 }}>{label}<small style={{ display: 'block', fontWeight: 500, color: C.mute, fontSize: 11.5, marginTop: 1 }}>{when}</small></span><span style={{ fontWeight: 700 }}>{dollars(cents)}</span></div>)}
+      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Posts, the taste, the review ask and the team card are free. Nothing is charged today; each paid piece is approved before it is charged.</div>
 
       {/* a ring, tapped */}
       {open && (() => {

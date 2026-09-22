@@ -25,7 +25,7 @@ export type Lean = 'seen' | 'asis' | 'in'
 export interface Rhythm { posts_week: number; graphics_week: number; reels_month: number; shoots_month: number; creator_quarter: number }
 export interface Slot { id?: string; date: string; stage: Stage; kind: SlotKind; label: string; options: Record<string, unknown>; cents: number; status: 'open' | 'planned' | 'minted' | 'done' | 'rolled' | 'removed'; ref?: { kind: string; id: string | null; href?: string } | null; why?: string | null }
 export interface StagePlan { stage: Stage; label: string; now: number | null; planned: number | null; /** what the plan adds, an estimate */ add: number | null; /** the arithmetic behind the estimate, in words */ basis: string | null; unit: string; lever: string | null; levers: string[] }
-export interface Month { month: string; status: string; thesis: string; rhythm: Rhythm; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: Facts }
+export interface Month { month: string; status: string; /** the goal line, or the owner's own subject for the month ("Fall menu") once set */ thesis: string; subject: string | null; rhythm: Rhythm; lean: Lean; baseline: Record<Stage, number | null>; stages: StagePlan[]; slots: Slot[]; total: number; budgetCents: number | null; creator: { slug: string; name: string; nearby: number | null; fromCents: number | null; date: string | null } | null; facts: Facts }
 interface Facts { usualReach: number | null; reelLift: number | null; postsN: number; reviews30: number | null; slowDay: string | null; budgetCents: number | null; locations: number; goal: string | null; prices: { graphic: number; video: number; shoot: number; print: number } }
 
 export const STAGE_LABEL: Record<Stage, string> = { aware: 'Awareness', interest: 'Interest', action: 'Actions', order: 'Orders', keep: 'Reputation' }
@@ -93,7 +93,7 @@ export function buildSlots(month: string, r: Rhythm, f: Facts, creator: Month['c
   const reelDays = days.filter((d) => dow(d) === 0 && (!shootDay || d > shootDay))
   for (let i = 0; i < r.reels_month; i++) { const d = reelDays[i * 2] ?? reelDays[i]; if (d) slots.push({ date: d, stage: 'interest', kind: 'reel', label: 'Reel', options: { filmed: shootDay ? 'shoot' : 'clips', style: 'dish', captions: true }, cents: f.prices.video, status: 'planned', why: f.reelLift ? `Your Reels do ${f.reelLift}× your photos` : 'Reels reach further than photos' }) }
   /* the creator: a Saturday in week two, or a Tuesday when leaning in */
-  if (r.creator_quarter > 0 && creator) { const d = lean === 'in' ? tuesdays[1] ?? saturdays[1] : creator.date && creator.date.startsWith(month) ? creator.date : saturdays[1] ?? saturdays[0]; if (d) slots.push({ date: d, stage: 'aware', kind: 'creator', label: `${creator.name.split(' ')[0]} visits`, options: { slug: creator.slug, code: true, repost: true }, cents: creator.fromCents ?? 0, status: 'planned', why: creator.nearby ? `${creator.nearby.toLocaleString()} people nearby watch ${creator.name.split(' ')[0]}` : null }) }
+  if (r.creator_quarter > 0 && creator) { let d = lean === 'in' ? tuesdays[1] ?? saturdays[1] : creator.date && creator.date.startsWith(month) ? creator.date : saturdays[1] ?? saturdays[0]; if (d && d === shootDay) d = saturdays.find((x) => x > d!) ?? tuesdays.find((x) => x > d!) ?? d; if (d) slots.push({ date: d, stage: 'aware', kind: 'creator', label: `${creator.name.split(' ')[0]} visits`, options: { slug: creator.slug, code: true, repost: true }, cents: creator.fromCents ?? 0, status: 'planned', why: creator.nearby ? `${creator.nearby.toLocaleString()} people nearby watch ${creator.name.split(' ')[0]}` : null }) }
   /* boost: the first post after the shoot, sized by lean */
   const boostCents = lean === 'seen' ? 10000 : lean === 'in' ? 4000 : 6000
   const firstPost = slots.filter((s) => s.kind === 'post' && (!shootDay || s.date > shootDay)).map((s) => s.date).sort()[0]
@@ -153,7 +153,7 @@ export async function topCreator(admin: Admin, clientId: string, month: string):
   } catch { return null }
 }
 
-export async function draftMonth(admin: Admin, clientId: string, month: string, lean: Lean = 'asis', rhythm?: Rhythm): Promise<Month> {
+export async function draftMonth(admin: Admin, clientId: string, month: string, lean: Lean = 'asis', rhythm?: Rhythm, subject?: string | null): Promise<Month> {
   const [facts, base, creator] = await Promise.all([loadFacts(admin, clientId), loadBaseline(clientId), topCreator(admin, clientId, month)])
   const r = rhythm ?? defaultRhythm(facts)
   let slots = buildSlots(month, r, facts, creator, lean)
@@ -170,12 +170,13 @@ export async function draftMonth(admin: Admin, clientId: string, month: string, 
   }
   const stages = planStages(slots, base, facts, creator)
   const total = slots.reduce((s, x) => s + x.cents, 0)
-  const thesis = [facts.goal ? facts.goal.replace(/^get /i, 'Get ') : 'More people in', lean === 'in' ? 'Fill the slow nights.' : ''].filter(Boolean).join(' ')
-  return { month, status: 'draft', thesis, rhythm: r, lean, baseline: base, stages, slots, total, budgetCents: facts.budgetCents, creator, facts }
+  const sub = (subject ?? '').trim().slice(0, 80) || null
+  const thesis = sub ?? [facts.goal ? facts.goal.replace(/^get /i, 'Get ') : 'More people in', lean === 'in' ? 'Fill the slow nights.' : ''].filter(Boolean).join(' ')
+  return { month, status: 'draft', thesis, subject: sub, rhythm: r, lean, baseline: base, stages, slots, total, budgetCents: facts.budgetCents, creator, facts }
 }
 
 /* ── edits: the owner drops a piece, adds one, or leans ── */
-export interface Edits { lean?: Lean; rhythm?: Partial<Rhythm>; drop?: string[]; add?: { kind: SlotKind; date?: string }[] }
+export interface Edits { lean?: Lean; subject?: string | null; rhythm?: Partial<Rhythm>; drop?: string[]; add?: { kind: SlotKind; date?: string }[] }
 export const slotKey = (s: Slot) => `${s.kind}:${s.date}`
 export interface AddTile { kind: SlotKind; stage: Stage; label: string; cents: number; date: string; why: string | null }
 /** what each ring can take on, with its real price */
@@ -229,7 +230,10 @@ export async function loadActual(clientId: string, month: string): Promise<Recor
 
 /* ── persistence ── */
 export async function saveMonth(admin: Admin, clientId: string, userId: string, m: Month, status: 'draft' | 'started' = 'draft'): Promise<string | null> {
-  const { data: row, error } = await admin.from('plan_months').upsert({ client_id: clientId, month: m.month, status, thesis: m.thesis, rhythm: m.rhythm, lean: m.lean, baseline: m.baseline, planned: Object.fromEntries(m.stages.map((s) => [s.stage, { planned: s.planned, lever: s.lever, levers: s.levers }])), total_cents: m.total, ...(status === 'started' ? { started_at: new Date().toISOString() } : {}), created_by: userId, updated_at: new Date().toISOString() }, { onConflict: 'client_id,month' }).select('id').single()
+  const rowIn = { client_id: clientId, month: m.month, status, thesis: m.thesis, subject: m.subject, rhythm: m.rhythm, lean: m.lean, baseline: m.baseline, planned: Object.fromEntries(m.stages.map((s) => [s.stage, { planned: s.planned, lever: s.lever, levers: s.levers }])), total_cents: m.total, ...(status === 'started' ? { started_at: new Date().toISOString() } : {}), created_by: userId, updated_at: new Date().toISOString() }
+  let { data: row, error } = await admin.from('plan_months').upsert(rowIn, { onConflict: 'client_id,month' }).select('id').single()
+  /* until 270 is run there is no subject column; the subject still lives in thesis */
+  if (error && /subject/i.test(error.message)) { const { subject: _s, ...rest } = rowIn; void _s; ({ data: row, error } = await admin.from('plan_months').upsert(rest, { onConflict: 'client_id,month' }).select('id').single()) }
   if (error || !row) return null
   const id = String(row.id)
   await admin.from('plan_slots').delete().eq('plan_month_id', id).in('status', ['planned', 'open'])
@@ -243,7 +247,7 @@ export async function loadMonth(admin: Admin, clientId: string, month: string): 
   const [facts, creator] = await Promise.all([loadFacts(admin, clientId), topCreator(admin, clientId, month)])
   const sl: Slot[] = ((slots ?? []) as Record<string, unknown>[]).map((s) => ({ id: String(s.id), date: String(s.date), stage: s.stage as Stage, kind: s.kind as SlotKind, label: String(s.label ?? ''), options: (s.options ?? {}) as Record<string, unknown>, cents: Number(s.cents) || 0, status: s.status as Slot['status'], ref: (s.ref as Slot['ref']) ?? null, why: (s.why as string | null) ?? null }))
   const base = (row.baseline ?? { aware: null, interest: null, action: null, order: null, keep: null }) as Record<Stage, number | null>
-  return { month, status: String(row.status), thesis: String(row.thesis ?? ''), rhythm: row.rhythm as Rhythm, lean: row.lean as Lean, baseline: base, stages: planStages(sl, base, facts, creator), slots: sl, total: sl.filter((s) => s.status !== 'rolled').reduce((a, s) => a + s.cents, 0), budgetCents: facts.budgetCents, creator, facts }
+  return { month, status: String(row.status), thesis: String(row.thesis ?? ''), subject: row.subject ? String(row.subject) : null, rhythm: row.rhythm as Rhythm, lean: row.lean as Lean, baseline: base, stages: planStages(sl, base, facts, creator), slots: sl, total: sl.filter((s) => s.status !== 'rolled').reduce((a, s) => a + s.cents, 0), budgetCents: facts.budgetCents, creator, facts }
 }
 
 /* ── Start: the month becomes real work ── */

@@ -17,8 +17,9 @@ export const maxDuration = 60
 const LEANS: Lean[] = ['seen', 'asis', 'in']
 const KINDS: SlotKind[] = ['post', 'graphic', 'reel', 'photos', 'creator', 'boost', 'print', 'offer', 'review', 'taste', 'sign', 'team']
 const monthOk = (m: unknown): m is string => typeof m === 'string' && /^\d{4}-\d{2}$/.test(m)
-const parseEdits = (o: { lean?: unknown; drop?: unknown; add?: unknown }): Edits => ({
+const parseEdits = (o: { lean?: unknown; subject?: unknown; drop?: unknown; add?: unknown }): Edits => ({
   lean: LEANS.includes(o.lean as Lean) ? (o.lean as Lean) : undefined,
+  subject: typeof o.subject === 'string' ? o.subject.trim().slice(0, 80) || null : undefined,
   drop: (Array.isArray(o.drop) ? o.drop : typeof o.drop === 'string' ? o.drop.split(',') : []).map(String).filter(Boolean),
   add: (Array.isArray(o.add) ? o.add : typeof o.add === 'string' ? o.add.split(',').filter(Boolean).map((x) => { const [kind, date] = x.split(':'); return { kind, date } }) : []).map((x) => ({ kind: String((x as { kind: unknown }).kind) as SlotKind, date: typeof (x as { date?: unknown }).date === 'string' ? String((x as { date?: unknown }).date) : undefined })).filter((x) => KINDS.includes(x.kind)),
 })
@@ -36,12 +37,12 @@ export async function GET(req: NextRequest) {
   const off = !!probe.error || !!probe267.error
   const month = monthOk(sp.get('month')) ? sp.get('month')! : nextMonth()
   const saved = off ? null : await loadMonth(admin, clientId, month)
-  const edits = parseEdits({ lean: sp.get('lean') ?? undefined, drop: sp.get('drop') ?? undefined, add: sp.get('add') ?? undefined })
+  const edits = parseEdits({ lean: sp.get('lean') ?? undefined, subject: sp.get('subject') ?? undefined, drop: sp.get('drop') ?? undefined, add: sp.get('add') ?? undefined })
   let m: Month
   if (saved && saved.status !== 'draft') m = saved
   else {
     /* a fresh draft, re-drawn with the lean when it changes (the lean shapes the slots) */
-    const base = await draftMonth(admin, clientId, month, edits.lean ?? saved?.lean ?? 'asis')
+    const base = await draftMonth(admin, clientId, month, edits.lean ?? saved?.lean ?? 'asis', undefined, edits.subject ?? saved?.subject ?? null)
     m = applyEdits(base, { drop: edits.drop, add: edits.add })
   }
   const actual = m.status === 'started' || m.status === 'done' ? await loadActual(clientId, month) : null
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { clientId?: string; action?: string; month?: unknown; lean?: unknown; drop?: unknown; add?: unknown; key?: string; kind?: string; date?: string }
+  const body = (await req.json().catch(() => ({}))) as { clientId?: string; action?: string; month?: unknown; lean?: unknown; subject?: unknown; drop?: unknown; add?: unknown; key?: string; kind?: string; date?: string }
   const clientId = body.clientId
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
   const access = await checkClientAccess(clientId)
@@ -66,16 +67,23 @@ export async function POST(req: NextRequest) {
     const have = await loadMonth(admin, clientId, month)
     if (have && have.status !== 'draft') return NextResponse.json({ error: `${month} is already started` }, { status: 409 })
     const edits = parseEdits(body)
-    const m = applyEdits(await draftMonth(admin, clientId, month, edits.lean ?? 'asis'), { drop: edits.drop, add: edits.add })
+    const m = applyEdits(await draftMonth(admin, clientId, month, edits.lean ?? 'asis', undefined, edits.subject ?? null), { drop: edits.drop, add: edits.add })
     const r = await startMonth(admin, clientId, access.userId, m)
     const fresh = await loadMonth(admin, clientId, month)
     return NextResponse.json({ ok: true, minted: r.minted, errors: r.errors, month: fresh ? strip(fresh) : strip(m) })
   }
   if (body.action === 'save') {
     const edits = parseEdits(body)
-    const m = applyEdits(await draftMonth(admin, clientId, month, edits.lean ?? 'asis'), { drop: edits.drop, add: edits.add })
+    const m = applyEdits(await draftMonth(admin, clientId, month, edits.lean ?? 'asis', undefined, edits.subject ?? null), { drop: edits.drop, add: edits.add })
     const id = await saveMonth(admin, clientId, access.userId, m, 'draft')
     return NextResponse.json({ ok: !!id, month: strip(m) })
+  }
+  if (body.action === 'subject') {
+    const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 80) || null : null
+    const up = await admin.from('plan_months').update({ subject, ...(subject ? { thesis: subject } : {}), updated_at: new Date().toISOString() }).eq('client_id', clientId).eq('month', month)
+    if (up.error && /subject/i.test(up.error.message)) await admin.from('plan_months').update({ ...(subject ? { thesis: subject } : {}), updated_at: new Date().toISOString() }).eq('client_id', clientId).eq('month', month)
+    const fresh = await loadMonth(admin, clientId, month)
+    return NextResponse.json({ ok: true, month: fresh ? strip(fresh) : null })
   }
   if (body.action === 'drop' || body.action === 'add') {
     const have = await loadMonth(admin, clientId, month)

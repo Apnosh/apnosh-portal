@@ -199,6 +199,19 @@ export async function getCalendar(
     })
   }
 
+  /* the monthly plan's pieces (owner 2026-09-21: "a calendar view"): every dated piece of a
+     started month, so the shoot day, the creator visit and the deal sit next to everything else.
+     Posts stay off; they are on the calendar once they are scheduled posts. */
+  try {
+    const { data: slots } = await admin.from('plan_slots').select('id, date, kind, label, cents, status, ref, plan_month_id, plan_months!inner(status, month)').eq('client_id', clientId).gte('date', fromDate).lte('date', toDate).in('status', ['planned', 'minted', 'done']).neq('kind', 'post').limit(200)
+    for (const r of (slots ?? []) as unknown as { id: string; date: string; kind: string; label: string | null; cents: number; status: string; ref: { href?: string } | null; plan_months: { status: string; month: string } | { status: string; month: string }[] }[]) {
+      const pm = Array.isArray(r.plan_months) ? r.plan_months[0] : r.plan_months
+      if (!pm || pm.status !== 'started') continue
+      if (r.kind === 'taste' || r.kind === 'review' || r.kind === 'team' || r.kind === 'sign') continue
+      const kind: CalendarEventKind = r.kind === 'photos' ? 'shoot' : r.kind === 'creator' || r.kind === 'offer' || r.kind === 'boost' ? 'task' : 'content'
+      events.push({ id: `plan-${r.id}`, kind, category: kind === 'task' ? 'task' : 'production', title: r.label ?? r.kind, detail: `The month${r.cents ? ` · $${Math.round(r.cents / 100)}` : ''}`, startIso: `${r.date}T09:00:00`, allDay: true, status: r.status === 'done' ? 'Done' : r.status === 'minted' ? 'With the team' : 'Coming', statusTone: r.status === 'done' ? 'green' : r.status === 'minted' ? 'blue' : 'gray', href: r.ref?.href ?? `/dashboard/plan?month=${pm.month}` })
+    }
+  } catch { /* the plan tables are not on yet */ }
   events.sort((a, b) => new Date(a.startIso).getTime() - new Date(b.startIso).getTime())
   return events
 }
