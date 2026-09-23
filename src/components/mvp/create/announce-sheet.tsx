@@ -374,11 +374,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [detail, setDetail] = useState<null | 'from' | 'limited' | 'look' | 'tags' | 'note' | 'dish'>(null)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
   const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-  const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean) => (
+  const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean, required?: boolean) => (
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: first ? 0 : `0.5px solid ${C.line}`, cursor: 'text' }}>
-      <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, width: 96, flex: 'none' }}>{label}</span>
-      {money && <span style={{ fontSize: 15, fontWeight: 600, color: v ? C.ink : C.faint, marginRight: -6 }}>$</span>}
-      <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'none', font: 'inherit', padding: 0, color: C.ink, fontSize: 15, fontWeight: 500, lineHeight: 1.3 }} />
+      <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}{required && <small style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6, letterSpacing: '.02em' }}>Required</small>}</span>
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+        {money && <span style={{ fontSize: 15, fontWeight: 500, color: v ? C.ink : C.faint }}>$</span>}
+        <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: money ? 'none' : 1, width: money ? `${(v || ph).length}ch` : undefined, minWidth: 0, border: 0, outline: 'none', background: 'none', font: 'inherit', padding: 0, color: C.ink, fontSize: 15, fontWeight: 500, lineHeight: 1.3, textAlign: 'right' }} />
+      </span>
     </label>
   )
   const platforms = useMemo(() => Array.from(new Set((targets ?? []).filter((t) => chosen.has(t.accountId)).map((t) => t.platform))), [targets, chosen])
@@ -854,7 +856,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
                   </div>
                   <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
-                    {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true)}
+                    {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true, false, true)}
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
                     {row('from', 'From when', fromSet ? niceDate(a.from ?? null) : 'Today', fromSet)}
@@ -1156,12 +1158,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     </>
                   })()}
                   {detail === 'dish' && <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, overflow: 'hidden' }}>
-                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true)}
+                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true, false, true)}
                     {dishRow('Price', newDish.price, (v) => setNewDish((x) => ({ ...x, price: v })), '12', false, true)}
                     {dishRow('Description', newDish.line, (v) => setNewDish((x) => ({ ...x, line: v })), 'A line about it')}
                   </div>}
                   {detail === 'note' && <textarea rows={3} autoFocus value={a.note ?? ''} onChange={(e) => setA((x) => ({ ...x, note: e.target.value }))} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 10, resize: 'none', lineHeight: 1.45 }} />}
-                  <button type="button" onClick={() => { if (detail === 'dish') { if (newDish.name.trim()) { setDishes((x) => [...x, newDish]); setNewDish({ name: '', line: '', price: '' }); void helpers.current?.write(true) } } setDetail(null) }} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: 0, background: C.ink, color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+                  <button type="button" disabled={detail === 'dish' && !newDish.name.trim()} onClick={() => { if (detail === 'dish') { if (newDish.name.trim()) { setDishes((x) => [...x, newDish]); setNewDish({ name: '', line: '', price: '' }); void helpers.current?.write(true) } } setDetail(null) }} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: 0, background: C.ink, color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: detail === 'dish' && !newDish.name.trim() ? .5 : 1 }}>{detail === 'dish' ? 'Add it' : 'Done'}</button>
                 </div>
           </div>, document.body)}
         {step === 'plans' && kind && (
