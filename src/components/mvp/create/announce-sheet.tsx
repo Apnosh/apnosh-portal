@@ -980,7 +980,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           const c = content
           const opt = (id: Content, label: string, small: string, scene: Scene, hue: string, first: boolean, body?: React.ReactNode) => (
             <div key={id}>
-              <button type="button" onClick={() => setContent(id)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+              <button type="button" onClick={() => { setContent(id); if ((id === 'newshoot' || id === 'shoot') && c !== 'newshoot' && c !== 'shoot') setWantVideo(true) }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
                 <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
                 <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
                 <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${c === id ? C.greenDk : C.line}`, background: c === id ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{c === id && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
@@ -998,7 +998,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           )
           const shootBody = (
             <div style={{ fontSize: 13 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>The shot list</div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>What we shoot</div>
               {names.map((n, i) => <div key={i} style={{ padding: '5px 0', fontWeight: 600 }}>{i + 1}. {n}</div>)}
               <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Anything else? The patio, the team" style={{ ...input, marginTop: 6, fontSize: 13.5, padding: '9px 11px' }} />
               <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}: {sizeOf(names.length + alsoItems.length)}</div>
@@ -1019,8 +1019,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             </div>
           )
           const rows: React.ReactNode[] = []
-          rows.push(opt('newshoot', openShoot ? 'Book another shoot day' : 'Book a shoot day', `Photos, and video if you want it. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
-          if (openShoot) rows.push(opt('shoot', `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} on the list already` : 'Nothing on the list yet', 'calendar', '#3b6fd4', false, shootBody))
+          rows.push(opt('newshoot', openShoot ? 'Book another content day' : 'Book a content day', `We come shoot photos and video in one visit. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
+          if (openShoot) rows.push(opt('shoot', `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day`, openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} on the list already` : 'Nothing on the list yet', 'calendar', '#3b6fd4', false, shootBody))
           rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
           if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
           rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
@@ -1055,7 +1055,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       {mk(wantVideo, () => setWantVideo((v) => !v), 'reel', '#0f97a8', 'A video', vSmall, true)}
                       {mk(wantGraphic, () => setWantGraphic((v) => !v), 'graphic', '#d99a1e', 'A graphic', gSmall, false)}
                     </div>
-                    {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos land in your library either way.</div>}
+                    {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos from the day land in your library either way.</div>}
                     <button type="button" onClick={() => { applyContent(); next() }} style={cta_}>See my plan</button>
                   </div>
                 )
