@@ -372,12 +372,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
   const [detail, setDetail] = useState<null | 'from' | 'limited' | 'look' | 'tags' | 'note'>(null)
-  const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10) }
-  const dishCard = (v: string, set: (v: string) => void, ph: string, big?: boolean, money?: boolean) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: big ? '4px 0 2px' : '2px 0', borderTop: big ? 0 : `0.5px solid ${C.line}`, marginTop: big ? 0 : 6, paddingTop: big ? 4 : 9 }}>
-      {money && <span style={{ fontSize: 15, fontWeight: 700, color: v ? C.ink : C.faint }}>$</span>}
-      <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'none', font: 'inherit', padding: 0, color: C.ink, fontSize: big ? 20 : 14.5, fontWeight: big ? 700 : 500, fontFamily: big ? DISPLAY : undefined, letterSpacing: big ? '-.02em' : undefined, lineHeight: 1.3 }} />
-    </div>
+  const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: first ? 0 : `0.5px solid ${C.line}`, cursor: 'text' }}>
+      <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, width: 96, flex: 'none' }}>{label}</span>
+      {money && <span style={{ fontSize: 15, fontWeight: 600, color: v ? C.ink : C.faint, marginRight: -6 }}>$</span>}
+      <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'none', font: 'inherit', padding: 0, color: C.ink, fontSize: 15, fontWeight: 500, lineHeight: 1.3 }} />
+    </label>
   )
   const platforms = useMemo(() => Array.from(new Set((targets ?? []).filter((t) => chosen.has(t.accountId)).map((t) => t.platform))), [targets, chosen])
   const igChosen = platforms.includes('instagram')
@@ -843,14 +844,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 {[{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...dishes].map((d, i) => {
                   const set = (k: 'name' | 'line' | 'price') => (v: string) => (i === 0 ? setA((x) => ({ ...x, [k === 'name' ? 'what' : k]: v })) : setDishes((x) => x.map((y, j) => (j === i - 1 ? { ...y, [k]: v } : y))))
                   return (
-                    <div key={i} style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '10px 14px 12px', marginTop: 10, background: '#fff', position: 'relative' }}>
-                      {dishes.length > 0 && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <div key={i} style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', position: 'relative', overflow: 'hidden' }}>
+                      {dishes.length > 0 && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 0' }}>
                         <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.greenDk }}>Dish {i + 1}</span>
                         {i > 0 && <button type="button" aria-label="Remove" onClick={() => setDishes((x) => x.filter((_, j) => j !== i - 1))} style={{ width: 26, height: 26, borderRadius: 99, border: 0, background: '#f6f6f8', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer', marginRight: -6 }}><X size={12} /></button>}
                       </div>}
-                      {dishCard(d.name, set('name'), 'What is it called?', true)}
-                      {dishCard(d.line, set('line'), 'A line about it')}
-                      {dishCard(d.price, set('price'), 'Price', false, true)}
+                      {dishRow('Name', d.name, set('name'), 'Pork belly bánh mì', true)}
+                      {dishRow('Price', d.price, set('price'), '14', false, true)}
+                      {dishRow('Description', d.line, set('line'), 'A line about it')}
                     </div>
                   )
                 })}
@@ -909,10 +910,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </>
             )}
-            {simple && !moreOpen && (kind.limited || kind.tags || kind.fields.some((f) => ['from', 'until', 'deadline'].includes(f.key))) && <button type="button" onClick={() => setMoreOpen(true)} style={{ display: 'block', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, padding: '10px 0 0', cursor: 'pointer' }}>More details ›</button>}
-            {/* MORE DETAILS AS ROWS (owner 2026-09-22, "like DoorDash, the options feel overwhelming"): five quiet
-               rows, each with its answer on the right; a tap opens one small picker for that one thing. */}
-            {dishRows && moreOpen && (() => {
+            {simple && !moreOpen && !dishRows && (kind.limited || kind.tags || kind.fields.some((f) => ['from', 'until', 'deadline'].includes(f.key))) && <button type="button" onClick={() => setMoreOpen(true)} style={{ display: 'block', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, padding: '10px 0 0', cursor: 'pointer' }}>More details ›</button>}
+            {/* THE DETAILS AS ROWS (owner 2026-09-22, "like DoorDash", then "not hidden, one form"): five quiet rows
+               under the dish, each with its answer on the right; a tap opens one small picker for that one thing. */}
+            {dishRows && (() => {
               const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
               const row = (k: NonNullable<typeof detail>, label: string, value: string, set: boolean) => (
                 <button key={k} type="button" onClick={() => setDetail(k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: k === 'from' ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
