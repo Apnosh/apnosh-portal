@@ -394,11 +394,6 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           if (on('apps')) push(3, { key: 'apps', scene: 'apps', hue: '#c92d32', label: 'Delivery apps', under: 'two weeks' })
           if (on('review')) push(4, { key: 'review', scene: 'review', hue: '#d99a1e', label: 'Reviews', under: 'two weeks', fact: 'with the check' })
           if (on('sign')) push(4, { key: 'sign', scene: 'story', hue: '#c2418f', label: 'Photo sign', under: 'Free' })
-          const measured = reachParts?.measured ?? null
-          const est = (reachParts?.boost ?? 0) + (reachParts?.creator ?? 0) + (reachParts?.video ?? 0)
-          const totalReach = (measured ?? 0) + est
-          const track = Math.max(1, totalReach)
-          const seg = (n: number) => `${Math.max(n > 0 ? 3 : 0, (n / track) * 100)}%`
           /* THE STAGE PAGE (owner 2026-09-23, "it should just go to their own page"): one stage at a time, its
              pieces listed, the ones on with a check and their options, the ones off with Add and a Recommended tag */
           if (openLane !== null && lanes[openLane]) {
@@ -444,23 +439,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 14 }}>
                 <b style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1, color: total ? C.ink : C.greenDk }}>{total ? dollars(total) : 'Free'}</b>
-                {totalReach > 0 && <span style={{ fontSize: 13, color: C.mute }}>could reach about <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em', color: C.ink }}>{round2(totalReach).toLocaleString()}</b></span>}
+                <span style={{ fontSize: 13, color: C.mute }}>{stepSets[chosen]?.note ?? ''}</span>
               </div>
-              {totalReach > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ display: 'flex', gap: 3, height: 8 }}>
-                    {measured != null && measured > 0 && <span style={{ width: seg(measured), borderRadius: 99, background: C.greenDk }} />}
-                    {est > 0 && <span style={{ width: seg(est), borderRadius: 99, border: `1.5px dashed ${C.greenDk}`, boxSizing: 'border-box', opacity: .7 }} />}
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 5, fontSize: 11.5, color: C.mute }}>
-                    {measured != null && <span><b style={{ color: C.ink }}>{measured.toLocaleString()}</b> your posts, measured</span>}
-                    {(reachParts?.boost ?? 0) > 0 && <span><b style={{ color: C.ink }}>{reachParts!.boost.toLocaleString()}</b> boost, estimate</span>}
-                    {(reachParts?.creator ?? 0) > 0 && <span><b style={{ color: C.ink }}>{reachParts!.creator.toLocaleString()}</b> {first ?? 'creator'}, estimate</span>}
-                    {(reachParts?.video ?? 0) > 0 && <span><b style={{ color: C.ink }}>{reachParts!.video.toLocaleString()}</b> the Reel, estimate</span>}
-                  </div>
-                </div>
-              )}
-              {me?.budgetCents != null && total > 0 && <div style={{ fontSize: 12, marginTop: 6, color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
                 {lanes.map((ln, li) => { const empty = ln.pieces.length === 0; return (
                   <div key={ln.name} style={{ borderRadius: 18, background: empty ? '#f6f6f8' : ln.tile }}>
