@@ -35,7 +35,7 @@ type Piece = 'graphic' | 'reel' | 'photos'
 type Tier = 'standard' | 'full' | 'works'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
-type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'content' | 'plans' | 'picture' | 'where' | 'words' | 'plan' | 'done'
+type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'content' | 'make' | 'plans' | 'picture' | 'where' | 'words' | 'plan' | 'done'
 type GetIn = 'show' | 'rsvp' | 'tickets' | 'book'
 
 interface Field { key: string; label: string; hint?: string; optional?: boolean; kind?: 'text' | 'date' | 'long' | 'time' }
@@ -743,7 +743,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* the simple road: facts, three cards, done. The old screens stay reachable from What is inside */
   const simple = !!kind && !isSlow && !kind.hidden
   const dishRows = kind?.id === 'dish' && simple
-  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', ...(kind?.picture ? ['content' as Step] : []), 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', ...(kind?.picture ? ['content' as Step, 'make' as Step] : []), 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
   const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('plans'); return } if (simple && step === 'plans' && openItem) { setOpenItem(null); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(visible[i + 1]) }
@@ -1029,7 +1029,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             <div style={hv(hue)}>
               <div style={h2}>The content</div>
               <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
-              {c !== 'none' && (() => {
+              {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
+              <button type="button" onClick={() => { if (c === 'none') { applyContent(); setStep('plans') } else next() }} disabled={!okay} style={{ ...cta_, opacity: okay ? 1 : .5 }}>{c === 'none' ? 'See my plan' : 'Next'}</button>
+            </div>
+          )
+        })()}
+
+        {step === 'make' && kind && (() => {
+                const c = content ?? 'stock'
                 const shoot = c === 'newshoot' || c === 'shoot'
                 const hasClip = media.some((m) => m.video)
                 const vSmall = shoot ? `Filmed on the shoot day · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : c === 'own' || c === 'library' ? (hasClip ? `A Reel from your clips · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : `Send ten seconds from your phone · ${dollars(ctx?.prices.video ?? null) || 'Priced'}`) : `We come film it · ${dollars(ctx?.prices.video ?? null) || 'Priced'} + $150`
@@ -1042,20 +1049,16 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   </button>
                 )
                 return (
-                  <>
-                    <div style={h3}>What we make</div>
+                  <div style={hv(hue)}>
+                    <div style={h2}>What we make</div>
                     <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
                       {mk(wantVideo, () => setWantVideo((v) => !v), 'reel', '#0f97a8', 'A video', vSmall, true)}
                       {mk(wantGraphic, () => setWantGraphic((v) => !v), 'graphic', '#d99a1e', 'A graphic', gSmall, false)}
                     </div>
                     {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos land in your library either way.</div>}
-                  </>
+                    <button type="button" onClick={() => { applyContent(); next() }} style={cta_}>See my plan</button>
+                  </div>
                 )
-              })()}
-              {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-              <button type="button" onClick={() => { applyContent(); next() }} disabled={!okay} style={{ ...cta_, opacity: okay ? 1 : .5 }}>See my plan</button>
-            </div>
-          )
         })()}
 
         {step === 'picture' && kind && (
