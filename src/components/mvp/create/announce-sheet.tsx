@@ -378,7 +378,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [content, setContent] = useState<Content | null>(null)
   const [library, setLibrary] = useState<{ id: string; name: string; url: string }[] | null>(null)
   const [libSel, setLibSel] = useState<Set<string>>(new Set())
-  const [reelOnShoot, setReelOnShoot] = useState(false)
+  const [wantVideo, setWantVideo] = useState(false)
+  const [wantGraphic, setWantGraphic] = useState(true)
   const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean, required?: boolean) => (
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: first ? 0 : `0.5px solid ${C.line}`, cursor: 'text' }}>
@@ -654,6 +655,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (step !== 'content') return
     if (library === null) { void fetch(`/api/dashboard/assets?clientId=${encodeURIComponent(clientId)}`).then((r) => (r.ok ? r.json() : { photos: [] })).then((j) => setLibrary((j.photos ?? []) as { id: string; name: string; url: string }[])).catch(() => setLibrary([])) }
     if (content === null) setContent(src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock')
+    if (content === null) { setWantVideo(!!it('video')?.on); setWantGraphic(it('graphic')?.on !== false) }
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the choice writes the lines the plan reads: the shoot on or off, where the graphic comes from, the Reel */
   const applyContent = () => {
@@ -663,13 +665,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const list = [...new Set([...extra, ...alsoItems])]
     setItems((xs) => xs.map((it) => {
       if (it.uid !== it.id) return it
-      if (it.id === 'photos') return shoot ? { ...it, on: true, options: { ...it.options, list, date: c === 'newshoot' ? shootDate : '', newDay: c === 'newshoot' && !!openShoot, reel: reelOnShoot } } : { ...it, on: false, options: { ...it.options, newDay: false } }
-      if (it.id === 'graphic') return c === 'none' ? { ...it, on: false } : { ...it, on: it.on || c === 'stock', options: { ...it.options, from: shoot ? 'shoot' : c === 'own' || c === 'library' ? 'own' : 'stock' } }
-      if (it.id === 'video') return c === 'none' ? { ...it, on: false } : shoot && reelOnShoot ? { ...it, on: true, options: { ...it.options, filmed: 'shoot' } } : shoot ? { ...it, on: false } : it
+      if (it.id === 'photos') return shoot ? { ...it, on: true, options: { ...it.options, list, date: c === 'newshoot' ? shootDate : '', newDay: c === 'newshoot' && !!openShoot, reel: wantVideo } } : { ...it, on: false, options: { ...it.options, newDay: false } }
+      if (it.id === 'graphic') return c === 'none' || !wantGraphic ? { ...it, on: false } : { ...it, on: true, options: { ...it.options, from: shoot ? 'shoot' : c === 'own' || c === 'library' ? 'own' : 'stock' } }
+      if (it.id === 'video') return c === 'none' || !wantVideo ? { ...it, on: false } : { ...it, on: true, options: { ...it.options, filmed: shoot ? 'shoot' : (c === 'own' || c === 'library') && media.some((m) => m.video) ? 'clips' : c === 'own' || c === 'library' ? 'clips' : 'visit' } }
       return it
     }))
   }
-  const keepLines = content === 'newshoot' || content === 'shoot' ? ['photos', ...(reelOnShoot ? ['video'] : [])] : content === 'stock' ? ['graphic'] : []
+  const keepLines = content === 'none' ? [] : [...(content === 'newshoot' || content === 'shoot' ? ['photos'] : []), ...(wantVideo ? ['video'] : []), ...(wantGraphic ? ['graphic'] : [])]
   const pickLibrary = (ph: { id: string; url: string }) => {
     setLibSel((st) => { const n = new Set(st); if (n.has(ph.id)) n.delete(ph.id); else n.add(ph.id); return n })
     setMedia((m) => (m.some((x) => x.url === ph.url) ? m.filter((x) => x.url !== ph.url) : [...m, { url: ph.url, preview: ph.url, video: false }]))
@@ -1002,7 +1004,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}: {sizeOf(names.length + alsoItems.length)}</div>
               {c === 'newshoot' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}><span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>The day</b><small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
               {c === 'shoot' && openShoot && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. {openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}{openShoot.used + 1 > openShoot.spots ? ` That makes it ${TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you first.` : ''}</div>}
-              {check(reelOnShoot, () => setReelOnShoot((v) => !v), 'Film a Reel the same day', `${dollars(ctx?.prices.video ?? null) || 'Priced'} · clips from the day`)}
             </div>
           )
           const ownBody = (
@@ -1018,16 +1019,39 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             </div>
           )
           const rows: React.ReactNode[] = []
-          rows.push(opt('newshoot', openShoot ? 'Book another shoot day' : 'Book a shoot day', `A photographer comes. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
+          rows.push(opt('newshoot', openShoot ? 'Book another shoot day' : 'Book a shoot day', `Photos, and video if you want it. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
           if (openShoot) rows.push(opt('shoot', `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} on the list already` : 'Nothing on the list yet', 'calendar', '#3b6fd4', false, shootBody))
-          rows.push(opt('own', 'My own photo or video', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
+          rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
           if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
           rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
-          rows.push(opt('none', 'No photo needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
+          rows.push(opt('none', 'No content needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
           return (
             <div style={hv(hue)}>
-              <div style={h2}>The photo</div>
+              <div style={h2}>The content</div>
               <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
+              {c !== 'none' && (() => {
+                const shoot = c === 'newshoot' || c === 'shoot'
+                const hasClip = media.some((m) => m.video)
+                const vSmall = shoot ? `Filmed on the shoot day · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : c === 'own' || c === 'library' ? (hasClip ? `A Reel from your clips · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : `Send ten seconds from your phone · ${dollars(ctx?.prices.video ?? null) || 'Priced'}`) : `We come film it · ${dollars(ctx?.prices.video ?? null) || 'Priced'} + $150`
+                const gSmall = `Designed for the post${a.price ? ', with the price on it' : ''} · ${dollars(ctx?.prices.graphic ?? null) || 'Priced'}`
+                const mk = (on: boolean, set: () => void, scene: Scene, hue: string, label: string, small: string, first: boolean) => (
+                  <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                    <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
+                    <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
+                    <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                  </button>
+                )
+                return (
+                  <>
+                    <div style={h3}>What we make</div>
+                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
+                      {mk(wantVideo, () => setWantVideo((v) => !v), 'reel', '#0f97a8', 'A video', vSmall, true)}
+                      {mk(wantGraphic, () => setWantGraphic((v) => !v), 'graphic', '#d99a1e', 'A graphic', gSmall, false)}
+                    </div>
+                    {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos land in your library either way.</div>}
+                  </>
+                )
+              })()}
               {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
               <button type="button" onClick={() => { applyContent(); next() }} disabled={!okay} style={{ ...cta_, opacity: okay ? 1 : .5 }}>See my plan</button>
             </div>
