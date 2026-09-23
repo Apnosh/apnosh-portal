@@ -103,7 +103,7 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
   const boostRec = isHours ? null : (isDeal || isEvent || isOpen) ? 4000 : low ? 5000 : 2000
   const recommended: LadderSet = { ...simple }
   if (src !== 'mine' || isDeal || isEvent || isOpen) recommended.graphic = true
-  if (i.facts.hasVideo) recommended.video = { filmed: 'clips', count: 1, style: 'dish', captions: true }
+  if (i.facts.hasVideo) recommended.video = { filmed: 'clips', style: 'dish', captions: true }
   if (boostRec) recommended.boost = { cents: boostRec, days: 3 }
   if (isDish || isDeal) recommended.print = { kinds: ['tent'] }
   if (isDish && it('taste')) recommended.taste = true
@@ -116,7 +116,7 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
   const creatorOk = !!i.creator?.nearby && (isDish || isDeal || isEvent || isOpen)
   const bigger: LadderSet = { ...recommended }
   if (creatorOk) bigger.creator = { slug: i.creator!.slug, code: true, repost: true }
-  if (!isHours) bigger.video = { filmed: creatorOk ? 'creator' : src === 'shoot' ? 'shoot' : i.facts.hasVideo ? 'clips' : 'visit', count: 1, style: 'dish', captions: true }
+  if (!isHours) bigger.video = { filmed: creatorOk ? 'creator' : src === 'shoot' ? 'shoot' : i.facts.hasVideo ? 'clips' : 'visit', style: 'dish', captions: true }
   if (!isHours) bigger.print = { kinds: ['tent', 'poster'] }
   if (!isHours) bigger.boost = { cents: 10000, days: 5 }
   if (isDish && i.connected.apps) bigger.apps = true

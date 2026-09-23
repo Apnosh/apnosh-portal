@@ -45,7 +45,7 @@ const GROUPS: { id: 'make' | 'seen' | 'inside'; label: string }[] = [{ id: 'make
 export function itemCents(it: ItemPick, p: MenuPrices, profile?: CreatorProfile | null): number {
   const o = it.options
   switch (it.id) {
-    case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; return p.graphic + (where.includes('tent') ? 2500 : 0) + (where.includes('poster') ? 2500 : 0) + (o.spanish ? 4000 : 0) }
+    case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; const n = Math.max(1, Math.min(6, Number(o.count) || 1)); return Math.round(n * (p.graphic + (where.includes('tent') ? 2500 : 0) + (where.includes('poster') ? 2500 : 0) + (o.spanish ? 4000 : 0)) * (n >= 2 ? 0.9 : 1)) }
     case 'video': { const n = Math.max(1, Math.min(3, Number(o.count) || 1)); const each = p.video + (o.style === 'chef' ? 7500 : 0) + (o.tiktok ? 6000 : 0) + (o.spanish ? 2500 : 0); return Math.round(each * n * (n >= 2 ? 0.9 : 1)) + (o.filmed === 'visit' ? 15000 : 0) }
     case 'photos': return o.queue ? 0 : p.shootFor(1 + ((o.list as string[] | undefined)?.length ?? 0))
     case 'boost': return Number(o.cents) || 2000
@@ -59,7 +59,7 @@ export function itemSummary(it: ItemPick, p: MenuPrices, profile?: CreatorProfil
   const o = it.options
   switch (it.id) {
     case 'post': return `${extra?.platforms ?? 'Your channels'} · Story · ${extra?.bestHour ?? 'your best hour'}`
-    case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; return [where.includes('post') ? 'Post + Story' : '', where.includes('tent') ? 'table tent' : '', where.includes('poster') ? 'poster' : '', o.from === 'stock' ? 'licensed photos' : o.from === 'shoot' ? 'from the shoot' : '', o.priceOn ? 'price on it' : '', o.look ? String(o.look).toLowerCase() : '', o.spanish ? 'Spanish' : '', extra?.readyBy ? `ready ${nice(extra.readyBy)}` : 'ready in 2 days'].filter(Boolean).join(' · ') }
+    case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; return [Number(o.count) > 1 ? `${o.count} graphics` : '', where.includes('post') ? 'Post + Story' : '', where.includes('tent') ? 'table tent' : '', where.includes('poster') ? 'poster' : '', o.from === 'stock' ? 'licensed photos' : o.from === 'shoot' ? 'from the shoot' : '', o.priceOn ? 'price on it' : '', o.look ? String(o.look).toLowerCase() : '', o.spanish ? 'Spanish' : '', extra?.readyBy ? `ready ${nice(extra.readyBy)}` : 'ready in 2 days'].filter(Boolean).join(' · ') }
     case 'video': return [Number(o.count) > 1 ? `${o.count} Reels` : '', o.filmed === 'clips' ? 'From your clips' : o.filmed === 'creator' ? `Filmed when ${profile?.name.split(' ')[0] ?? 'the creator'} visits` : o.filmed === 'shoot' ? 'On the shoot day' : 'We come film it', o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : 'the dish up close', o.tiktok ? 'TikTok cut' : ''].filter(Boolean).join(' · ')
     case 'photos': return o.queue ? `On the next content day, not booked yet${(o.list as string[] | undefined)?.length ? ` · ${(o.list as string[]).join(', ')}` : ''}` : `${p.shootLabel(1 + ((o.list as string[] | undefined)?.length ?? 0))}${(o.list as string[] | undefined)?.length ? ` · ${(o.list as string[]).join(', ')}` : ''}`
     case 'boost': return `$${Math.round((Number(o.cents) || 2000) / 100)} · ${o.days ?? 3} days · about ${((Number(o.cents) || 2000) / 100 * 150).toLocaleString()} people`
@@ -79,7 +79,7 @@ const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
   print: { kinds: ['tent'] },
   creator: { code: true, repost: true },
 }
-export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep, ladder, reachParts, orderButton, startDay }: {
+export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep, ladder, reachParts, orderButton, startDay, ctaLabel, laneInit }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
   /* the calm plan screen (owner 2026-09-18): a small preview, a five-step how-far, date tiles */
@@ -97,11 +97,16 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   reachParts?: { measured: number | null; video: number; boost: number; creator: number }
   orderButton?: boolean
   startDay?: string
+  /* the button's word (Save plan on the lanes page) and which lane opens on arrival */
+  ctaLabel?: string
+  laneInit?: number | null
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
   /* plan first: what is picked, short. Add more opens the whole menu */
   const [mode, setModeRaw] = useState<'plan' | 'add'>('plan')
+  /* the lane that is open for changes (owner 2026-09-23: click into each stage to change or add) */
+  const [openLane, setOpenLane] = useState<number | null>(laneInit ?? null)
   const [switched, setSwitched] = useState(false)
   const setMode = (m: 'plan' | 'add') => { setSwitched(true); setModeRaw(m) }
   const openIt = open ? items.find((x) => x.uid === open) ?? null : null
@@ -336,11 +341,11 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   ) }
 
   /* ADD MODE: the whole menu, grouped, rows one line each */
-  const AddRow = ({ it }: { it: ItemPick }) => { const m = META[it.id]; const cents = it.on ? itemCents(it, prices, profile) : minOf(it); const free = m.free || cents === 0; return (
+  const AddRow = ({ it, tag }: { it: ItemPick; tag?: string }) => { const m = META[it.id]; const cents = it.on ? itemCents(it, prices, profile) : minOf(it); const free = m.free || cents === 0; return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
       <Thumb it={it} size={44} />
       <button type="button" onClick={() => (m.hasOptions ? setOpen(it.uid) : toggle(it.uid))} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 0, padding: 0, font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>{it.why && <small style={{ ...sub, fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.why}</small>}
+        <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}{tag && !it.on && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 6px', verticalAlign: 'middle' }}>{tag}</span>}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>{it.why && <small style={{ ...sub, fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.why}</small>}
       </button>
       <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions && !it.on ? 'from ' : ''}${dollars(cents)}`}</b>
       {MULTI.includes(it.id) && it.on && <button type="button" onClick={() => addNew(it.id)} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>＋ Another</button>}
@@ -379,8 +384,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           if (on('post')) { push(0, { key: 'post', scene: 'post', hue: '#2e9a78', label: 'Post', under: postDay || 'Free', fact: platformsWord ? platformsWord.split(', ').map((w) => ({ Instagram: 'IG', Facebook: 'FB', TikTok: 'TT' } as Record<string, string>)[w] ?? w).join(' · ') : undefined }); push(0, { key: 'google', scene: 'google', hue: '#2e9a78', label: 'Google', under: postDay || 'Free' }) }
           const b = on('boost'); if (b) push(0, { key: 'boost', scene: 'boost', hue: '#6a39de', label: 'Boost', under: money('boost'), fact: reachParts?.measured != null ? `${short(reachParts.measured)} → ${short(reachParts.boost)}` : `${(Number(b.options.days) || 3)} days` })
           const c = on('creator'); if (c) push(0, { key: 'creator', scene: 'creator', hue: '#0f97a8', label: first ?? 'Creator', under: c.options.date ? day(String(c.options.date)) : money('creator'), fact: reachParts?.creator ? `${short(reachParts.creator)} nearby` : undefined })
-          const g = on('graphic'); if (g) push(1, { key: 'graphic', scene: 'graphic', hue: '#d99a1e', label: 'Graphic', under: money('graphic'), fact: g.options.priceOn !== false ? 'price on it' : undefined })
-          const v = on('video'); if (v) push(1, { key: 'video', scene: 'reel', hue: '#0f97a8', label: 'Reel', under: money('video') })
+          const g = on('graphic'); if (g) { const n = Math.max(1, Number(g.options.count) || 1); push(1, { key: 'graphic', scene: 'graphic', hue: '#d99a1e', label: n > 1 ? `${n} graphics` : 'Graphic', under: money('graphic'), fact: g.options.priceOn !== false ? 'price on it' : undefined }) }
+          const v = on('video'); if (v) { const n = Math.max(1, Number(v.options.count) || 1); push(1, { key: 'video', scene: 'reel', hue: '#0f97a8', label: n > 1 ? `${n} Reels` : 'Reel', under: money('video'), fact: v.options.filmed === 'shoot' ? 'from the shoot' : v.options.filmed === 'clips' ? 'your clips' : v.options.filmed === 'creator' ? `${first ?? 'creator'} films` : undefined }) }
+          const ph = on('photos'); if (ph) { const n = Number(ph.options.photos) || 15; push(1, { key: 'photos', scene: 'photos', hue: '#6a39de', label: `${n} photos`, under: ph.options.queue ? 'next shoot' : money('photos'), fact: 'your library' }) }
           const pr = on('print'); if (pr) { const kinds = (pr.options.kinds as string[] | undefined) ?? ['tent']; if (kinds.includes('tent')) push(1, { key: 'tent', scene: 'print', hue: '#d99a1e', label: 'Tent', under: money('print') }); if (kinds.includes('poster')) push(1, { key: 'poster', scene: 'print', hue: '#d99a1e', label: 'Poster', under: kinds.includes('tent') ? 'with it' : money('print') }) }
           if (on('taste')) push(2, { key: 'taste', scene: 'dish', hue: '#2e9a78', label: 'Taste', under: day(startDay) || 'Free', fact: 'at the counter' })
           if (orderButton && on('post')) push(2, { key: 'order', scene: 'order', hue: '#6a39de', label: 'Order button', under: postDay || 'Free' })
@@ -424,8 +430,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               )}
               {me?.budgetCents != null && total > 0 && <div style={{ fontSize: 12, marginTop: 6, color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {lanes.map((ln) => { const empty = ln.pieces.length === 0; return (
-                  <div key={ln.name} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 78, padding: '10px 12px', borderRadius: 18, background: empty ? '#f6f6f8' : ln.tile }}>
+                {lanes.map((ln, li) => { const empty = ln.pieces.length === 0; const openHere = openLane === li; const CAT: ItemId[][] = [['post', 'boost', 'creator'], ['graphic', 'video', 'print', 'photos'], ['taste', 'offer'], ['apps'], ['review', 'sign']]; return (
+                  <div key={ln.name} style={{ borderRadius: 18, background: empty && !openHere ? '#f6f6f8' : ln.tile, border: openHere ? `0.5px solid ${ln.hue}` : '0.5px solid transparent' }}>
+                  <div role="button" tabIndex={0} onClick={() => setOpenLane(openHere ? null : li)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLane(openHere ? null : li) } }} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 78, padding: '10px 12px', cursor: 'pointer' }}>
                     <div style={{ width: 84, flex: 'none' }}>
                       <span style={{ display: 'block', width: 8, height: 8, borderRadius: 99, background: empty ? 'transparent' : ln.hue, border: empty ? `1.5px solid ${C.faint}` : 0, marginBottom: 6 }} />
                       <b style={{ display: 'block', fontSize: 12.5, fontWeight: 700, lineHeight: 1.2, color: empty ? C.faint : C.ink }}>{ln.name}</b>
@@ -440,10 +447,17 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                         </div>
                       ))}
                     </div>
+                    <span style={{ flex: 'none', width: 22, height: 22, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 14, lineHeight: 1, transform: openHere ? 'rotate(45deg)' : 'none' }}>+</span>
+                  </div>
+                  {openHere && (
+                    <div style={{ background: '#fff', borderRadius: '0 0 18px 18px', padding: '2px 12px 6px' }}>
+                      {CAT[li].map((id) => { const lines = items.filter((x) => x.id === id); const it = lines.find((x) => x.uid === id) ?? lines[0]; if (!it) return null; const rec = !it.on && ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : undefined; return <AddRow key={id} it={it} tag={rec} /> })}
+                      {li === 2 && orderButton && <div style={{ fontSize: 12, color: C.mute, padding: '8px 0 4px' }}>The Order button rides on the post, from your ordering link.</div>}
+                    </div>
+                  )}
                   </div>
                 ) })}
               </div>
-              <div style={{ textAlign: 'center', marginTop: 12 }}><button type="button" onClick={() => setMode('add')} style={{ fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '6px 10px', cursor: 'pointer' }}>I'll build my own</button></div>
             </div>
           )
         })()}
@@ -489,7 +503,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
       </>}
       <div style={{ paddingTop: 10, marginTop: 6 }}>
         {mode === 'add' && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: C.mute, padding: '0 2px 2px' }}><span><b style={{ color: C.ink }}>{onCount} thing{onCount === 1 ? '' : 's'}</b>{reach != null ? ` · about ${round2(reach).toLocaleString()} people` : ''}</span></div>}
-        <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : 'Make it happen'}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
+        <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : (ctaLabel ?? 'Make it happen')}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
         <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
       </div>
     </div>
