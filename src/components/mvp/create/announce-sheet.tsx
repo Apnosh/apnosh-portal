@@ -874,13 +874,32 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                and opens one small picker. More dishes are added on the next page. */}
             {dishRows && (() => {
               const fromSet = !!a.from && a.from !== isoPlus(0)
-              const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean) => (
-                <button key={k} type="button" onClick={() => setDetail(k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}</span>
-                  <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 14, color: set ? C.greenDk : C.mute, fontWeight: set ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
-                  <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4 }} />
-                </button>
+              const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean, body: React.ReactNode) => { const open = detail === k; return (
+                <div key={k}>
+                  <button type="button" onClick={() => setDetail(open ? null : k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}</span>
+                    <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 14, color: set ? C.greenDk : C.mute, fontWeight: set ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
+                    <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+                  </button>
+                  {open && <div style={{ padding: '0 14px 14px' }}>{body}</div>}
+                </div>
+              ) }
+              const dateBody = (
+                <>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
+                  <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
+                  <button type="button" onClick={() => { const v = !limited; setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 0 10px', marginTop: 4, border: 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                    <span><b style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink }}>For a limited time</b><small style={sub}>The posts say so, and we stop when it ends</small></span>
+                    <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${limited ? C.greenDk : C.line}`, background: limited ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{limited && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                  </button>
+                  {limited && <>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '0 0 10px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
+                    <input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />
+                  </>}
+                </>
               )
+              const tagsBody = <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setTags((st) => { const n = new Set(st); if (n.has(t)) n.delete(t); else n.add(t); return n })} style={chip(tags.has(t))}>{t}</button>)}</div>
+              const noteBody = <textarea rows={3} autoFocus value={a.note ?? ''} onChange={(e) => setA((x) => ({ ...x, note: e.target.value }))} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.45 }} />
               return (
                 <div>
                   <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 150, display: 'grid', placeItems: 'center' }}>
@@ -890,9 +909,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true)}
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
-                    {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited)}
-                    {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0)}
-                    {row('note', 'Additional comments', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim())}
+                    {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited, dateBody)}
+                    {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0, tagsBody)}
+                    {row('note', 'Additional comments', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim(), noteBody)}
                   </div>
                 </div>
               )
@@ -1241,46 +1260,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           </div>
         )}
 
-        {dishRows && detail && typeof document !== 'undefined' && createPortal(
-              <div className="cr" role="dialog" aria-modal="true" onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(20,22,26,.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '24px 24px 0 0', padding: '12px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
-                  <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
-                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'Starting date', look: 'The look', tags: 'Good to know', note: 'Additional comments', dish: 'Another dish' }[detail]}</div>
-                  {detail === 'from' && <>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0 12px' }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
-                    <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                    <button type="button" onClick={() => { const v = !limited; setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 0 12px', marginTop: 8, border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                      <span><b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>For a limited time</b><small style={sub}>The posts say so, and we stop when it ends</small></span>
-                      <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${limited ? C.greenDk : C.line}`, background: limited ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{limited && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-                    </button>
-                    {limited && <>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '0 0 12px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
-                      <input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                    </>}
-                  </>}
-                  {(detail === 'look' || detail === 'tags') && (() => {
-                    const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-                    const opts = detail === 'look' ? ['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful', 'Like my brand kit'] : TAGS
-                    const on = (t: string) => (detail === 'look' ? looks.includes(t) : tags.has(t))
-                    const full = detail === 'look' && looks.length >= 3
-                    const flip = (t: string) => { if (detail === 'look') setA((x) => { const cur = looks.includes(t) ? looks.filter((y) => y !== t) : full ? looks : [...looks, t]; return { ...x, look: cur.join(', ') } }); else setTags((st) => { const n = new Set(st); if (n.has(t)) n.delete(t); else n.add(t); return n }) }
-                    return <>
-                      {detail === 'look' && <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 6 }}>Goes to the designer and the photographer. Up to three.</div>}
-                      <div style={{ margin: '0 -4px' }}>{opts.map((t) => { const o = on(t); const dim = !o && full; return (
-                        <button key={t} type="button" disabled={dim} onClick={() => flip(t)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 4px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', fontSize: 15, fontWeight: 600, color: dim ? C.faint : C.ink, cursor: dim ? 'default' : 'pointer' }}>
-                          {t}<span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${o ? C.greenDk : C.line}`, background: o ? C.greenDk : '#fff', display: 'grid', placeItems: 'center' }}>{o && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-                        </button>) })}</div>
-                    </>
-                  })()}
-                  {detail === 'dish' && <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, overflow: 'hidden' }}>
-                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true)}
-                    {dishRow('Price', newDish.price, (v) => setNewDish((x) => ({ ...x, price: v })), '12', false, true)}
-                    {dishRow('Description', newDish.line, (v) => setNewDish((x) => ({ ...x, line: v })), 'A line about it')}
-                  </div>}
-                  {detail === 'note' && <textarea rows={3} autoFocus value={a.note ?? ''} onChange={(e) => setA((x) => ({ ...x, note: e.target.value }))} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 10, resize: 'none', lineHeight: 1.45 }} />}
-                  <button type="button" disabled={detail === 'dish' && !newDish.name.trim()} onClick={() => { if (detail === 'dish') { if (newDish.name.trim()) { setDishes((x) => [...x, newDish]); setNewDish({ name: '', line: '', price: '' }); void helpers.current?.write(true) } } setDetail(null) }} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: 0, background: C.ink, color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: detail === 'dish' && !newDish.name.trim() ? .5 : 1 }}>{detail === 'dish' ? 'Add it' : 'Done'}</button>
-                </div>
-          </div>, document.body)}
         {step === 'plans' && kind && (
           <div style={hv(hue)}>
             {/* MORE DISHES (owner 2026-09-22, "add another dish on the next page"): the dishes so far, and a
@@ -1296,7 +1275,18 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     </div>
                   ))}
                 </div>
-                {dishes.length < 5 && <button type="button" onClick={() => setDetail('dish')} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> Another dish</button>}
+                {detail === 'dish' && (
+                  <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
+                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true)}
+                    {dishRow('Price', newDish.price, (v) => setNewDish((x) => ({ ...x, price: v })), '12', false, true)}
+                    {dishRow('Description', newDish.line, (v) => setNewDish((x) => ({ ...x, line: v })), 'A line about it')}
+                    <div style={{ display: 'flex', gap: 8, padding: '4px 14px 12px' }}>
+                      <button type="button" disabled={!newDish.name.trim()} onClick={() => { setDishes((x) => [...x, newDish]); setNewDish({ name: '', line: '', price: '' }); setDetail(null); void helpers.current?.write(true) }} style={{ flex: 1, height: 40, borderRadius: 99, border: 0, background: C.ink, color: '#fff', font: 'inherit', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: newDish.name.trim() ? 1 : .5 }}>Add it</button>
+                      <button type="button" onClick={() => { setNewDish({ name: '', line: '', price: '' }); setDetail(null) }} style={{ height: 40, padding: '0 14px', borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', font: 'inherit', fontSize: 14, fontWeight: 600, color: C.ink, cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {dishes.length < 5 && detail !== 'dish' && <button type="button" onClick={() => setDetail('dish')} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> Another dish</button>}
               </div>
             )}
                 {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
