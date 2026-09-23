@@ -371,7 +371,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const ready = required.every((f) => (a[f.key] ?? '').trim())
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
-  const [detail, setDetail] = useState<null | 'from' | 'limited' | 'look' | 'tags' | 'note'>(null)
+  const [detail, setDetail] = useState<null | 'from' | 'limited' | 'look' | 'tags' | 'note' | 'dish'>(null)
+  const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
   const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean) => (
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: first ? 0 : `0.5px solid ${C.line}`, cursor: 'text' }}>
@@ -834,32 +835,37 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </div>
             )}
-            {/* THE DISH FORM (owner 2026-09-22, "more like the form but designed better"): one dish or a few,
-               the mint tile with the cloche as the hero, and one clean card per dish instead of labelled boxes. */}
-            {kind.id === 'dish' && simple && (
-              <div>
-                <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 150, display: 'grid', placeItems: 'center' }}>
-                  <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
+            {/* THE DISH FORM (owner 2026-09-22, "one form"): the cloche tile, then one card that runs from Name,
+               Price and Description straight into the details, each detail a row whose answer sits on the right
+               and opens one small picker. More dishes are added on the next page. */}
+            {dishRows && (() => {
+              const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+              const fromSet = !!a.from && a.from !== isoPlus(0)
+              const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean) => (
+                <button key={k} type="button" onClick={() => setDetail(k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}</span>
+                  <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 14, color: set ? C.greenDk : C.mute, fontWeight: set ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
+                  <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4 }} />
+                </button>
+              )
+              return (
+                <div>
+                  <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 150, display: 'grid', placeItems: 'center' }}>
+                    <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
+                  </div>
+                  <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
+                    {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true)}
+                    {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
+                    {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
+                    {row('from', 'From when', fromSet ? niceDate(a.from ?? null) : 'Today', fromSet)}
+                    {row('limited', 'For a limited time', limited ? (a.until ? `Until ${niceDate(a.until)}` : 'Yes') : 'No', limited)}
+                    {row('look', 'The look', looks.length ? looks.join(', ') : 'We choose', looks.length > 0)}
+                    {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0)}
+                    {row('note', 'A note for the team', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim())}
+                  </div>
                 </div>
-                {[{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...dishes].map((d, i) => {
-                  const set = (k: 'name' | 'line' | 'price') => (v: string) => (i === 0 ? setA((x) => ({ ...x, [k === 'name' ? 'what' : k]: v })) : setDishes((x) => x.map((y, j) => (j === i - 1 ? { ...y, [k]: v } : y))))
-                  return (
-                    <div key={i} style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', position: 'relative', overflow: 'hidden' }}>
-                      {dishes.length > 0 && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 0' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: C.greenDk }}>Dish {i + 1}</span>
-                        {i > 0 && <button type="button" aria-label="Remove" onClick={() => setDishes((x) => x.filter((_, j) => j !== i - 1))} style={{ width: 26, height: 26, borderRadius: 99, border: 0, background: '#f6f6f8', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer', marginRight: -6 }}><X size={12} /></button>}
-                      </div>}
-                      {dishRow('Name', d.name, set('name'), 'Pork belly bánh mì', true)}
-                      {dishRow('Price', d.price, set('price'), '14', false, true)}
-                      {dishRow('Description', d.line, set('line'), 'A line about it')}
-                    </div>
-                  )
-                })}
-                {dishes.length < 5 && (
-                  <button type="button" onClick={() => setDishes((x) => [...x, { name: '', line: '', price: '' }])} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> Another dish</button>
-                )}
-              </div>
-            )}
+              )
+            })()}
             {kind.fields.filter((f) => !(dishRows && ['what', 'line', 'price', 'from'].includes(f.key))).filter((f) => !(f.key === 'until' && kind.hours === 'oneday' && oneDay)).filter((f) => !(simple && !moreOpen && ((f.kind === 'date' && ['from', 'until', 'deadline'].includes(f.key) && (f.optional || (a[f.key] ?? '').trim())) || (f.optional && f.key !== 'price')))).map((f) => (
               <label key={f.key} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
                 {f.label}{f.optional && <span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span>}
@@ -868,10 +874,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   : <input type="text" value={a[f.key] ?? ''} onChange={(e) => setA((x) => ({ ...x, [f.key]: e.target.value }))} placeholder={f.hint} style={f.key === 'what' && simple ? { ...input, fontSize: 20, fontWeight: 600, padding: '14px 14px', borderRadius: 16 } : input} />}
               </label>
             ))}
-            {/* THE PICTURE COMES LATER (owner 2026-09-22): the plan assumes and the graphic's own sheet lets them change where it comes from. Here, only a quiet way to attach one. */}
-            {kind.photo && simple && !media.length && (
-              <div style={{ marginTop: 14, fontSize: 12.5, color: C.mute, textAlign: 'center' }}>We pick the photo. <button type="button" onClick={() => fileRef.current?.click()} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>{uploading ? 'Adding…' : 'Add your own'}</button></div>
-            )}
             {isEvent && (
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>Every week<small style={sub}>Same day, same time. We post each week</small></span><Switch on={weekly} set={setWeekly} /></div>
@@ -911,62 +913,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               </>
             )}
             {simple && !moreOpen && !dishRows && (kind.limited || kind.tags || kind.fields.some((f) => ['from', 'until', 'deadline'].includes(f.key))) && <button type="button" onClick={() => setMoreOpen(true)} style={{ display: 'block', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, padding: '10px 0 0', cursor: 'pointer' }}>More details ›</button>}
-            {/* THE DETAILS AS ROWS (owner 2026-09-22, "like DoorDash", then "not hidden, one form"): five quiet rows
-               under the dish, each with its answer on the right; a tap opens one small picker for that one thing. */}
-            {dishRows && (() => {
-              const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-              const row = (k: NonNullable<typeof detail>, label: string, value: string, set: boolean) => (
-                <button key={k} type="button" onClick={() => setDetail(k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: k === 'from' ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}</span>
-                  <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 14, color: set ? C.greenDk : C.mute, fontWeight: set ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
-                  <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4 }} />
-                </button>
-              )
-              const fromSet = !!a.from && a.from !== isoPlus(0)
-              return (
-                <div style={{ marginTop: 14, border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
-                  {row('from', 'From when', fromSet ? niceDate(a.from ?? null) : 'Today', fromSet)}
-                  {row('limited', 'For a limited time', limited ? (a.until ? `Until ${niceDate(a.until)}` : 'Yes') : 'No', limited)}
-                  {row('look', 'The look', looks.length ? looks.join(', ') : 'We choose', looks.length > 0)}
-                  {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0)}
-                  {row('note', 'A note for the team', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim())}
-                </div>
-              )
-            })()}
-            {dishRows && detail && typeof document !== 'undefined' && createPortal(
-              <div className="cr" role="dialog" aria-modal="true" onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(20,22,26,.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '24px 24px 0 0', padding: '12px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
-                  <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
-                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'From when', limited: 'For a limited time', look: 'The look', tags: 'Good to know', note: 'A note for the team' }[detail]}</div>
-                  {detail === 'from' && <>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0 12px' }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
-                    <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                  </>}
-                  {detail === 'limited' && <>
-                    <div style={{ ...rowS, borderBottom: 0 }}><span>Only for a while<small style={sub}>The posts say so, and we stop when it ends</small></span><Switch on={limited} set={(v) => { setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} /></div>
-                    {limited && <>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
-                      <input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                    </>}
-                  </>}
-                  {(detail === 'look' || detail === 'tags') && (() => {
-                    const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-                    const opts = detail === 'look' ? ['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful', 'Like my brand kit'] : TAGS
-                    const on = (t: string) => (detail === 'look' ? looks.includes(t) : tags.has(t))
-                    const full = detail === 'look' && looks.length >= 3
-                    const flip = (t: string) => { if (detail === 'look') setA((x) => { const cur = looks.includes(t) ? looks.filter((y) => y !== t) : full ? looks : [...looks, t]; return { ...x, look: cur.join(', ') } }); else setTags((st) => { const n = new Set(st); if (n.has(t)) n.delete(t); else n.add(t); return n }) }
-                    return <>
-                      <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 6 }}>{detail === 'look' ? 'Goes to the designer and the photographer. Up to three.' : 'Only what you pick is ever said.'}</div>
-                      <div style={{ margin: '0 -4px' }}>{opts.map((t) => { const o = on(t); const dim = !o && full; return (
-                        <button key={t} type="button" disabled={dim} onClick={() => flip(t)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 4px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', fontSize: 15, fontWeight: 600, color: dim ? C.faint : C.ink, cursor: dim ? 'default' : 'pointer' }}>
-                          {t}<span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${o ? C.greenDk : C.line}`, background: o ? C.greenDk : '#fff', display: 'grid', placeItems: 'center' }}>{o && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-                        </button>) })}</div>
-                    </>
-                  })()}
-                  {detail === 'note' && <textarea rows={3} autoFocus value={a.note ?? ''} onChange={(e) => setA((x) => ({ ...x, note: e.target.value }))} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 10, resize: 'none', lineHeight: 1.45 }} />}
-                  <button type="button" onClick={() => setDetail(null)} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: 0, background: C.ink, color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</button>
-                </div>
-              </div>, document.body)}
             {kind.limited && (!simple || moreOpen) && !dishRows && (
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>For a limited time</span><Switch on={limited} set={setLimited} /></div>
@@ -1179,8 +1125,63 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           </div>
         )}
 
+        {dishRows && detail && typeof document !== 'undefined' && createPortal(
+              <div className="cr" role="dialog" aria-modal="true" onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(20,22,26,.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '24px 24px 0 0', padding: '12px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
+                  <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
+                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'From when', limited: 'For a limited time', look: 'The look', tags: 'Good to know', note: 'A note for the team', dish: 'Another dish' }[detail]}</div>
+                  {detail === 'from' && <>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0 12px' }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
+                    <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
+                  </>}
+                  {detail === 'limited' && <>
+                    <div style={{ ...rowS, borderBottom: 0 }}><span>Only for a while<small style={sub}>The posts say so, and we stop when it ends</small></span><Switch on={limited} set={(v) => { setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} /></div>
+                    {limited && <>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
+                      <input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />
+                    </>}
+                  </>}
+                  {(detail === 'look' || detail === 'tags') && (() => {
+                    const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
+                    const opts = detail === 'look' ? ['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful', 'Like my brand kit'] : TAGS
+                    const on = (t: string) => (detail === 'look' ? looks.includes(t) : tags.has(t))
+                    const full = detail === 'look' && looks.length >= 3
+                    const flip = (t: string) => { if (detail === 'look') setA((x) => { const cur = looks.includes(t) ? looks.filter((y) => y !== t) : full ? looks : [...looks, t]; return { ...x, look: cur.join(', ') } }); else setTags((st) => { const n = new Set(st); if (n.has(t)) n.delete(t); else n.add(t); return n }) }
+                    return <>
+                      <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 6 }}>{detail === 'look' ? 'Goes to the designer and the photographer. Up to three.' : 'Only what you pick is ever said.'}</div>
+                      <div style={{ margin: '0 -4px' }}>{opts.map((t) => { const o = on(t); const dim = !o && full; return (
+                        <button key={t} type="button" disabled={dim} onClick={() => flip(t)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 4px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', fontSize: 15, fontWeight: 600, color: dim ? C.faint : C.ink, cursor: dim ? 'default' : 'pointer' }}>
+                          {t}<span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${o ? C.greenDk : C.line}`, background: o ? C.greenDk : '#fff', display: 'grid', placeItems: 'center' }}>{o && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                        </button>) })}</div>
+                    </>
+                  })()}
+                  {detail === 'dish' && <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, overflow: 'hidden' }}>
+                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true)}
+                    {dishRow('Price', newDish.price, (v) => setNewDish((x) => ({ ...x, price: v })), '12', false, true)}
+                    {dishRow('Description', newDish.line, (v) => setNewDish((x) => ({ ...x, line: v })), 'A line about it')}
+                  </div>}
+                  {detail === 'note' && <textarea rows={3} autoFocus value={a.note ?? ''} onChange={(e) => setA((x) => ({ ...x, note: e.target.value }))} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 10, resize: 'none', lineHeight: 1.45 }} />}
+                  <button type="button" onClick={() => { if (detail === 'dish') { if (newDish.name.trim()) { setDishes((x) => [...x, newDish]); setNewDish({ name: '', line: '', price: '' }); void helpers.current?.write(true) } } setDetail(null) }} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: 0, background: C.ink, color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+                </div>
+          </div>, document.body)}
         {step === 'plans' && kind && (
           <div style={hv(hue)}>
+            {/* MORE DISHES (owner 2026-09-22, "add another dish on the next page"): the dishes so far, and a
+               dashed row that opens the small sheet for one more. The words are written again after. */}
+            {dishRows && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
+                  {[{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...dishes].map((d, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i ? `0.5px solid ${C.line}` : 0 }}>
+                      <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name || 'A dish'}</b>{d.line.trim() && <small style={{ display: 'block', fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.line}</small>}</span>
+                      {d.price.trim() && <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{/^\d/.test(d.price.trim()) ? `$${d.price.trim()}` : d.price.trim()}</span>}
+                      {i > 0 && <button type="button" aria-label="Remove" onClick={() => { setDishes((x) => x.filter((_, j) => j !== i - 1)); void helpers.current?.write(true) }} style={{ width: 26, height: 26, borderRadius: 99, border: 0, background: '#f6f6f8', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'pointer', marginRight: -6 }}><X size={12} /></button>}
+                    </div>
+                  ))}
+                </div>
+                {dishes.length < 5 && <button type="button" onClick={() => setDetail('dish')} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> Another dish</button>}
+              </div>
+            )}
                 {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} preview={{ name: a.what?.trim() || kind.label, price: a.price?.trim() || null, caption: social, image: media[0] && !media[0].video ? media[0].preview : null, video: !!media[0]?.video, onWords: () => setStep('words'), onPhoto: () => fileRef.current?.click() }} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
