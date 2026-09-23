@@ -389,7 +389,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
       <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}{required && <small style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6, letterSpacing: '.02em' }}>Required</small>}</span>
       <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
         {money && <span style={{ fontSize: 15, fontWeight: 500, color: v ? C.ink : C.faint }}>$</span>}
-        <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: money ? 'none' : 1, width: money ? `${(v || ph).length}ch` : undefined, minWidth: 0, border: 0, outline: 'none', background: 'none', font: 'inherit', padding: 0, color: C.ink, fontSize: 15, fontWeight: 500, lineHeight: 1.3, textAlign: 'right' }} />
+        <input type="text" inputMode={money ? 'decimal' : undefined} value={v} onChange={(e) => set(money ? e.target.value.replace(/^\$/, '') : e.target.value)} placeholder={ph} style={{ flex: money ? 'none' : 1, width: money ? `${(v || ph).length}ch` : undefined, minWidth: 0, border: 0, outline: 'none', background: 'none', fontFamily: 'inherit', padding: 0, color: C.ink, fontSize: 15, fontWeight: 500, lineHeight: 1.3, textAlign: 'right' }} />
       </span>
     </label>
   )
@@ -780,7 +780,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const body = (
 
     <>
-        {page && step !== 'kind' && step !== 'done' && !(initialKind && visible.indexOf(step) === 0) && <button type="button" onClick={back} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, cursor: 'pointer', padding: '6px 0' }}><ArrowLeft size={14} /> Back</button>}
+        {page && step !== 'kind' && step !== 'done' && !(initialKind && visible.indexOf(step) === 0) && <button type="button" onClick={back} style={{ display: 'flex', alignItems: 'center', gap: 4, border: 0, background: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, cursor: 'pointer', padding: '6px 0' }}><ArrowLeft size={14} /> Back</button>}
         {step !== 'kind' && step !== 'done' && visible.length > 1 && <div style={{ display: 'flex', gap: 4, margin: '0 0 14px' }}>{visible.map((s) => <i key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: visible.indexOf(s) <= visible.indexOf(step) ? C.ink : C.line }} />)}</div>}
         <input ref={fileRef} type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
 
@@ -970,7 +970,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       {row('note', 'Additional comments', d.note.trim() ? d.note : 'None', !!d.note.trim(), dNoteBody)}
                     </div>
                     <button type="button" onClick={() => { setOpenDish(null); setDetail(null) }} disabled={!d.name.trim()} style={{ ...cta_, opacity: d.name.trim() ? 1 : .5 }}>Done</button>
-                    {(count > 1 || d.name.trim()) && <div style={{ textAlign: 'center', marginTop: 2 }}><button type="button" onClick={() => { removeDish(i); setOpenDish(null); setDetail(null) }} style={{ font: 'inherit', fontSize: 13, fontWeight: 600, color: C.mute, border: 0, background: 'none', padding: '8px 12px', cursor: 'pointer' }}>Remove this dish</button></div>}
+                    {(count > 1 || d.name.trim()) && <div style={{ textAlign: 'center', marginTop: 2 }}><button type="button" onClick={() => { removeDish(i); setOpenDish(null); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 600, color: C.mute, border: 0, background: 'none', padding: '8px 12px', cursor: 'pointer' }}>Remove this dish</button></div>}
                   </div>
                 )
               }
@@ -991,7 +991,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     </div>
                   )}
                   {count - (named.length) === 0 && count >= 6 ? null : (
-                    <button type="button" onClick={addDish} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> {named.length ? 'Another dish' : 'Add a dish'}</button>
+                    <button type="button" onClick={addDish} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> {named.length ? 'Another dish' : 'Add a dish'}</button>
                   )}
                   <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 14, background: '#fff', overflow: 'hidden' }}>
                     <div style={{ marginTop: -1 }}>{row('content', 'Content', contentWord, content !== null, contentUI)}</div>
@@ -1046,7 +1046,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )}
               </>
             )}
-            {simple && !moreOpen && !dishRows && (kind.limited || kind.tags || kind.fields.some((f) => ['from', 'until', 'deadline'].includes(f.key))) && <button type="button" onClick={() => setMoreOpen(true)} style={{ display: 'block', border: 0, background: 'none', font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, padding: '10px 0 0', cursor: 'pointer' }}>More details ›</button>}
+            {simple && !moreOpen && !dishRows && (kind.limited || kind.tags || kind.fields.some((f) => ['from', 'until', 'deadline'].includes(f.key))) && <button type="button" onClick={() => setMoreOpen(true)} style={{ display: 'block', border: 0, background: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.mute, padding: '10px 0 0', cursor: 'pointer' }}>More details ›</button>}
             {kind.limited && (!simple || moreOpen) && !dishRows && (
               <>
                 <div style={{ ...rowS, marginTop: 8 }}><span>For a limited time</span><Switch on={limited} set={setLimited} /></div>
@@ -1202,13 +1202,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                 {media[0] && !media[0].video ? <div style={{ height: 170, background: `center/cover url(${media[0].preview})` }} /> : <div style={{ height: 110, background: hexa(hue, 0.14), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 80 }}><Drawing spec={{ scene: madeLater ? (pieces.has('reel') ? 'reel' : pieces.has('graphic') ? 'graphic' : 'photos') : kind.scene }} name="" rating="" t={(s) => s} /></span></div>}
                 <div style={{ padding: '10px 12px 0', fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.mute }}>{platforms.map((p) => PLAT[p] ?? p).join(' and ')}</div>
-                <textarea value={social} onChange={(e) => setSocial(e.target.value)} rows={5} style={{ display: 'block', width: '100%', border: 0, outline: 0, resize: 'none', padding: '6px 12px 10px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box' }} />
+                <textarea value={social} onChange={(e) => setSocial(e.target.value)} rows={5} style={{ display: 'block', width: '100%', border: 0, outline: 0, resize: 'none', padding: '6px 12px 10px', fontFamily: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box' }} />
               </div>
             )}
             {google && (
               <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', marginTop: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px 0', fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.mute }}><BrandOrMark provider="google" size={14} /> Google</div>
-                <textarea value={gtext} onChange={(e) => setGtext(e.target.value.slice(0, 1500))} rows={3} style={{ display: 'block', width: '100%', border: 0, outline: 0, resize: 'none', padding: '6px 12px 10px', font: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box' }} />
+                <textarea value={gtext} onChange={(e) => setGtext(e.target.value.slice(0, 1500))} rows={3} style={{ display: 'block', width: '100%', border: 0, outline: 0, resize: 'none', padding: '6px 12px 10px', fontFamily: 'inherit', fontSize: 13.5, lineHeight: 1.5, color: C.ink, boxSizing: 'border-box' }} />
               </div>
             )}
             {reminderText && reminderWhen() && (
