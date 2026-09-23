@@ -169,7 +169,7 @@ const PLAT: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebo
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
 interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: { label: string; kind: string; pieces: string[] }[]; needs: Tier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
-interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; usualReach?: { median: number; min: number; max: number; n: number } | null; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
+interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; usualReach?: { median: number; min: number; max: number; n: number } | null; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; planShoot?: string | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
 /* a shoot day is a visit with a shot list; the size follows the list */
 const TIERS: { id: Tier; label: string; photos: number; upto: number }[] = [{ id: 'standard', label: 'A quick visit', photos: 15, upto: 2 }, { id: 'full', label: 'Half a day', photos: 25, upto: 4 }, { id: 'works', label: 'A full day', photos: 40, upto: 6 }]
 const tierFor = (n: number): Tier => (n <= 2 ? 'standard' : n <= 4 ? 'full' : 'works')
@@ -579,6 +579,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const today = todayIso()
     const pieceDue = readyBy || plusDays(shootLead, 3)
     if (src === 'newshoot') line('shootday', 'Book the shoot day', `${TIERS.find((t) => t.id === tier)?.label ?? ''}: ${sizeOf(listN)}. Pay to book it`, shootDate || null, tierCents(tier), 'needs_payment', 'Add to the list until the day. The price follows the list')
+    if (src === 'shoot' && !openShoot) line('shootday', 'On the next content day', 'Not booked yet. We book it when the list is worth the visit, or with your monthly plan. Nothing to pay now', ctx?.planShoot ?? null, null, 'later', 'No day to pay for yet')
     if (src === 'shoot' && openShoot) { const n = openShoot.used + 1; line('shootday', `On the ${openShoot.date ? niceDate(openShoot.date) : 'booked'} shoot`, `Yours makes ${n} thing${n === 1 ? '' : 's'} on the list. Already booked`, openShoot.date, null, 'with_team', 'No new day to pay for'); if (n > openShoot.spots) { const nt = tierFor(n); const up = tierCents(nt) != null && tierCents(openShoot.tier) != null ? (tierCents(nt) as number) - (tierCents(openShoot.tier) as number) : null; line('upgrade', `That makes it ${TIERS.find((t) => t.id === nt)?.label.toLowerCase()}`, `${n} things is more than ${openShoot.tierLabel.toLowerCase()} covers. About ${TIERS.find((t) => t.id === nt)?.photos} photos. The team confirms with you before the day`, openShoot.date, up, 'with_team', 'Nothing is charged until you agree the bigger day') } }
     if (pieces.has('graphic')) line('graphic', onShoot ? 'The graphic, from the shoot' : 'We start the graphic', onShoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', onShoot ? pieceDue : today, ctx?.prices.graphic ?? null, 'with_team', isEvent ? 'A night needs the date on the picture' : a.price ? 'A price on the picture is what people remember' : undefined)
     if (pieces.has('reel')) line('video', onShoot ? 'The Reel, from the shoot' : 'The video', onShoot ? 'Cut from the clips we film that day' : 'Pay to start. Then the team takes it', pieceDue, ctx?.prices.video ?? null, onShoot ? 'with_team' : 'needs_payment', 'Reels reach further than photos')
@@ -629,7 +630,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     try {
       const r = await fetch('/api/dashboard/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         clientId, kind: kind.id, answers: factsOut(),
-        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, tier, alsoShoot: alsoItems, shootDate: shootDate || undefined },
+        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, queue: src === 'shoot' && !openShoot ? true : undefined, tier, alsoShoot: alsoItems, shootDate: shootDate || undefined },
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
@@ -665,7 +666,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const list = [...new Set([...extra, ...alsoItems])]
     setItems((xs) => xs.map((it) => {
       if (it.uid !== it.id) return it
-      if (it.id === 'photos') return shoot ? { ...it, on: true, options: { ...it.options, list, date: c === 'newshoot' ? shootDate : '', newDay: c === 'newshoot' && !!openShoot, reel: wantVideo } } : { ...it, on: false, options: { ...it.options, newDay: false } }
+      if (it.id === 'photos') return shoot ? { ...it, on: true, options: { ...it.options, list, date: c === 'newshoot' ? shootDate : '', newDay: c === 'newshoot' && !!openShoot, queue: c === 'shoot' && !openShoot, reel: wantVideo } } : { ...it, on: false, options: { ...it.options, newDay: false, queue: false } }
       if (it.id === 'graphic') return c === 'none' || !wantGraphic ? { ...it, on: false } : { ...it, on: true, options: { ...it.options, from: shoot ? 'shoot' : c === 'own' || c === 'library' ? 'own' : 'stock' } }
       if (it.id === 'video') return c === 'none' || !wantVideo ? { ...it, on: false } : { ...it, on: true, options: { ...it.options, filmed: shoot ? 'shoot' : (c === 'own' || c === 'library') && media.some((m) => m.video) ? 'clips' : c === 'own' || c === 'library' ? 'clips' : 'visit' } }
       return it
@@ -698,7 +699,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const p = new Set<Piece>()
     if (g?.on) p.add('graphic'); if (v?.on) p.add('reel')
     let nextSrc: Src = media.length ? 'own' : 'words'
-    if (ph?.on || v?.on && v.options.filmed === 'shoot' || g?.on && g.options.from === 'shoot') { nextSrc = openShoot && !ph?.options.newDay ? 'shoot' : 'newshoot'; p.add('photos'); setAlsoShoot(((ph?.options.list as string[]) ?? []).join(', ')); setShootDate(String(ph?.options.date ?? '')) }
+    if (ph?.on || v?.on && v.options.filmed === 'shoot' || g?.on && g.options.from === 'shoot') { nextSrc = ph?.options.queue || (openShoot && !ph?.options.newDay) ? 'shoot' : 'newshoot'; p.add('photos'); setAlsoShoot(((ph?.options.list as string[]) ?? []).join(', ')); setShootDate(String(ph?.options.date ?? '')) }
     else if (g?.on) nextSrc = g.options.from === 'own' && media.length ? 'own' : 'team'
     setSrc(nextSrc); setPieces(p); settle(nextSrc, p); setWithReel(!!v?.on)
     setPic(nextSrc === 'newshoot' ? 'shoot' : nextSrc === 'shoot' ? 'booked' : nextSrc === 'team' ? 'graphic' : nextSrc === 'own' ? 'own' : 'words')
@@ -1020,9 +1021,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>What we shoot</div>
               {names.map((n, i) => <div key={i} style={{ padding: '5px 0', fontWeight: 600 }}>{i + 1}. {n}</div>)}
               <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Anything else? The patio, the team" style={{ ...input, marginTop: 6, fontSize: 13.5, padding: '9px 11px' }} />
-              <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}: {sizeOf(names.length + alsoItems.length)}</div>
+              <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}{c === 'shoot' && (!openShoot || !openShoot.requestId) ? ' when it is booked' : ''}: {sizeOf(names.length + alsoItems.length)}</div>
               {c === 'newshoot' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}><span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>The day</b><small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
               {c === 'shoot' && openShoot && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. {openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}{openShoot.used + 1 > openShoot.spots ? ` That makes it ${TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you first.` : ''}</div>}
+              {c === 'shoot' && (!openShoot || !openShoot.requestId) && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>Nothing to pay now. We book the day when the list is worth the visit, or when your monthly plan's shoot day comes, and you pay then.</div>}
             </div>
           )
           const ownBody = (
@@ -1039,7 +1041,11 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           )
           const rows: React.ReactNode[] = []
           rows.push(opt('newshoot', openShoot ? 'Book another content day' : 'Book a content day', `We come shoot photos and video in one visit. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
-          if (openShoot) rows.push(opt('shoot', `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day`, openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} on the list already` : 'Nothing on the list yet', 'calendar', '#3b6fd4', false, shootBody))
+          const queued = !!openShoot && !openShoot.requestId
+          rows.push(opt('shoot',
+            openShoot && !queued ? `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day` : 'Add it to the next content day',
+            openShoot ? `${openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} ${queued ? 'waiting' : 'on the list already'}` : 'Nothing on the list yet'}${queued && openShoot.date ? `, planned for ${niceDate(openShoot.date).replace(/^\w+, /, '')}` : ''}` : ctx?.planShoot ? `Planned for ${niceDate(ctx.planShoot).replace(/^\w+, /, '')} with your monthly plan` : 'Nothing booked yet. It waits on the list',
+            'calendar', '#3b6fd4', false, shootBody))
           rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
           if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
           rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))

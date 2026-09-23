@@ -111,6 +111,22 @@ export async function bookShoot(admin: Admin, o: { clientId: string; userId: str
   return { ok: true, shoot: shapeShoot(row as Record<string, unknown>), needsPayment: r.needsPayment, orderCents: r.orderCents }
 }
 
+/** THE NEXT CONTENT DAY (owner 2026-09-22): nothing booked yet, but a plan wants to ride on the next
+    visit. The day exists as a shoot with no order and no request; plans attach to it like any other,
+    and it is booked (and paid) when the list is worth the visit or the monthly plan's shoot day comes. */
+export async function queueShoot(admin: Admin, o: { clientId: string; date: string | null }): Promise<Shoot | null> {
+  const probe = await admin.from('announcements').select('id').limit(1)
+  if (probe.error) return null
+  const plan: Line[] = [
+    { key: 'book', label: 'The next content day', detail: 'Not booked yet. We book it when the list is worth the visit, or with your monthly plan. Nothing to pay now', date: dayIso(new Date()), cost: null, status: 'later', ref: null },
+    { key: 'date', label: o.date ? 'Planned for' : 'Pick the day', detail: o.date ? 'From your monthly plan' : 'The team offers two dates when it is time', date: o.date, cost: null, status: 'later', ref: null },
+    { key: 'delivered', label: 'Photos and clips in your library', detail: 'Tagged with the day, for every plan on it and the next ones', date: null, cost: null, status: 'later', ref: null },
+  ]
+  const { data: row, error } = await admin.from('announcements').insert({ client_id: o.clientId, kind: 'shoot', status: 'planned', answers: { what: 'The next content day', tier: TIER_LABEL.standard }, picture: { tier: 'standard', attached: [], queued: true }, places: {}, timing: { date: o.date }, plan, total_cents: 0 }).select('*').maybeSingle()
+  if (error || !row) return null
+  return shapeShoot(row as Record<string, unknown>)
+}
+
 export async function attachToShoot(admin: Admin, clientId: string, shootId: string, add: { label: string; kind: string; planId: string | null; pieces: string[] } | null, removeIndex?: number): Promise<Shoot | null> {
   const { data: row } = await admin.from('announcements').select('*').eq('id', shootId).eq('client_id', clientId).eq('kind', 'shoot').maybeSingle()
   if (!row) return null

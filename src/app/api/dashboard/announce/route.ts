@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents } from '@/lib/requests/create'
-import { openShoot, bookShoot, attachToShoot, adoptShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
+import { openShoot, bookShoot, attachToShoot, adoptShoot, queueShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
 import { bookInfluencer } from '@/lib/influencers/book'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
@@ -67,7 +67,7 @@ interface Body {
   clientId?: string
   kind?: string
   answers?: Record<string, unknown>
-  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; tier?: string; alsoShoot?: unknown; shootDate?: string }
+  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; queue?: boolean; tier?: string; alsoShoot?: unknown; shootDate?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
   timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
@@ -97,7 +97,7 @@ const whenWord = (due: string | null): string => {
 async function context(admin: ReturnType<typeof createAdminClient>, clientId: string) {
   const today = new Date().toISOString().slice(0, 10)
   const since = new Date(Date.now() - 56 * 86400000).toISOString().slice(0, 10)
-  const [client, site, guests, shoot, card, pos, open, recent] = await Promise.all([
+  const [client, site, guests, shoot, card, pos, open, recent, planShoot] = await Promise.all([
     admin.from('clients').select('name, tier, website').eq('id', clientId).maybeSingle(),
     admin.from('site_settings').select('order_online_url, reservation_url').eq('client_id', clientId).maybeSingle(),
     admin.from('guest_contacts').select('id', { count: 'exact', head: true }).eq('client_id', clientId).is('unsubscribed_at', null),
@@ -107,6 +107,8 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     admin.from('pos_daily_sales').select('day, gross_cents, orders, source').eq('client_id', clientId).gte('day', since).order('day', { ascending: true }).limit(400),
     openShoot(admin, clientId).catch(() => null),
     admin.from('social_posts').select('reach').eq('client_id', clientId).order('posted_at', { ascending: false }).limit(12),
+    /* the monthly plan's next shoot day, when the plan is on (the table may not be there yet) */
+    admin.from('plan_slots').select('date').eq('client_id', clientId).eq('kind', 'photos').eq('status', 'planned').gte('date', today).order('date', { ascending: true }).limit(1).maybeSingle().then((r) => (r.error ? null : (r.data as { date: string } | null)?.date ?? null), () => null),
   ])
   const reaches = ((recent.data ?? []) as { reach: number | null }[]).map((r) => Number(r.reach || 0)).filter((x) => x > 0).sort((x, y) => x - y)
   const usualReach = reaches.length ? { median: reaches[Math.floor(reaches.length / 2)], min: reaches[0], max: reaches[reaches.length - 1], n: reaches.length } : null
@@ -137,6 +139,7 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     usualReach,
     nextShoot: sh && sh.id !== open?.requestId ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
     shoot: open,
+    planShoot: planShoot as string | null,
     prices: { graphic, video, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },
     weekdays,
     avgTicketCents,
@@ -265,13 +268,15 @@ export async function POST(req: NextRequest) {
     const id = typeof body.picture?.shootId === 'string' ? body.picture.shootId : null
     if (id && ctx.shoot?.id === id) shoot = ctx.shoot
     else if (ctx.nextShoot && body.picture?.nextShootId === ctx.nextShoot.id) shoot = await adoptShoot(admin, clientId, userId, ctx.nextShoot.id)
+    /* nothing booked: the next content day starts now as a list, no order yet */
+    else if (body.picture?.queue) shoot = await queueShoot(admin, { clientId, date: ctx.planShoot ?? null })
     if (!shoot) errors.push('That shoot day is not open any more')
   }
   if (shoot && src === 'shoot') {
     const after = await attachToShoot(admin, clientId, shoot.id, { label: name, kind, planId: announcementId, pieces })
     if (after) {
       shoot = after
-      plan.push({ key: 'shootday', label: `On the ${shoot.date ? niceDay(shoot.date) : ''} shoot`.replace('  ', ' '), detail: `Yours makes ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list. Already booked`, date: shoot.date, cost: null, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'No new day to pay for' })
+      plan.push(!shoot.requestId ? { key: 'shootday', label: 'On the next content day', detail: `Yours makes ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list. Not booked yet, nothing to pay now`, date: shoot.date, cost: null, status: 'later' as const, ref: null } : { key: 'shootday', label: `On the ${shoot.date ? niceDay(shoot.date) : ''} shoot`.replace('  ', ' '), detail: `Yours makes ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list. Already booked`, date: shoot.date, cost: null, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'No new day to pay for' })
       if (shoot.needs) plan.push({ key: 'upgrade', label: `That makes it ${TIER_LABEL[shoot.needs].toLowerCase()}`, detail: `${shoot.used} things is more than ${shoot.tierLabel.toLowerCase()} covers. About ${PHOTOS[shoot.needs]} photos. The team confirms with you before the day`, date: shoot.date, cost: shoot.upgradeCents, status: 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Nothing is charged until you agree the bigger day' })
     }
   }
