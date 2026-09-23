@@ -25,6 +25,7 @@ import { C, DISPLAY } from '../tokens'
 import { Drawing, DRAW_CSS, type Scene } from './drawings'
 import AnnounceMenu, { itemCents, type MenuMe, type MenuPrices } from './announce-menu'
 import type { Ladder } from '@/lib/plan/suggest'
+import { SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 import type { ItemId, ItemPick } from '@/lib/plan/suggest'
 import { BrandOrMark } from '../mvp-insights'
 
@@ -383,6 +384,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [detail, setDetail] = useState<null | 'content' | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
   const [building, setBuilding] = useState(false)
+  /* RUSH (owner 2026-09-23): the pieces we make come two days sooner, a quarter more on those pieces */
+  const [rush, setRush] = useState(false)
+  const RUSH_RATE = 0.25
   /* THE CONTENT CHOICE (owner 2026-09-22): where the pictures come from. It goes to the server, which shapes the plans by it. */
   const [content, setContent] = useState<Content | null>(null)
   const [library, setLibrary] = useState<{ id: string; name: string; url: string }[] | null>(null)
@@ -500,6 +504,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const extra = dishes.filter((d) => d.name.trim())
     const money = (v?: string) => (v && /^\d/.test(v.trim()) ? `$${v.trim()}` : (v ?? ''))
     if (kind?.id === 'dish') facts.price = money(a.price)
+    if (rush) facts.note = [facts.note, 'RUSH: the pieces are wanted two days sooner'].filter(Boolean).join('\n')
     const photosOf = (i: number) => media.filter((m) => m.dish === i).map((m) => m.url)
     if (kind?.id === 'dish' && (extra.length || media.some((m) => m.dish != null))) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: money(a.price), photos: photosOf(0) }, ...extra.map((d) => ({ ...d, price: money(d.price), photos: photosOf(dishes.indexOf(d) + 1) }))]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); if (extra.length) facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${money(d.price)})` : ''}${d.line ? `: ${d.line}` : ''}${d.tags?.length ? ` (${d.tags.join(', ')})` : ''}${d.note?.trim() ? `. ${d.note.trim()}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
@@ -1292,25 +1297,23 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 </div>
               </div>
             )}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={() => { setLaneInit(null); setStep('plan') }} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} ladder={ladder} reachParts={reachParts} orderButton={ctaEff === 'order'} startDay={a.from || todayIso()} ctaLabel="Save plan" laneInit={laneInit} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={() => { setLaneInit(null); setStep('plan') }} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} ladder={ladder} reachParts={reachParts} orderButton={ctaEff === 'order'} startDay={a.from || todayIso()} ctaLabel="Continue" laneInit={laneInit} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
 
         {step === 'plan' && kind && (
           <div style={hv(hue)}>
-            <div style={h2}>{simple ? 'Your plan' : 'Here is the plan'}</div>
+            <div style={h2}>{simple ? 'Timeline' : 'Here is the plan'}</div>
             {simple && (() => {
               /* THE REVIEW (owner 2026-09-23): the timeline by day, the price broken down, and a way back into any stage */
               const dated = preview.filter((l) => l.date).sort((x, y) => String(x.date).localeCompare(String(y.date)))
               const undated = preview.filter((l) => !l.date)
               const days = Array.from(new Set(dated.map((l) => String(l.date))))
-              const NAMES: Record<string, string> = { post: 'Post it', graphic: 'Graphics', video: 'Reels', photos: 'The shoot', boost: 'Boost it', creator: 'A creator posts it', print: 'Print', apps: 'Delivery apps', taste: 'A taste at the counter', review: 'Ask for a review', sign: 'Guest photo sign', offer: 'Launch offer' }
-              const paidItems = items.filter((x) => x.on).map((x) => ({ key: x.uid, label: `${NAMES[x.id] ?? x.id}${x.id === 'graphic' && Number(x.options.count) > 1 ? ` ×${x.options.count}` : x.id === 'video' && Number(x.options.count) > 1 ? ` ×${x.options.count}` : ''}`, cost: itemCents(x, prices, null) })).filter((x) => x.cost > 0)
               const STAGES = ['Get seen', 'Create interest', 'Drive actions', 'Get orders', 'Build reputation']
               const stageWord = (i: number) => { const ids: ItemId[][] = [['post', 'boost', 'creator'], ['graphic', 'video', 'print', 'photos'], ['taste', 'offer'], ['apps'], ['review', 'sign']]; const names = items.filter((x) => x.on && ids[i].includes(x.id)).map((x) => ({ post: 'post', boost: 'boost', creator: 'creator', graphic: 'graphic', video: 'Reel', print: 'print', photos: 'photos', taste: 'taste', offer: 'offer', apps: 'delivery apps', review: 'reviews', sign: 'photo sign' } as Record<string, string>)[x.id]); return names.length ? names.join(', ') : 'nothing yet' }
+              const madeCents = items.filter((x) => x.on && ['photos', 'graphic', 'video', 'print'].includes(x.id)).reduce((t, x) => t + itemCents(x, prices, null), 0)
               return (
                 <div>
-                  <div style={h3}>Timeline</div>
                   {days.map((d) => (
                     <div key={d} style={{ display: 'flex', gap: 12, padding: '8px 0', borderTop: `0.5px solid ${C.line}` }}>
                       <b style={{ flex: 'none', width: 78, fontSize: 12.5, color: C.ink }}>{niceDate(d).replace(/^(\w+), /, '$1 ')}</b>
@@ -1318,11 +1321,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     </div>
                   ))}
                   {undated.length > 0 && <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderTop: `0.5px solid ${C.line}` }}><b style={{ flex: 'none', width: 78, fontSize: 12.5, color: C.mute }}>When ready</b><div style={{ flex: 1 }}>{undated.map((l) => <div key={l.key} style={{ fontSize: 13, lineHeight: 1.35, marginBottom: 2 }}><b style={{ fontWeight: 600 }}>{l.label}</b>{l.detail && <span style={{ color: C.mute }}> · {l.detail}</span>}</div>)}</div></div>}
-                  <div style={h3}>Pricing</div>
-                  {paidItems.map((l) => <div key={l.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>{l.label}</span><b>{dollars(l.cost)}</b></div>)}
-                  {paidItems.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '7px 0' }}>Nothing to pay. Your own channels and the room.</div>}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '10px 0 4px', borderTop: `0.5px solid ${C.line}` }}><span>Total</span><span>{total ? dollars(total) : 'Free'}</span></div>
-                  {me?.budgetCents != null && total > 0 && <div style={{ fontSize: 12, color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>}
+                  {madeCents > 0 && (
+                    <div style={{ ...rowS, marginTop: 10, borderTop: `0.5px solid ${C.line}`, borderBottom: 0 }}><span>Rush it<small style={sub}>The pieces we make come two days sooner. A quarter more on those pieces{madeCents ? `, ${dollars(Math.round(madeCents * RUSH_RATE))}` : ''}</small></span><Switch on={rush} set={setRush} /></div>
+                  )}
                   <div style={h3}>Change a stage</div>
                   <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, overflow: 'hidden' }}>
                     {STAGES.map((nm, i) => (
@@ -1333,12 +1334,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       </button>
                     ))}
                   </div>
-                  <div style={h3}>Details</div>
                 </div>
               )
             })()}
             {simple && (
               <div style={{ marginBottom: 6 }}>
+                <div style={h3}>Details</div>
                 {([
                   ['picture', 'The picture', src === 'own' ? `Your ${media[0]?.video ? 'video' : 'photo'}${pieces.has('graphic') ? ', a designed graphic from it' : ''}` : src === 'newshoot' ? `A shoot day, about ${TIERS.find((t) => t.id === tier)?.photos ?? 15} photos, ${Array.from(pieces).filter((p) => p !== 'photos').map((p) => p === 'reel' ? 'a Reel' : 'a graphic').join(' and ') || 'the photos'}` : src === 'team' ? 'A designed graphic from our own photos' : src === 'shoot' ? 'The booked shoot' : 'Words only'],
                   ['where', 'Where and when', `${[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Nowhere yet'}${story && hasIgFb ? ', a Story' : ''}. ${postNow ? 'As soon as it is ready' : niceDate(postDay)}${boost ? `. Boost $${Math.round(boostCents / 100)}` : ''}${also.size ? `. ${Array.from(also).map((k) => ALSO[k].label).join(', ')}` : ''}`],
@@ -1346,10 +1347,31 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 ] as [Step, string, string][]).map(([st, l, d]) => <button key={st} type="button" onClick={() => setStep(st)} style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'flex-start', textAlign: 'left', padding: '10px 0', borderTop: `0.5px solid ${C.line}`, borderBottom: 0, borderLeft: 0, borderRight: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}><span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14 }}>{l}</b><small style={sub}>{d}</small></span><span style={{ fontSize: 12.5, fontWeight: 700, color: C.mute, flex: 'none' }}>Change</span></button>)}
               </div>
             )}
+            {simple && (() => {
+              const madeCents = items.filter((x) => x.on && ['photos', 'graphic', 'video', 'print'].includes(x.id)).reduce((t, x) => t + itemCents(x, prices, null), 0)
+              const rushCents = rush ? Math.round(madeCents * RUSH_RATE) : 0
+              const feeCents = Math.round((total + rushCents) * SERVICE_FEE_RATE)
+              const grand = total + rushCents + feeCents
+              const NAMES: Record<string, string> = { post: 'Post it', graphic: 'Graphics', video: 'Reels', photos: 'The content day', boost: 'Boost it', creator: 'A creator posts it', print: 'Print', apps: 'Delivery apps', taste: 'A taste at the counter', review: 'Ask for a review', sign: 'Guest photo sign', offer: 'Launch offer' }
+              const paidItems = items.filter((x) => x.on).map((x) => ({ key: x.uid, label: `${NAMES[x.id] ?? x.id}${(x.id === 'graphic' || x.id === 'video') && Number(x.options.count) > 1 ? ` ×${x.options.count}` : ''}`, cost: itemCents(x, prices, null) })).filter((x) => x.cost > 0)
+              return (
+                <div>
+                  <div style={h3}>Pricing</div>
+                  {paidItems.map((l) => <div key={l.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>{l.label}</span><b>{dollars(l.cost)}</b></div>)}
+                  {paidItems.length === 0 && <div style={{ fontSize: 13, color: C.mute, padding: '7px 0' }}>Nothing to pay. Your own channels and the room.</div>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Subtotal</span><b>{total ? dollars(total) : 'Free'}</b></div>
+                  {rush && rushCents > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Rush</span><b>{dollars(rushCents)}</b></div>}
+                  {total > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Service fee ({Math.round(SERVICE_FEE_RATE * 100)}%)</span><b>{dollars(feeCents)}</b></div>}
+                  {total > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Taxes</span><span style={{ color: C.mute }}>At checkout</span></div>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '10px 0 4px', borderTop: `0.5px solid ${C.line}` }}><span>Total</span><span>{grand ? dollars(grand) : 'Free'}</span></div>
+                  {me?.budgetCents != null && grand > 0 && <div style={{ fontSize: 12, color: grand > me.budgetCents ? '#8a5a0c' : C.mute }}>{grand > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(grand - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>}
+                </div>
+              )
+            })()}
             {!simple && <div>{preview.map((l) => <Line key={l.key} l={l} />)}</div>}
             {!simple && previewTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '12px 0 0' }}><span>Total</span><span>{dollars(previewTotal)}</span></div>}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-            <button type="button" onClick={() => (simple ? go() : commit())} disabled={posting} style={{ ...cta_, opacity: posting ? .6 : 1 }}>{posting ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Making it happen' : 'Make it happen'}</button>
+            <button type="button" onClick={() => (simple ? go() : commit())} disabled={posting} style={{ ...cta_, opacity: posting ? .6 : 1 }}>{posting ? <Loader2 size={16} className="mvp-spin" /> : null} {posting ? 'Placing the order' : simple ? 'Place order' : 'Make it happen'}</button>
             <button type="button" onClick={back} style={{ ...cta_, marginTop: 8, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}` }}>{simple ? 'Back' : 'Change something'}</button>
             <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>Everything lands in Coming up. Nothing that costs money starts without your okay.</div>
           </div>

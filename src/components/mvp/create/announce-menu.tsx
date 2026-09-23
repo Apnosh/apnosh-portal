@@ -12,6 +12,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2, Plus } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { MULTI, newUid, type ItemId, type ItemPick, type Ladder } from '@/lib/plan/suggest'
+import { SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 
 export interface MenuMe { usualReach: number | null; budgetCents: number | null; creator: { slug: string; name: string; fromCents: number | null; nearby: number | null; date?: string | null } | null }
 export interface MenuPrices { graphic: number; video: number; print: number; shootFor: (n: number) => number; shootLabel: (n: number) => string }
@@ -348,7 +349,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
         <b style={{ display: 'block', fontSize: 14 }}>{META[it.id].name}{tag && !it.on && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 6px', verticalAlign: 'middle' }}>{tag}</span>}</b><small style={{ ...sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.on ? `✓ ${itemSummary(it, prices, profile, { platforms: platformsWord, bestHour: bestHourWord, readyBy })}` : m.line}</small>{it.why && <small style={{ ...sub, fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.why}</small>}
       </button>
       <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions && !it.on ? 'from ' : ''}${dollars(cents)}`}</b>
-      {MULTI.includes(it.id) && it.on && <button type="button" onClick={() => addNew(it.id)} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>＋ Another</button>}
+      {m.hasOptions && it.on && <button type="button" onClick={() => setOpen(it.uid)} aria-label={it.id === 'creator' ? 'Swap the creator' : 'Change the options'} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', fontFamily: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>{it.id === 'creator' ? 'Swap' : 'Change'}</button>}
+      {MULTI.includes(it.id) && it.on && it.id !== 'creator' && <button type="button" onClick={() => addNew(it.id)} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 9px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', color: C.ink, cursor: 'pointer', font: 'inherit', flex: 'none', whiteSpace: 'nowrap' }}>＋ Another</button>}
       {(() => { const added = it.on; const act = () => (it.on ? toggle(it.uid) : m.hasOptions ? setOpen(it.uid) : toggle(it.uid)); return <button type="button" onClick={act} aria-label={added ? 'Added, tap to remove' : 'Add'} style={{ width: 34, height: 34, borderRadius: 99, border: `1.5px solid ${added ? C.greenDk : C.ink}`, background: added ? C.greenDk : '#fff', color: added ? '#fff' : C.ink, cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none', transition: 'background .18s, border-color .18s' }}>{added ? <span key="on" className="an-pop" style={{ display: 'grid' }}><Check size={16} strokeWidth={3} /></span> : <Plus size={16} strokeWidth={2.5} />}</button> })()}
     </div>
   ) }
@@ -439,7 +441,6 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 14 }}>
                 <b style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1, color: total ? C.ink : C.greenDk }}>{total ? dollars(total) : 'Free'}</b>
-                <span style={{ fontSize: 13, color: C.mute }}>{stepSets[chosen]?.note ?? ''}</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
                 {lanes.map((ln, li) => { const empty = ln.pieces.length === 0; return (
@@ -464,6 +465,25 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                   </div>
                 ) })}
               </div>
+              {(() => {
+                /* THE PRICING SUMMARY (owner 2026-09-23): what it costs, grouped the way an owner thinks: what gets made,
+                   getting it seen, and what comes free. The fee and taxes are on the next screen. */
+                const onItems = items.filter((x) => x.on)
+                const sum = (ids: ItemId[]) => onItems.filter((x) => ids.includes(x.id)).reduce((t, x) => t + itemCents(x, prices, profile), 0)
+                const setup = sum(['photos', 'graphic', 'video', 'print'])
+                const seen = sum(['boost', 'creator'])
+                const freeOnes = onItems.filter((x) => itemCents(x, prices, profile) === 0).map((x) => META[x.id].name.toLowerCase())
+                return (
+                  <div style={{ marginTop: 16, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 6 }}>Pricing</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Setup<small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{onItems.filter((x) => ['photos', 'graphic', 'video', 'print'].includes(x.id)).map((x) => META[x.id].name.toLowerCase()).join(', ') || 'nothing to make'}</small></span><b>{setup ? dollars(setup) : 'Free'}</b></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Getting it seen<small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{onItems.filter((x) => ['boost', 'creator'].includes(x.id)).map((x) => nameOf(x).toLowerCase()).join(', ') || 'your own channels'}</small></span><b>{seen ? dollars(seen) : 'Free'}</b></div>
+                    {freeOnes.length > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Included<small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{freeOnes.join(', ')}</small></span><b style={{ color: C.greenDk }}>Free</b></div>}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '10px 0 2px', borderTop: `0.5px solid ${C.line}` }}><span>Subtotal</span><span>{total ? dollars(total) : 'Free'}</span></div>
+                    <div style={{ fontSize: 11.5, color: C.mute }}>Service fee ({Math.round(SERVICE_FEE_RATE * 100)}%) and taxes on the next screen</div>
+                  </div>
+                )
+              })()}
             </div>
           )
         })()}
