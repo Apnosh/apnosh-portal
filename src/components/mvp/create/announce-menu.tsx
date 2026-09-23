@@ -8,7 +8,7 @@
  * bar is the cart: how many things, how many people, the total.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Loader2, Plus } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Loader2, Plus } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { MULTI, newUid, type ItemId, type ItemPick, type Ladder } from '@/lib/plan/suggest'
@@ -399,6 +399,38 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           const totalReach = (measured ?? 0) + est
           const track = Math.max(1, totalReach)
           const seg = (n: number) => `${Math.max(n > 0 ? 3 : 0, (n / track) * 100)}%`
+          /* THE STAGE PAGE (owner 2026-09-23, "it should just go to their own page"): one stage at a time, its
+             pieces listed, the ones on with a check and their options, the ones off with Add and a Recommended tag */
+          if (openLane !== null && lanes[openLane]) {
+            const ln = lanes[openLane]
+            const CAT: ItemId[][] = [['post', 'boost', 'creator'], ['graphic', 'video', 'print', 'photos'], ['taste', 'offer'], ['apps', 'offer'], ['review', 'sign']]
+            const WHAT = ['Post it, boost it, have a creator post it', 'The graphic, the Reel, the print, the photos', 'The taste, the offer, the Order button', 'The delivery apps, the code at the counter', 'Reviews and guest photos']
+            return (
+              <div style={{ marginTop: 2 }}>
+                <button type="button" onClick={() => setOpenLane(null)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: C.mute, border: 0, background: 'none', padding: '4px 0', cursor: 'pointer' }}><ArrowLeft size={14} /> All stages</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 99, background: ln.hue, flex: 'none' }} />
+                  <b style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: '-.02em' }}>{ln.name}</b>
+                </div>
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4 }}>{WHAT[openLane]}</div>
+                <div style={{ marginTop: 10, borderRadius: 18, background: ln.tile, padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: '10px 6px', minHeight: 60 }}>
+                  {ln.pieces.length === 0 && <span style={{ fontSize: 12.5, color: C.mute, alignSelf: 'center' }}>Nothing here yet. Add from the list below.</span>}
+                  {ln.pieces.map((pc) => (
+                    <div key={pc.key} style={{ flex: 'none', width: 74, textAlign: 'center' }}>
+                      <span style={{ width: 44, height: 44, borderRadius: 99, display: 'grid', placeItems: 'center', margin: '0 auto', background: '#fff', ['--c2' as string]: pc.hue }}><span style={{ width: 28 }}><Drawing spec={{ scene: pc.scene }} name="" rating="" t={(x) => x} /></span></span>
+                      <b style={{ display: 'block', fontSize: 11.5, fontWeight: 700, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.label}</b>
+                      <small style={{ display: 'block', fontSize: 10.5, color: C.mute, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.under}</small>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  {Array.from(new Set(CAT[openLane])).map((id) => { const lines = items.filter((x) => x.id === id); const it = lines.find((x) => x.uid === id) ?? lines[0]; if (!it) return null; const rec = !it.on && ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : undefined; return <AddRow key={id} it={it} tag={rec} /> })}
+                  {openLane === 2 && orderButton && <div style={{ fontSize: 12, color: C.mute, padding: '10px 0 4px' }}>The Order button rides on the post, from your ordering link.</div>}
+                </div>
+                <button type="button" onClick={() => setOpenLane(null)} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, color: C.ink, cursor: 'pointer' }}>Done</button>
+              </div>
+            )
+          }
           return (
             <div style={{ marginTop: 2 }}>
               <div style={{ position: 'relative', display: 'flex', background: '#f6f6f8', borderRadius: 99, padding: 3 }}>
@@ -430,9 +462,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               )}
               {me?.budgetCents != null && total > 0 && <div style={{ fontSize: 12, marginTop: 6, color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {lanes.map((ln, li) => { const empty = ln.pieces.length === 0; const openHere = openLane === li; const CAT: ItemId[][] = [['post', 'boost', 'creator'], ['graphic', 'video', 'print', 'photos'], ['taste', 'offer'], ['apps'], ['review', 'sign']]; return (
-                  <div key={ln.name} style={{ borderRadius: 18, background: empty && !openHere ? '#f6f6f8' : ln.tile, border: openHere ? `0.5px solid ${ln.hue}` : '0.5px solid transparent' }}>
-                  <div role="button" tabIndex={0} onClick={() => setOpenLane(openHere ? null : li)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLane(openHere ? null : li) } }} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 78, padding: '10px 12px', cursor: 'pointer' }}>
+                {lanes.map((ln, li) => { const empty = ln.pieces.length === 0; return (
+                  <div key={ln.name} style={{ borderRadius: 18, background: empty ? '#f6f6f8' : ln.tile }}>
+                  <div role="button" tabIndex={0} onClick={() => setOpenLane(li)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLane(li) } }} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 78, padding: '10px 12px', cursor: 'pointer' }}>
                     <div style={{ width: 84, flex: 'none' }}>
                       <span style={{ display: 'block', width: 8, height: 8, borderRadius: 99, background: empty ? 'transparent' : ln.hue, border: empty ? `1.5px solid ${C.faint}` : 0, marginBottom: 6 }} />
                       <b style={{ display: 'block', fontSize: 12.5, fontWeight: 700, lineHeight: 1.2, color: empty ? C.faint : C.ink }}>{ln.name}</b>
@@ -447,14 +479,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                         </div>
                       ))}
                     </div>
-                    <span style={{ flex: 'none', width: 22, height: 22, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 14, lineHeight: 1, transform: openHere ? 'rotate(45deg)' : 'none' }}>+</span>
+                    <ChevronRight size={16} color={empty ? C.faint : C.mute} style={{ flex: 'none' }} />
                   </div>
-                  {openHere && (
-                    <div style={{ background: '#fff', borderRadius: '0 0 18px 18px', padding: '2px 12px 6px' }}>
-                      {CAT[li].map((id) => { const lines = items.filter((x) => x.id === id); const it = lines.find((x) => x.uid === id) ?? lines[0]; if (!it) return null; const rec = !it.on && ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : undefined; return <AddRow key={id} it={it} tag={rec} /> })}
-                      {li === 2 && orderButton && <div style={{ fontSize: 12, color: C.mute, padding: '8px 0 4px' }}>The Order button rides on the post, from your ordering link.</div>}
-                    </div>
-                  )}
                   </div>
                 ) })}
               </div>
