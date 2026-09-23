@@ -80,3 +80,50 @@ export function suggestItems(i: SuggestInput): ItemPick[] {
   return out
 }
 export const itemsTotal = (items: ItemPick[]) => items.filter((x) => x.on).reduce((s, x) => s + x.cents, 0)
+
+/* THE LADDER (owner 2026-09-22, "the actual build plan logic"): three plans, each the one before plus more,
+   built from what the app knows. A new dish is a conversion play for the people who already know the place,
+   with a small awareness push nearby: content first, own channels on a peak day, Google for searchers, then
+   paid reach in proportion to budget. Every set is a map of item id → true (the item's own options) or the
+   options to use. */
+export type LadderSet = Record<string, true | Record<string, unknown>>
+export interface Ladder { simple: LadderSet; recommended: LadderSet; bigger: LadderSet; notes: { simple: string; recommended: string; bigger: string } }
+export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
+  const k = i.kind
+  const isDish = k === 'dish', isDeal = k === 'deal', isEvent = k === 'event', isOpen = k === 'open', isHours = k === 'hours' || k === 'holiday'
+  const src = i.facts.source ?? (i.facts.hasMedia ? 'mine' : 'none')
+  const it = (id: ItemId) => items.find((x) => x.id === id) ?? null
+  const centsOf = (id: ItemId) => it(id)?.cents ?? 0
+  const first = i.creator?.name.split(' ')[0] ?? 'a creator'
+  /* Keep it simple: everything free that fits the news */
+  const simple: LadderSet = { post: true }
+  for (const id of ['taste', 'review', 'sign', 'apps'] as ItemId[]) if (it(id)?.on || (id === 'apps' && i.connected.apps && isDish)) simple[id] = true
+  /* Recommended: the graphic when there is no photo of their own, a boost sized to how far their posts
+     already go, a table tent for the room, the creator only when the fit is real and the budget covers it */
+  const low = i.usualReach == null || i.usualReach < 300
+  const boostRec = isHours ? null : (isDeal || isEvent || isOpen) ? 4000 : low ? 5000 : 2000
+  const recommended: LadderSet = { ...simple }
+  if (src !== 'mine' || isDeal || isEvent || isOpen) recommended.graphic = true
+  if (i.facts.hasVideo) recommended.video = { filmed: 'clips', count: 1, style: 'dish', captions: true }
+  if (boostRec) recommended.boost = { cents: boostRec, days: 3 }
+  if (isDish || isDeal) recommended.print = { kinds: ['tent'] }
+  const spent = (set: LadderSet) => Object.keys(set).reduce((sum, id) => sum + (id === 'boost' ? Number((set.boost as Record<string, unknown>)?.cents ?? 0) : centsOf(id as ItemId)), 0)
+  const creatorOk = !!i.creator?.nearby && (isDish || isDeal || isEvent || isOpen)
+  if (creatorOk && (i.budgetCents == null ? false : spent(recommended) + (i.creator?.fromCents ?? centsOf('creator')) <= i.budgetCents)) recommended.creator = { slug: i.creator!.slug, code: true, repost: true }
+  /* the budget law for the middle plan: drop the dearest extras first, never the boost */
+  if (i.budgetCents != null) for (const id of ['creator', 'video', 'print', 'graphic'] as ItemId[]) { if (spent(recommended) <= i.budgetCents) break; delete recommended[id] }
+  /* Go bigger: the creator, a Reel, print for the window, the bigger boost, the delivery apps, a code to count */
+  const bigger: LadderSet = { ...recommended }
+  if (creatorOk) bigger.creator = { slug: i.creator!.slug, code: true, repost: true }
+  if (!isHours) bigger.video = { filmed: creatorOk ? 'creator' : src === 'shoot' ? 'shoot' : i.facts.hasVideo ? 'clips' : 'visit', count: 1, style: 'dish', captions: true }
+  if (!isHours) bigger.print = { kinds: ['tent', 'poster'] }
+  if (!isHours) bigger.boost = { cents: 10000, days: 5 }
+  if (isDish && i.connected.apps) bigger.apps = true
+  if (isDish || isDeal) bigger.offer = { text: isDish ? 'A free drink with it this week' : 'This week only', code: true }
+  const notes = {
+    simple: 'Your own channels, Google, and the room. Free',
+    recommended: [recommended.graphic ? 'a graphic' : '', recommended.boost ? `a $${Math.round(Number((recommended.boost as Record<string, unknown>).cents) / 100)} boost` : '', recommended.creator ? `${first} posts it` : '', recommended.print ? 'a table tent' : ''].filter(Boolean).join(', '),
+    bigger: [bigger.creator ? `${first} visits` : '', 'a Reel', 'print', 'the bigger boost', bigger.apps ? 'the delivery apps' : '', bigger.offer ? 'a code to count' : ''].filter(Boolean).join(', '),
+  }
+  return { simple, recommended, bigger, notes }
+}

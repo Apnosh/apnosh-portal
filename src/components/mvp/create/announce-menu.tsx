@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Plus } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
-import { MULTI, newUid, type ItemId, type ItemPick } from '@/lib/plan/suggest'
+import { MULTI, newUid, type ItemId, type ItemPick, type Ladder } from '@/lib/plan/suggest'
 
 export interface MenuMe { usualReach: number | null; budgetCents: number | null; creator: { slug: string; name: string; fromCents: number | null; nearby: number | null; date?: string | null } | null }
 export interface MenuPrices { graphic: number; video: number; print: number; shootFor: (n: number) => number; shootLabel: (n: number) => string }
@@ -97,7 +97,7 @@ function Crowd({ n, seed }: { n: number; seed: number }) {
   )
 }
 
-export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep }: {
+export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep, ladder }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
   /* the calm plan screen (owner 2026-09-18): a small preview, a five-step how-far, date tiles */
@@ -109,6 +109,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
      chose (the shoot, the licensed graphic) in every plan. */
   simplePlans?: boolean
   keep?: string[]
+  /* the three sets the server built from what it knows (suggest.ts ladderFor); the old ladder is the fallback */
+  ladder?: Ladder | null
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
@@ -305,8 +307,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     /* Go bigger: a Reel, print, and the bigger boost, so it reaches further as well as making more */
     const s3 = { ...s2, video: { filmed: cn ? 'creator' : 'clips', count: 1, style: 'dish', captions: true }, print: { kinds: ['poster'] }, boost: { cents: 10000 } }
     const s4 = { ...s3, photos: { list: [], reel: false }, boost: { cents: 10000 } }
+    if (ladder) { const k: Record<string, true> = {}; for (const id of keep ?? []) k[id] = true; return [{ label: 'Free', note: ladder.notes.simple, on: { ...ladder.simple, ...k } }, { label: '', note: ladder.notes.recommended, on: { ...ladder.recommended, ...k } }, { label: '', note: ladder.notes.bigger, on: { ...ladder.bigger, ...k } }] }
     return [{ label: 'Free', note: 'Your channels only', on: free }, { label: '', note: 'The usual pick', on: s1 }, { label: '', note: cn ? `${cn.name.split(' ')[0]} posts it` : 'A bigger boost', on: s2 }, { label: '', note: 'A Reel and a poster', on: s3 }, { label: '', note: 'A shoot day too', on: s4 }]
-  }, [items.length, cn?.slug, (keep ?? []).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items.length, cn?.slug, (keep ?? []).join(','), ladder]) // eslint-disable-line react-hooks/exhaustive-deps
   const costOf = (set: Record<string, Record<string, unknown> | true>) => items.filter((x) => x.uid === x.id).reduce((sum, it) => { const v = set[it.id]; if (!v) return sum; const opt = v === true ? baseOpts(it) : { ...baseOpts(it), ...v }; return sum + itemCents({ ...it, on: true, options: opt }, prices, profile) }, 0)
   const applyStep = (n: number) => {
     const set = stepSets[n].on
@@ -363,7 +366,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
              that plan in effect: the price, the crowd it reaches, every piece in its slot (absent ones as faint
              holes), the days things land. Go bigger is the first step that really adds something. */
           const c1 = costOf(stepSets[1].on)
-          const bigger = [2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > c1) ?? 2
+          const bigger = ladder ? 2 : ([2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > c1) ?? 2)
           const three = [0, 1, bigger]
           const titles: Record<number, string> = { 0: 'Keep it simple', 1: 'Recommended', [bigger]: 'Go bigger' }
           const chosen = currentStep
@@ -422,6 +425,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                   ) })}
                 </div>
               </div>
+              {me?.budgetCents != null && total > 0 && (
+                <div style={{ fontSize: 12.5, marginTop: 8, textAlign: 'center', color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>
+              )}
               {beads.length > 0 && (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 8 }}>When it lands</div>

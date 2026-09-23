@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { suggestItems, type SuggestInput } from '@/lib/plan/suggest'
+import { suggestItems, ladderFor, type SuggestInput } from '@/lib/plan/suggest'
 import { listInfluencers, fitInfluencers } from '@/lib/influencers/read'
 import { getVendorSchedule } from '@/lib/marketplace/creator-schedule'
 import { graphicOrderCents } from '@/lib/requests/create'
@@ -64,5 +64,6 @@ export async function POST(req: NextRequest) {
     usualReach, budgetCents, creator, last: lastResult, prices: { graphic, video, shoot, print: 2500 },
     profile: { locations: (() => { const v = String(biz.data?.location_count ?? '1'); const m = v.match(/\d+/); return m ? Number(m[0]) : /\+|many|more/.test(v) ? 6 : 1 })(), footprint: (shp.data?.shape_footprint as string | null) ?? null, concept: (shp.data?.shape_concept as string | null) ?? null, goal: (biz.data?.primary_goal as string | null) ?? null, canFilm: Array.isArray(biz.data?.can_film) ? (biz.data!.can_film as string[]).length > 0 : null },
   }
-  return NextResponse.json({ items: suggestItems(input), me: { usualReach, budgetCents, creator, connected: input.connected } }, { headers: { 'Cache-Control': 'no-store' } })
+  const items = suggestItems(input)
+  return NextResponse.json({ items, ladder: ladderFor(input, items), me: { usualReach, budgetCents, creator, connected: input.connected } }, { headers: { 'Cache-Control': 'no-store' } })
 }

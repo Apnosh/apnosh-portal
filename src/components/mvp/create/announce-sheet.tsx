@@ -24,6 +24,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2, X, Plus, Copy } from 'lucide-r
 import { C, DISPLAY } from '../tokens'
 import { Drawing, DRAW_CSS, type Scene } from './drawings'
 import AnnounceMenu, { itemCents, type MenuMe, type MenuPrices } from './announce-menu'
+import type { Ladder } from '@/lib/plan/suggest'
 import type { ItemId, ItemPick } from '@/lib/plan/suggest'
 import { BrandOrMark } from '../mvp-insights'
 
@@ -285,6 +286,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   type Pic = 'own' | 'graphic' | 'shoot' | 'booked' | 'words'
   const [items, setItems] = useState<ItemPick[]>([])
   const [me, setMe] = useState<MenuMe | null>(null)
+  const [ladder, setLadder] = useState<Ladder | null>(null)
   const [openItem, setOpenItemRaw] = useState<string | null>(null)
   const setOpenItem = (uid: string | null) => { setDir(uid ? 'fwd' : 'back'); setOpenItemRaw(uid) }
   const [suggested, setSuggested] = useState<string | null>(null)
@@ -726,7 +728,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     try {
       const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null, source: media.length ? 'mine' : (a.picsrc as 'licensed' | 'shoot' | 'none' | undefined) ?? 'none', look: a.look ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
       const j = await r.json().catch(() => ({}))
-      if (r.ok && Array.isArray(j.items)) { setItems(j.items); setMe(j.me ?? null) }
+      if (r.ok && Array.isArray(j.items)) { setItems(j.items); setMe(j.me ?? null); setLadder((j.ladder as Ladder | undefined) ?? null) }
     } catch { /* the menu still works by hand */ }
   }
   const pickForBudget = () => { const cents = Math.round(Number(budget.replace(/[^0-9.]/g, '')) * 100); if (Number.isFinite(cents) && cents >= 0) void suggest(cents) }
@@ -1288,7 +1290,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 </div>
               </div>
             )}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} ladder={ladder} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
 
