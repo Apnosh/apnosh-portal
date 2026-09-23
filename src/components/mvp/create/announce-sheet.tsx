@@ -889,25 +889,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               {c === id && body && <div style={{ padding: '0 14px 14px 70px' }}>{body}</div>}
             </div>
           )
-          const names = [a.what?.trim() || kind.label, ...dishes.map((d) => d.name.trim()).filter(Boolean)]
-          const okay = c === 'own' ? media.length > 0 : c === 'library' ? libSel.size > 0 : !!c
-          const check = (on: boolean, set: () => void, label: string, small?: string) => (
-            <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', padding: '9px 0', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', textAlign: 'left' }}>
-              <span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{label}</b>{small && <small style={sub}>{small}</small>}</span>
-              <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-            </button>
-          )
-          const shootBody = (
-            <div style={{ fontSize: 13 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>What we shoot</div>
-              {names.map((n, i) => <div key={i} style={{ padding: '5px 0', fontWeight: 600 }}>{i + 1}. {n}</div>)}
-              <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Anything else? The patio, the team" style={{ ...input, marginTop: 6, fontSize: 13.5, padding: '9px 11px' }} />
-              <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}{c === 'shoot' && (!openShoot || !openShoot.requestId) ? ' when it is booked' : ''}: {sizeOf(names.length + alsoItems.length)}</div>
-              {c === 'newshoot' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}><span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>The day</b><small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
-              {c === 'shoot' && openShoot && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. {openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}{openShoot.used + 1 > openShoot.spots ? ` That makes it ${TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you first.` : ''}</div>}
-              {c === 'shoot' && (!openShoot || !openShoot.requestId) && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>Nothing to pay now. We book the day when the list is worth the visit, or when your monthly plan's shoot day comes, and you pay then.</div>}
-            </div>
-          )
           const ownBody = (
             <div>
               {mediaStrip}
@@ -921,12 +902,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             </div>
           )
           const rows: React.ReactNode[] = []
-          rows.push(opt('newshoot', openShoot ? 'Book another content day' : 'Book a content day', `We come shoot photos and video in one visit. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
+          rows.push(opt('newshoot', openShoot ? 'Another full content shoot' : 'Full content shoot', 'We come shoot photos and video in one visit', 'creator', '#6a39de', true))
           const queued = !!openShoot && !openShoot.requestId
           rows.push(opt('shoot',
-            openShoot && !queued ? `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day` : 'Add it to the next content day',
-            openShoot ? `${openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} ${queued ? 'waiting' : 'on the list already'}` : 'Nothing on the list yet'}${queued && openShoot.date ? `, planned for ${niceDate(openShoot.date).replace(/^\w+, /, '')}` : ''}` : ctx?.planShoot ? `Planned for ${niceDate(ctx.planShoot).replace(/^\w+, /, '')} with your monthly plan` : 'Nothing booked yet. It waits on the list',
-            'calendar', '#3b6fd4', false, shootBody))
+            openShoot && !queued ? `Add to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content shoot` : 'Add to the next content shoot',
+            openShoot ? `${openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} ${queued ? 'waiting' : 'on the list already'}` : 'Nothing on the list yet'}${queued && openShoot.date ? `, planned for ${niceDate(openShoot.date).replace(/^\w+, /, '')}` : ''}` : ctx?.planShoot ? `Planned for ${niceDate(ctx.planShoot).replace(/^\w+, /, '')} with your monthly plan` : 'Nothing booked yet. It waits on the list, nothing to pay now',
+            'calendar', '#3b6fd4', false))
           rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
           if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
           rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
