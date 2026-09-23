@@ -885,7 +885,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
                   </div>
                   <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
-                    {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true, false, true)}
+                    {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true)}
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
                     {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited)}
@@ -1246,7 +1246,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     </>
                   })()}
                   {detail === 'dish' && <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, overflow: 'hidden' }}>
-                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true, false, true)}
+                    {dishRow('Name', newDish.name, (v) => setNewDish((x) => ({ ...x, name: v })), 'Lemongrass chicken', true)}
                     {dishRow('Price', newDish.price, (v) => setNewDish((x) => ({ ...x, price: v })), '12', false, true)}
                     {dishRow('Description', newDish.line, (v) => setNewDish((x) => ({ ...x, line: v })), 'A line about it')}
                   </div>}
