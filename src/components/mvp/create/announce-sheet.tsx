@@ -915,7 +915,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
           rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
           rows.push(opt('none', 'No content needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
-          return <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>{rows}</div>
+          return <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
               })()
 
 
@@ -948,9 +948,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 else setDishes((x) => x.map((d, j) => (j === i - 1 ? { ...d, ...patch } : d)))
               }
               const count = 1 + dishes.length
-              const named = Array.from({ length: count }, (_, i) => i).filter((i) => getDish(i).name.trim())
-              const addDish = () => { if (!(a.what ?? '').trim()) { setOpenDish(0); return } setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(dishes.length + 1) }
-              const removeDish = (i: number) => { if (i === 0) { const [first, ...rest] = dishes; if (first) { setA((x) => ({ ...x, what: first.name, line: first.line, price: first.price, note: first.note ?? '' })); setTags(new Set(first.tags ?? [])); setDishes(rest) } else { setA((x) => ({ ...x, what: '', line: '', price: '', note: '' })); setTags(new Set()) } } else setDishes((x) => x.filter((_, j) => j !== i - 1)) }
+                            const removeDish = (i: number) => { if (i === 0) { const [first, ...rest] = dishes; if (first) { setA((x) => ({ ...x, what: first.name, line: first.line, price: first.price, note: first.note ?? '' })); setTags(new Set(first.tags ?? [])); setDishes(rest) } else { setA((x) => ({ ...x, what: '', line: '', price: '', note: '' })); setTags(new Set()) } } else setDishes((x) => x.filter((_, j) => j !== i - 1)) }
               const priceWord = (v: string) => (v.trim() ? (/^\d/.test(v.trim()) ? `$${v.trim()}` : v.trim()) : '')
 
               if (openDish !== null) {
@@ -974,29 +972,27 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   </div>
                 )
               }
+              const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 2px 8px' }
               return (
                 <div>
                   <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 150, display: 'grid', placeItems: 'center' }}>
                     <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
                   </div>
-                  {named.length > 0 && (
-                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
-                      {named.map((i, k) => { const d = getDish(i); return (
-                        <button key={i} type="button" onClick={() => { setOpenDish(i); setDetail(null) }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', borderLeft: 0, borderRight: 0, borderBottom: 0, borderTop: k ? `0.5px solid ${C.line}` : 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                          <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</b>{d.line.trim() && <small style={{ display: 'block', fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.line}</small>}</span>
-                          {priceWord(d.price) && <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{priceWord(d.price)}</span>}
-                          <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4 }} />
-                        </button>
-                      ) })}
-                    </div>
-                  )}
-                  {count - (named.length) === 0 && count >= 6 ? null : (
-                    <button type="button" onClick={addDish} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> {named.length ? 'Another dish' : 'Add a dish'}</button>
-                  )}
-                  <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 14, background: '#fff', overflow: 'hidden' }}>
-                    <div style={{ marginTop: -1 }}>{row('content', 'Content', contentWord, content !== null, contentUI)}</div>
-                    {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited, dateBody)}
+                  <div style={sec}>Starting date</div>
+                  {dateBody}
+                  <div style={sec}>Dishes</div>
+                  <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
+                    {Array.from({ length: count }, (_, i) => i).map((i) => { const d = getDish(i); const has = !!d.name.trim(); return (
+                      <button key={i} type="button" onClick={() => { setOpenDish(i); setDetail(null) }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', borderLeft: 0, borderRight: 0, borderBottom: 0, borderTop: i ? `0.5px solid ${C.line}` : 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                        <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{has ? d.name : `Dish ${i + 1}`}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{has ? (d.line.trim() || 'Tap to add a line') : 'Tap to add the name and price'}</small></span>
+                        {priceWord(d.price) && <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{priceWord(d.price)}</span>}
+                        <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4 }} />
+                      </button>
+                    ) })}
                   </div>
+                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(count); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '10px 2px 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={14} /> Add dish</button>}
+                  <div style={sec}>Content</div>
+                  {contentUI}
                 </div>
               )
             })()}
