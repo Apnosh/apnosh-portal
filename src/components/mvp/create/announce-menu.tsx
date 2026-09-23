@@ -79,6 +79,24 @@ const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
   print: { kinds: ['tent'] },
   creator: { code: true, repost: true },
 }
+/* THE CROWD: a ringed field of the Home funnel's figures, dense in the middle, one figure per 72 people */
+function Crowd({ n, seed }: { n: number; seed: number }) {
+  const pts = useMemo(() => {
+    let s = seed | 0
+    const rnd = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+    const cx = 60, cy = 36, rx = 57, ry = 30, out: { x: number; y: number }[] = []
+    let tries = 0
+    while (out.length < n && tries < n * 20) { tries++; const g1 = (rnd() + rnd() + rnd()) / 1.5 - 1, g2 = (rnd() + rnd() + rnd()) / 1.5 - 1; const x = cx + g1 * rx * 1.05, y = cy + g2 * ry * 1.05 + 3; const dx = (x - cx) / rx, dy = (y - 4 - cy) / ry; if (dx * dx + dy * dy <= 0.94) out.push({ x, y }) }
+    return out.sort((p, q) => p.y - q.y)
+  }, [n, seed])
+  return (
+    <svg viewBox="0 0 120 70" width={120} height={70} aria-hidden style={{ flex: 'none', overflow: 'visible' }}>
+      <ellipse cx={60} cy={36} rx={57} ry={30} fill="none" stroke="#2e9a78" strokeWidth={0.6} opacity={0.6} />
+      {pts.map((p, i) => <g key={i} transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(.4)`}><path d="M -6 9.2 Q -7 0.2 0 -1.6 Q 7 0.2 6 9.2 Z" fill={i % 6 === 2 ? '#4fa17c' : '#2e9a78'} /><circle cx={0} cy={-7.4} r={4.6} fill="#8fd6b8" /></g>)}
+    </svg>
+  )
+}
+
 export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
@@ -284,7 +302,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     for (const k of keep ?? []) free[k] = true
     const s1 = { ...free, ...usualOn }
     const s2 = { ...s1, ...(cn ? { creator: { slug: cn.slug } } : { boost: { cents: 10000 } }) }
-    const s3 = { ...s2, video: { filmed: cn ? 'creator' : 'clips', count: 1, style: 'dish', captions: true }, print: { kinds: ['poster'] } }
+    /* Go bigger: a Reel, print, and the bigger boost, so it reaches further as well as making more */
+    const s3 = { ...s2, video: { filmed: cn ? 'creator' : 'clips', count: 1, style: 'dish', captions: true }, print: { kinds: ['poster'] }, boost: { cents: 10000 } }
     const s4 = { ...s3, photos: { list: [], reel: false }, boost: { cents: 10000 } }
     return [{ label: 'Free', note: 'Your channels only', on: free }, { label: '', note: 'The usual pick', on: s1 }, { label: '', note: cn ? `${cn.name.split(' ')[0]} posts it` : 'A bigger boost', on: s2 }, { label: '', note: 'A Reel and a poster', on: s3 }, { label: '', note: 'A shoot day too', on: s4 }]
   }, [items.length, cn?.slug, (keep ?? []).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -340,33 +359,88 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
       {mode === 'plan' && simplePlans ? <>
         {(() => {
-          /* Go bigger is the first step that really adds something past the recommended one */
+          /* ONE PLAN AT A TIME (owner 2026-09-22, "that's what the tabs are for"): the pill picks, the page shows
+             that plan in effect: the price, the crowd it reaches, every piece in its slot (absent ones as faint
+             holes), the days things land. Go bigger is the first step that really adds something. */
           const c1 = costOf(stepSets[1].on)
           const bigger = [2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > c1) ?? 2
           const three = [0, 1, bigger]
-          const inside = (set: Record<string, Record<string, unknown> | true>) => { const names = Object.keys(set).filter((id) => META[id as ItemId] && META[id as ItemId].group !== 'inside').map((id) => (id === 'creator' && cn ? `${cn.name.split(' ')[0]} posts it` : META[id as ItemId].name.toLowerCase())); if (Object.keys(set).some((id) => META[id as ItemId]?.group === 'inside')) names.push('in the restaurant'); return names.join(', ') }
           const titles: Record<number, string> = { 0: 'Keep it simple', 1: 'Recommended', [bigger]: 'Go bigger' }
           const chosen = currentStep
+          const pos = three.indexOf(chosen)
+          const first = cn ? cn.name.split(' ')[0] : (profile?.name.split(' ')[0] ?? null)
+          const SLOTS: { id: ItemId | 'inside'; label: string; scene: Scene; hue: string }[] = [
+            { id: 'post', label: 'Post', scene: 'post', hue: '#2e9a78' }, { id: 'inside', label: 'In store', scene: 'dish', hue: '#2e9a78' },
+            { id: 'graphic', label: 'Graphic', scene: 'graphic', hue: '#d99a1e' }, { id: 'boost', label: 'Boost', scene: 'boost', hue: '#6a39de' },
+            { id: 'creator', label: first ?? 'Creator', scene: 'creator', hue: '#0f97a8' }, { id: 'video', label: 'Video', scene: 'reel', hue: '#3b6fd4' },
+            { id: 'print', label: 'Print', scene: 'print', hue: '#d99a1e' }, { id: 'photos', label: 'Shoot', scene: 'photos', hue: '#6a39de' },
+          ]
+          const isOn = (id: ItemId | 'inside') => (id === 'inside' ? items.some((x) => x.on && META[x.id].group === 'inside') : items.some((x) => x.on && x.id === id))
+          const centsOf = (id: ItemId | 'inside') => (id === 'inside' ? 0 : items.filter((x) => x.on && x.id === id).reduce((sum, it) => sum + itemCents(it, prices, profile), 0))
+          const slots = SLOTS.filter((sl) => sl.id !== 'photos' || isOn('photos'))
+          const n = reach != null ? Math.max(3, Math.min(280, Math.round(reach / 72))) : 0
+          const usualX = reach != null && usualReach ? Math.round(reach / usualReach) : null
+          const creatorOn = items.find((x) => x.on && x.id === 'creator')
+          const beads: { scene: Scene; hue: string; day: string | null; label: string }[] = [
+            ...(items.some((x) => x.on && x.id === 'graphic') && dates?.ready ? [{ scene: 'graphic' as Scene, hue: '#d99a1e', day: dates.ready, label: 'Graphic' }] : []),
+            ...(dates?.posts ? [{ scene: 'post' as Scene, hue: '#2e9a78', day: dates.posts, label: 'Posts' }] : []),
+            ...(creatorOn && typeof creatorOn.options.date === 'string' && creatorOn.options.date ? [{ scene: 'creator' as Scene, hue: '#0f97a8', day: String(creatorOn.options.date), label: `${first ?? 'Creator'} visits` }] : []),
+            ...(dates?.results ? [{ scene: 'chart' as Scene, hue: '#2e9a78', day: dates.results, label: 'Results' }] : []),
+          ]
           return (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-.01em', marginBottom: 10 }}>Pick a plan</div>
-              {three.map((i) => { const on = chosen === i; const cents = costOf(stepSets[i].on); return (
-                <button key={i} type="button" onClick={() => applyStep(i)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '13px 14px', marginTop: 8, borderRadius: 18, border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <b style={{ display: 'block', fontSize: 15 }}>{titles[i]}{i === 1 && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk }}>Our pick</span>}</b>
-                    <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>{inside(stepSets[i].on)}</small>
-                  </span>
-                  <b style={{ fontSize: 15, whiteSpace: 'nowrap', color: cents ? C.ink : C.greenDk }}>{cents ? dollars(cents) : 'Free'}</b>
-                  <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
-                </button>
-              ) })}
-              {chosen < 0 && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Your own plan: {picked.map((it) => nameOf(it).toLowerCase()).join(', ') || 'nothing yet'}. {dollars(total) || 'Free'}.</div>}
-              <div style={{ textAlign: 'center', marginTop: 14 }}><button type="button" onClick={() => setMode('add')} style={{ font: 'inherit', fontSize: 13.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '6px 10px', cursor: 'pointer' }}>I'll build my own</button></div>
-              {reach != null && <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 4 }}>About {round2(reach).toLocaleString()} people{usualReach ? `. Your posts usually reach about ${usualReach.toLocaleString()}` : ''}</div>}
+            <div style={{ marginTop: 2 }}>
+              <div style={{ position: 'relative', display: 'flex', background: '#f6f6f8', borderRadius: 99, padding: 3 }}>
+                {pos >= 0 && <span aria-hidden style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(3px + ${pos} * (100% - 6px) / 3)`, width: 'calc((100% - 6px) / 3)', borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.08)', transition: 'left .22s cubic-bezier(.2,.8,.2,1)' }} />}
+                {three.map((i, k) => (
+                  <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: 40, borderRadius: 99, border: 0, background: 'none', font: 'inherit', cursor: 'pointer', color: pos === k ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
+                    <b style={{ fontSize: 13, fontWeight: 700 }}>{titles[i]}</b>
+                    {i === 1 && <small style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.08em', color: C.greenDk }}>OUR PICK</small>}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 12, borderRadius: 22, border: `0.5px solid ${pos >= 0 ? C.ink : C.line}`, background: '#eaf7f3', padding: '14px 14px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                  <div>
+                    <b style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>{pos >= 0 ? titles[chosen] : 'Your own plan'}</b>
+                    <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{picked.map((it) => nameOf(it).toLowerCase()).join(', ') || 'your channels only'}{insideOn.length ? ', in the restaurant' : ''}</small>
+                  </div>
+                  <b style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1, whiteSpace: 'nowrap', color: total ? C.ink : C.greenDk }}>{total ? dollars(total) : 'Free'}</b>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
+                  <Crowd n={n} seed={chosen + 7} />
+                  <div style={{ flex: 1 }}>
+                    <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: '-.02em', lineHeight: 1 }}>{reach != null ? round2(reach).toLocaleString() : '—'}</b>
+                    <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3 }}>people{usualX && usualX > 1 ? `, ${usualX}x your usual` : usualReach ? ', your usual' : ''}</small>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginTop: 12 }}>
+                  {slots.map((sl) => { const on = isOn(sl.id); const c = centsOf(sl.id); return (
+                    <div key={sl.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 0', opacity: on ? 1 : .55 }}>
+                      <span style={{ width: 40, height: 40, borderRadius: 99, flex: 'none', display: 'grid', placeItems: 'center', background: on ? `color-mix(in srgb, ${sl.hue} 14%, #fff)` : 'transparent', border: on ? 0 : `1.5px dotted ${C.faint}`, ['--c2' as string]: sl.hue, filter: on ? 'none' : 'grayscale(1)', opacity: on ? 1 : .6 }}><span style={{ width: 26 }}><Drawing spec={{ scene: sl.scene }} name="" rating="" t={(x) => x} /></span></span>
+                      <span style={{ minWidth: 0 }}><b style={{ display: 'block', fontSize: 13, fontWeight: 700, color: on ? C.ink : C.faint }}>{sl.label}</b>{on && <small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{c ? dollars(c) : 'Free'}</small>}</span>
+                    </div>
+                  ) })}
+                </div>
+              </div>
+              {beads.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 8 }}>When it lands</div>
+                  <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between' }}>
+                    <span aria-hidden style={{ position: 'absolute', left: 20, right: 20, top: 17, height: 0.5, background: C.line }} />
+                    {beads.map((bd, i) => (
+                      <div key={i} style={{ position: 'relative', flex: 1, textAlign: 'center' }}>
+                        <span style={{ width: 34, height: 34, borderRadius: 99, display: 'grid', placeItems: 'center', margin: '0 auto', background: `color-mix(in srgb, ${bd.hue} 14%, #fff)`, ['--c2' as string]: bd.hue }}><span style={{ width: 22 }}><Drawing spec={{ scene: bd.scene }} name="" rating="" t={(x) => x} /></span></span>
+                        <b style={{ display: 'block', fontSize: 12, fontWeight: 700, marginTop: 6 }}>{bd.day && bd.day.length === 10 ? nice(bd.day).replace(/^(\w+), /, '$1 ') : bd.day}</b>
+                        <small style={{ display: 'block', fontSize: 11, color: C.mute }}>{bd.label}</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ textAlign: 'center', marginTop: 12 }}><button type="button" onClick={() => setMode('add')} style={{ fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '6px 10px', cursor: 'pointer' }}>I'll build my own</button></div>
             </div>
           )
         })()}
-        {dates && <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>{[['Posts', dates.posts], ['Graphic ready', items.some((x) => x.on && x.id === 'graphic') ? dates.ready : '—'], ['Results', dates.results]].map(([k, v]) => <div key={k} style={{ flex: 1, background: '#f6f6f8', borderRadius: 12, padding: '8px 10px', fontSize: 11.5, color: C.mute }}>{k}<b style={{ display: 'block', color: C.ink, fontSize: 13, marginTop: 2 }}>{v ? (v.length === 10 ? nice(v).replace(/^(\w+), /, '$1 ') : v) : '—'}</b></div>)}</div>}
       </> : mode === 'plan' ? <>
         {preview && (
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 10, border: `0.5px solid ${C.line}`, borderRadius: 16 }}>
