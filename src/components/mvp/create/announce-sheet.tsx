@@ -696,6 +696,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const onIt = (id: ItemId) => items.some((x) => x.id === id && x.on)
   const linesOn = (id: ItemId) => items.filter((x) => x.id === id && x.on)
   const total = items.filter((x) => x.on).reduce((s, x) => s + itemCents(x, prices), 0)
+  /* the honest reach: what is measured and what is a guess, kept apart for the plan page */
+  const reachParts = useMemo(() => {
+    const measured = usual?.median ?? null
+    const video = measured != null && onIt('video') ? measured : 0
+    const boost = onIt('boost') ? Math.round((Number(it('boost')?.options.cents) || 2000) / 100) * REACH_PER_DOLLAR : 0
+    const creator = onIt('creator') && me?.creator?.nearby ? me.creator.nearby : 0
+    return { measured, video, boost, creator }
+  }, [items, usual, me]) // eslint-disable-line react-hooks/exhaustive-deps
   const reachEst = useMemo((): number | null => {
     const base = usual?.median ?? null
     let r = base == null ? 0 : onIt('video') ? base * 2 : base
@@ -1290,7 +1298,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 </div>
               </div>
             )}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} ladder={ladder} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} ladder={ladder} reachParts={reachParts} orderButton={ctaEff === 'order'} startDay={a.from || todayIso()} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
 

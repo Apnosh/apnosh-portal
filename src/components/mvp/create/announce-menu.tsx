@@ -79,25 +79,7 @@ const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
   print: { kinds: ['tent'] },
   creator: { code: true, repost: true },
 }
-/* THE CROWD: a ringed field of the Home funnel's figures, dense in the middle, one figure per 72 people */
-function Crowd({ n, seed }: { n: number; seed: number }) {
-  const pts = useMemo(() => {
-    let s = seed | 0
-    const rnd = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
-    const cx = 60, cy = 36, rx = 57, ry = 30, out: { x: number; y: number }[] = []
-    let tries = 0
-    while (out.length < n && tries < n * 20) { tries++; const g1 = (rnd() + rnd() + rnd()) / 1.5 - 1, g2 = (rnd() + rnd() + rnd()) / 1.5 - 1; const x = cx + g1 * rx * 1.05, y = cy + g2 * ry * 1.05 + 3; const dx = (x - cx) / rx, dy = (y - 4 - cy) / ry; if (dx * dx + dy * dy <= 0.94) out.push({ x, y }) }
-    return out.sort((p, q) => p.y - q.y)
-  }, [n, seed])
-  return (
-    <svg viewBox="0 0 120 70" width={120} height={70} aria-hidden style={{ flex: 'none', overflow: 'visible' }}>
-      <ellipse cx={60} cy={36} rx={57} ry={30} fill="none" stroke="#2e9a78" strokeWidth={0.6} opacity={0.6} />
-      {pts.map((p, i) => <g key={i} transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(.4)`}><path d="M -6 9.2 Q -7 0.2 0 -1.6 Q 7 0.2 6 9.2 Z" fill={i % 6 === 2 ? '#4fa17c' : '#2e9a78'} /><circle cx={0} cy={-7.4} r={4.6} fill="#8fd6b8" /></g>)}
-    </svg>
-  )
-}
-
-export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep, ladder }: {
+export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep, ladder, reachParts, orderButton, startDay }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
   /* the calm plan screen (owner 2026-09-18): a small preview, a five-step how-far, date tiles */
@@ -111,6 +93,10 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   keep?: string[]
   /* the three sets the server built from what it knows (suggest.ts ladderFor); the old ladder is the fallback */
   ladder?: Ladder | null
+  /* THE LANES (owner 2026-09-23): the honest reach in parts, whether the post gets an Order button, the start day */
+  reachParts?: { measured: number | null; video: number; boost: number; creator: number }
+  orderButton?: boolean
+  startDay?: string
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
@@ -366,87 +352,97 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
       {mode === 'plan' && simplePlans ? <>
         {(() => {
-          /* ONE PLAN AT A TIME (owner 2026-09-22, "that's what the tabs are for"): the pill picks, the page shows
-             that plan in effect: the price, the crowd it reaches, every piece in its slot (absent ones as faint
-             holes), the days things land. Go bigger is the first step that really adds something. */
-          const c1 = costOf(stepSets[1].on)
-          const bigger = ladder ? 2 : ([2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > c1) ?? 2)
-          const three = [0, 1, bigger]
-          const titles: Record<number, string> = { 0: 'Keep it simple', 1: 'Recommended', [bigger]: 'Go bigger' }
+          /* THE LANES (owner 2026-09-23, "go with A, no people, no animation"): the pill picks a level, and the plan
+             is told by the funnel's five stages, each a lane in its colour holding the pieces that serve it, with
+             the day or price under each and one small fact where it earns it. A stage the plan does not work on
+             stays as a dim lane with two dotted empty discs. Above, the price and the honest reach. */
+          const three = ladder ? [0, 1, 2] : [0, 1, ([2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > costOf(stepSets[1].on)) ?? 2)]
+          const titles: Record<number, string> = { [three[0]]: 'Just be seen', [three[1]]: 'Drive actions', [three[2]]: 'The full push' }
           const chosen = currentStep
           const pos = three.indexOf(chosen)
           const first = cn ? cn.name.split(' ')[0] : (profile?.name.split(' ')[0] ?? null)
-          const SLOTS: { id: ItemId | 'inside'; label: string; scene: Scene; hue: string }[] = [
-            { id: 'post', label: 'Post', scene: 'post', hue: '#2e9a78' }, { id: 'inside', label: 'In store', scene: 'dish', hue: '#2e9a78' },
-            { id: 'graphic', label: 'Graphic', scene: 'graphic', hue: '#d99a1e' }, { id: 'boost', label: 'Boost', scene: 'boost', hue: '#6a39de' },
-            { id: 'creator', label: first ?? 'Creator', scene: 'creator', hue: '#0f97a8' }, { id: 'video', label: 'Video', scene: 'reel', hue: '#3b6fd4' },
-            { id: 'print', label: 'Print', scene: 'print', hue: '#d99a1e' }, { id: 'photos', label: 'Shoot', scene: 'photos', hue: '#6a39de' },
+          const on = (id: ItemId) => items.find((x) => x.on && x.id === id) ?? null
+          const cents = (id: ItemId) => items.filter((x) => x.on && x.id === id).reduce((sum, it) => sum + itemCents(it, prices, profile), 0)
+          const day = (iso: string | null | undefined) => (iso && iso.length === 10 ? nice(iso).replace(/^(\w+), /, '$1 ') : iso ?? '')
+          const money = (id: ItemId) => (cents(id) ? dollars(cents(id)) : 'Free')
+          const short = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k`.replace('.0k', 'k') : String(n))
+          type Piece = { key: string; scene: Scene; hue: string; label: string; under: string; fact?: string }
+          const push = (lane: number, pc: Piece) => lanes[lane].pieces.push(pc)
+          const lanes: { name: string; hue: string; tile: string; pieces: Piece[] }[] = [
+            { name: 'Get seen', hue: '#2e9a78', tile: '#e3f3ee', pieces: [] },
+            { name: 'Create interest', hue: '#3b6fd4', tile: '#e6eef9', pieces: [] },
+            { name: 'Drive actions', hue: '#6a39de', tile: '#ece7fb', pieces: [] },
+            { name: 'Get orders', hue: '#d99a1e', tile: '#fbf3e3', pieces: [] },
+            { name: 'Build reputation', hue: '#0f97a8', tile: '#e2f4f6', pieces: [] },
           ]
-          const isOn = (id: ItemId | 'inside') => (id === 'inside' ? items.some((x) => x.on && META[x.id].group === 'inside') : items.some((x) => x.on && x.id === id))
-          const centsOf = (id: ItemId | 'inside') => (id === 'inside' ? 0 : items.filter((x) => x.on && x.id === id).reduce((sum, it) => sum + itemCents(it, prices, profile), 0))
-          const slots = SLOTS.filter((sl) => sl.id !== 'photos' || isOn('photos'))
-          const n = reach != null ? Math.max(3, Math.min(280, Math.round(reach / 72))) : 0
-          const usualX = reach != null && usualReach ? Math.round(reach / usualReach) : null
-          const creatorOn = items.find((x) => x.on && x.id === 'creator')
-          const beads: { scene: Scene; hue: string; day: string | null; label: string }[] = [
-            ...(items.some((x) => x.on && x.id === 'graphic') && dates?.ready ? [{ scene: 'graphic' as Scene, hue: '#d99a1e', day: dates.ready, label: 'Graphic' }] : []),
-            ...(dates?.posts ? [{ scene: 'post' as Scene, hue: '#2e9a78', day: dates.posts, label: 'Posts' }] : []),
-            ...(creatorOn && typeof creatorOn.options.date === 'string' && creatorOn.options.date ? [{ scene: 'creator' as Scene, hue: '#0f97a8', day: String(creatorOn.options.date), label: `${first ?? 'Creator'} visits` }] : []),
-            ...(dates?.results ? [{ scene: 'chart' as Scene, hue: '#2e9a78', day: dates.results, label: 'Results' }] : []),
-          ]
+          const postDay = day(dates?.posts)
+          if (on('post')) { push(0, { key: 'post', scene: 'post', hue: '#2e9a78', label: 'Post', under: postDay || 'Free', fact: platformsWord ? platformsWord.split(', ').map((w) => ({ Instagram: 'IG', Facebook: 'FB', TikTok: 'TT' } as Record<string, string>)[w] ?? w).join(' · ') : undefined }); push(0, { key: 'google', scene: 'google', hue: '#2e9a78', label: 'Google', under: postDay || 'Free' }) }
+          const b = on('boost'); if (b) push(0, { key: 'boost', scene: 'boost', hue: '#6a39de', label: 'Boost', under: money('boost'), fact: reachParts?.measured != null ? `${short(reachParts.measured)} → ${short(reachParts.boost)}` : `${(Number(b.options.days) || 3)} days` })
+          const c = on('creator'); if (c) push(0, { key: 'creator', scene: 'creator', hue: '#0f97a8', label: first ?? 'Creator', under: c.options.date ? day(String(c.options.date)) : money('creator'), fact: reachParts?.creator ? `${short(reachParts.creator)} nearby` : undefined })
+          const g = on('graphic'); if (g) push(1, { key: 'graphic', scene: 'graphic', hue: '#d99a1e', label: 'Graphic', under: money('graphic'), fact: g.options.priceOn !== false ? 'price on it' : undefined })
+          const v = on('video'); if (v) push(1, { key: 'video', scene: 'reel', hue: '#0f97a8', label: 'Reel', under: money('video') })
+          const pr = on('print'); if (pr) { const kinds = (pr.options.kinds as string[] | undefined) ?? ['tent']; if (kinds.includes('tent')) push(1, { key: 'tent', scene: 'print', hue: '#d99a1e', label: 'Tent', under: money('print') }); if (kinds.includes('poster')) push(1, { key: 'poster', scene: 'print', hue: '#d99a1e', label: 'Poster', under: kinds.includes('tent') ? 'with it' : money('print') }) }
+          if (on('taste')) push(2, { key: 'taste', scene: 'dish', hue: '#2e9a78', label: 'Taste', under: day(startDay) || 'Free', fact: 'at the counter' })
+          if (orderButton && on('post')) push(2, { key: 'order', scene: 'order', hue: '#6a39de', label: 'Order button', under: postDay || 'Free' })
+          const o = on('offer'); if (o) { push(2, { key: 'offer', scene: 'offer', hue: '#3b6fd4', label: 'Offer', under: postDay || 'Free', fact: o.options.code ? 'a code' : undefined }); push(3, { key: 'code', scene: 'offer', hue: '#d99a1e', label: 'Code used', under: 'counted' }) }
+          if (on('apps')) push(3, { key: 'apps', scene: 'apps', hue: '#c92d32', label: 'Delivery apps', under: 'two weeks' })
+          if (on('review')) push(4, { key: 'review', scene: 'review', hue: '#d99a1e', label: 'Reviews', under: 'two weeks', fact: 'with the check' })
+          if (on('sign')) push(4, { key: 'sign', scene: 'story', hue: '#c2418f', label: 'Photo sign', under: 'Free' })
+          const measured = reachParts?.measured ?? null
+          const est = (reachParts?.boost ?? 0) + (reachParts?.creator ?? 0) + (reachParts?.video ?? 0)
+          const totalReach = (measured ?? 0) + est
+          const track = Math.max(1, totalReach)
+          const seg = (n: number) => `${Math.max(n > 0 ? 3 : 0, (n / track) * 100)}%`
           return (
             <div style={{ marginTop: 2 }}>
               <div style={{ position: 'relative', display: 'flex', background: '#f6f6f8', borderRadius: 99, padding: 3 }}>
-                {pos >= 0 && <span aria-hidden style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(3px + ${pos} * (100% - 6px) / 3)`, width: 'calc((100% - 6px) / 3)', borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.08)', transition: 'left .22s cubic-bezier(.2,.8,.2,1)' }} />}
+                {pos >= 0 && <span aria-hidden style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(3px + ${pos} * (100% - 6px) / 3)`, width: 'calc((100% - 6px) / 3)', borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.08)' }} />}
                 {three.map((i, k) => (
-                  <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: 40, borderRadius: 99, border: 0, background: 'none', font: 'inherit', cursor: 'pointer', color: pos === k ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
+                  <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: 40, borderRadius: 99, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', color: pos === k ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
                     <b style={{ fontSize: 13, fontWeight: 700 }}>{titles[i]}</b>
-                    {i === 1 && <small style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.08em', color: C.greenDk }}>OUR PICK</small>}
+                    {k === 1 && <small style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.08em', color: C.greenDk }}>OUR PICK</small>}
                   </button>
                 ))}
               </div>
-              <div style={{ marginTop: 12, borderRadius: 22, border: `0.5px solid ${pos >= 0 ? C.ink : C.line}`, background: '#eaf7f3', padding: '14px 14px 12px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                  <div>
-                    <b style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>{pos >= 0 ? titles[chosen] : 'Your own plan'}</b>
-                    <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{picked.map((it) => nameOf(it).toLowerCase()).join(', ') || 'your channels only'}{insideOn.length ? ', in the restaurant' : ''}</small>
-                  </div>
-                  <b style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1, whiteSpace: 'nowrap', color: total ? C.ink : C.greenDk }}>{total ? dollars(total) : 'Free'}</b>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
-                  <Crowd n={n} seed={chosen + 7} />
-                  <div style={{ flex: 1 }}>
-                    <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: '-.02em', lineHeight: 1 }}>{reach != null ? round2(reach).toLocaleString() : '—'}</b>
-                    <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3 }}>people{usualX && usualX > 1 ? `, ${usualX}x your usual` : usualReach ? ', your usual' : ''}</small>
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginTop: 12 }}>
-                  {slots.map((sl) => { const on = isOn(sl.id); const c = centsOf(sl.id); return (
-                    <div key={sl.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 0', opacity: on ? 1 : .55 }}>
-                      <span style={{ width: 40, height: 40, borderRadius: 99, flex: 'none', display: 'grid', placeItems: 'center', background: on ? `color-mix(in srgb, ${sl.hue} 14%, #fff)` : 'transparent', border: on ? 0 : `1.5px dotted ${C.faint}`, ['--c2' as string]: sl.hue, filter: on ? 'none' : 'grayscale(1)', opacity: on ? 1 : .6 }}><span style={{ width: 26 }}><Drawing spec={{ scene: sl.scene }} name="" rating="" t={(x) => x} /></span></span>
-                      <span style={{ minWidth: 0 }}><b style={{ display: 'block', fontSize: 13, fontWeight: 700, color: on ? C.ink : C.faint }}>{sl.label}</b>{on && <small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{c ? dollars(c) : 'Free'}</small>}</span>
-                    </div>
-                  ) })}
-                </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 14 }}>
+                <b style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1, color: total ? C.ink : C.greenDk }}>{total ? dollars(total) : 'Free'}</b>
+                {totalReach > 0 && <span style={{ fontSize: 13, color: C.mute }}>could reach about <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em', color: C.ink }}>{round2(totalReach).toLocaleString()}</b></span>}
               </div>
-              {me?.budgetCents != null && total > 0 && (
-                <div style={{ fontSize: 12.5, marginTop: 8, textAlign: 'center', color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>
-              )}
-              {beads.length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 8 }}>When it lands</div>
-                  <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between' }}>
-                    <span aria-hidden style={{ position: 'absolute', left: 20, right: 20, top: 17, height: 0.5, background: C.line }} />
-                    {beads.map((bd, i) => (
-                      <div key={i} style={{ position: 'relative', flex: 1, textAlign: 'center' }}>
-                        <span style={{ width: 34, height: 34, borderRadius: 99, display: 'grid', placeItems: 'center', margin: '0 auto', background: `color-mix(in srgb, ${bd.hue} 14%, #fff)`, ['--c2' as string]: bd.hue }}><span style={{ width: 22 }}><Drawing spec={{ scene: bd.scene }} name="" rating="" t={(x) => x} /></span></span>
-                        <b style={{ display: 'block', fontSize: 12, fontWeight: 700, marginTop: 6 }}>{bd.day && bd.day.length === 10 ? nice(bd.day).replace(/^(\w+), /, '$1 ') : bd.day}</b>
-                        <small style={{ display: 'block', fontSize: 11, color: C.mute }}>{bd.label}</small>
-                      </div>
-                    ))}
+              {totalReach > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 3, height: 8 }}>
+                    {measured != null && measured > 0 && <span style={{ width: seg(measured), borderRadius: 99, background: C.greenDk }} />}
+                    {est > 0 && <span style={{ width: seg(est), borderRadius: 99, border: `1.5px dashed ${C.greenDk}`, boxSizing: 'border-box', opacity: .7 }} />}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 5, fontSize: 11.5, color: C.mute }}>
+                    {measured != null && <span><b style={{ color: C.ink }}>{measured.toLocaleString()}</b> your posts, measured</span>}
+                    {(reachParts?.boost ?? 0) > 0 && <span><b style={{ color: C.ink }}>{reachParts!.boost.toLocaleString()}</b> boost, estimate</span>}
+                    {(reachParts?.creator ?? 0) > 0 && <span><b style={{ color: C.ink }}>{reachParts!.creator.toLocaleString()}</b> {first ?? 'creator'}, estimate</span>}
+                    {(reachParts?.video ?? 0) > 0 && <span><b style={{ color: C.ink }}>{reachParts!.video.toLocaleString()}</b> the Reel, estimate</span>}
                   </div>
                 </div>
               )}
+              {me?.budgetCents != null && total > 0 && <div style={{ fontSize: 12, marginTop: 6, color: total > me.budgetCents ? '#8a5a0c' : C.mute }}>{total > me.budgetCents ? `Over your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget by ${dollars(total - me.budgetCents)}` : `Inside your $${Math.round(me.budgetCents / 100).toLocaleString()} monthly budget`}</div>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                {lanes.map((ln) => { const empty = ln.pieces.length === 0; return (
+                  <div key={ln.name} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 78, padding: '10px 12px', borderRadius: 18, background: empty ? '#f6f6f8' : ln.tile }}>
+                    <div style={{ width: 84, flex: 'none' }}>
+                      <span style={{ display: 'block', width: 8, height: 8, borderRadius: 99, background: empty ? 'transparent' : ln.hue, border: empty ? `1.5px solid ${C.faint}` : 0, marginBottom: 6 }} />
+                      <b style={{ display: 'block', fontSize: 12.5, fontWeight: 700, lineHeight: 1.2, color: empty ? C.faint : C.ink }}>{ln.name}</b>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: '10px 6px' }}>
+                      {empty ? [0, 1].map((k) => <span key={k} style={{ width: 44, height: 44, borderRadius: 99, border: `1.5px dotted ${C.faint}`, flex: 'none', opacity: .6 }} />) : ln.pieces.map((pc) => (
+                        <div key={pc.key} style={{ flex: 'none', width: 74, textAlign: 'center' }}>
+                          <span style={{ width: 44, height: 44, borderRadius: 99, display: 'grid', placeItems: 'center', margin: '0 auto', background: '#fff', ['--c2' as string]: pc.hue }}><span style={{ width: 28 }}><Drawing spec={{ scene: pc.scene }} name="" rating="" t={(x) => x} /></span></span>
+                          <b style={{ display: 'block', fontSize: 11.5, fontWeight: 700, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.label}</b>
+                          <small style={{ display: 'block', fontSize: 10.5, color: C.mute, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.under}</small>
+                          {pc.fact && <small style={{ display: 'inline-block', fontSize: 9.5, fontWeight: 700, color: C.mute, background: '#fff', borderRadius: 99, padding: '1px 6px', marginTop: 3, maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.fact}</small>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) })}
+              </div>
               <div style={{ textAlign: 'center', marginTop: 12 }}><button type="button" onClick={() => setMode('add')} style={{ fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '6px 10px', cursor: 'pointer' }}>I'll build my own</button></div>
             </div>
           )
