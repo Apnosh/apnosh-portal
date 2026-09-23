@@ -941,7 +941,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 )
               })()
 
-              const contentWord = effContent === 'newshoot' ? 'A content day' : effContent === 'shoot' ? (openShoot && openShoot.requestId ? `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day` : 'The next content day') : effContent === 'own' ? (media.length ? `${media.length} of yours` : 'My own photos') : effContent === 'library' ? `${libSel.size || ''} from my library`.trim() : effContent === 'stock' ? 'A licensed photo' : 'Words only'
+              const contentWord = effContent === 'newshoot' ? 'Full content shoot' : effContent === 'shoot' ? (openShoot && openShoot.requestId ? `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content shoot` : 'The next content shoot') : effContent === 'own' ? (media.length ? `${media.length} of yours` : 'My own photos') : effContent === 'library' ? `${libSel.size || ''} from my library`.trim() : effContent === 'stock' ? 'A licensed photo' : 'Words only'
               const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean, body: React.ReactNode) => { const open = detail === k; return (
                 <div key={k}>
                   <button type="button" onClick={() => setDetail(open ? null : k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
