@@ -228,7 +228,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [ctx, setCtx] = useState<Ctx | null>(null)
   const [targets, setTargets] = useState<Target[] | null>(null)
   const [bests, setBests] = useState<Best[]>([])
-  const [media, setMedia] = useState<{ url: string; preview: string; video: boolean }[]>([])
+  const [media, setMedia] = useState<{ url: string; preview: string; video: boolean; dish?: number }[]>([])
+  /* which dish the next upload belongs to (the photo row on a dish form) */
+  const uploadFor = useRef<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [src, setSrc] = useState<Src>('words')
@@ -480,10 +482,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         if (!r.ok || !j.uploadUrl) throw new Error(j.error || 'Could not add the photo')
         const put = await fetch(j.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
         if (!put.ok) throw new Error('Could not add the photo')
-        setMedia((m) => [...m, { url: j.fileUrl, preview: URL.createObjectURL(file), video: file.type.startsWith('video/') }])
+        const forDish = uploadFor.current
+        setMedia((m) => [...m, { url: j.fileUrl, preview: URL.createObjectURL(file), video: file.type.startsWith('video/'), ...(forDish != null ? { dish: forDish } : {}) }])
         if (src === 'words' || src === 'own') setSrc('own')
       }
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not add the photo') }
+    uploadFor.current = null
     setUploading(false)
   }
 
@@ -492,7 +496,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const extra = dishes.filter((d) => d.name.trim())
     const money = (v?: string) => (v && /^\d/.test(v.trim()) ? `$${v.trim()}` : (v ?? ''))
     if (kind?.id === 'dish') facts.price = money(a.price)
-    if (kind?.id === 'dish' && extra.length) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: money(a.price) }, ...extra.map((d) => ({ ...d, price: money(d.price) }))]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${money(d.price)})` : ''}${d.line ? `: ${d.line}` : ''}${d.tags?.length ? ` (${d.tags.join(', ')})` : ''}${d.note?.trim() ? `. ${d.note.trim()}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
+    const photosOf = (i: number) => media.filter((m) => m.dish === i).map((m) => m.url)
+    if (kind?.id === 'dish' && (extra.length || media.some((m) => m.dish != null))) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: money(a.price), photos: photosOf(0) }, ...extra.map((d) => ({ ...d, price: money(d.price), photos: photosOf(dishes.indexOf(d) + 1) }))]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); if (extra.length) facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${money(d.price)})` : ''}${d.line ? `: ${d.line}` : ''}${d.tags?.length ? ` (${d.tags.join(', ')})` : ''}${d.note?.trim() ? `. ${d.note.trim()}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
     if (tags.size) facts.tags = Array.from(tags).join(', ')
     if (kind?.limited) { if (limited && a.until) facts.until = longDate(a.until); else delete facts.until }
@@ -964,6 +969,15 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       {dishRow('Name', d.name, (v) => setDish(i, { name: v }), 'Pork belly bánh mì', true)}
                       {dishRow('Price', d.price, (v) => setDish(i, { price: v }), '14', false, true)}
                       {dishRow('Description', d.line, (v) => setDish(i, { line: v }), 'A line about it')}
+                      {(() => { const mine = media.filter((m) => m.dish === i); return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: `0.5px solid ${C.line}` }}>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>Photo<small style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>optional</small></span>
+                          <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, overflowX: 'auto' }}>
+                            {mine.map((m) => <span key={m.url} style={{ position: 'relative', flex: 'none', width: 44, height: 44, borderRadius: 10, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}><button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((y) => y.url !== m.url))} style={{ position: 'absolute', right: 2, top: 2, width: 16, height: 16, borderRadius: 99, border: 0, background: 'rgba(255,255,255,.92)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={9} /></button></span>)}
+                            {mine.length < 4 && <button type="button" onClick={() => { uploadFor.current = i; fileRef.current?.click() }} style={{ flex: 'none', height: 32, padding: '0 11px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>{uploading && uploadFor.current === i ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} {mine.length ? 'Add' : 'Add a photo'}</button>}
+                          </span>
+                        </div>
+                      ) })()}
                       {row('tags', 'Good to know', d.tags.length ? d.tags.join(', ') : 'Nothing to add', d.tags.length > 0, dTagsBody)}
                       {row('note', 'Additional comments', d.note.trim() ? d.note : 'None', !!d.note.trim(), dNoteBody)}
                     </div>
@@ -988,7 +1002,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       </button>
                     ) })}
                   </div>
-                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(count); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '10px 2px 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={14} /> Add dish</button>}
+                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(count); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '12px 10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 auto' }}><Plus size={14} /> Add dish</button>}
                   <div style={sec}>Starting date</div>
                   {dateBody}
                   <div style={sec}>Content</div>
