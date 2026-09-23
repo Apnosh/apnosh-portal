@@ -371,7 +371,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const ready = required.every((f) => (a[f.key] ?? '').trim())
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
-  const [detail, setDetail] = useState<null | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
+  const [detail, setDetail] = useState<null | 'content' | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
   /* THE CONTENT SCREEN (owner 2026-09-22): where the photo comes from, asked before the plan. */
   type Content = 'newshoot' | 'shoot' | 'own' | 'library' | 'stock' | 'none'
@@ -653,14 +653,15 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   useEffect(() => { if ((step === 'words' || step === 'plans') && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the picker runs when the kind opens, and again when a photo lands */
   useEffect(() => {
-    if (step !== 'content') return
+    if (step !== 'content' && !(step === 'facts' && dishRows)) return
     if (library === null) { void fetch(`/api/dashboard/assets?clientId=${encodeURIComponent(clientId)}`).then((r) => (r.ok ? r.json() : { photos: [] })).then((j) => setLibrary((j.photos ?? []) as { id: string; name: string; url: string }[])).catch(() => setLibrary([])) }
-    if (content === null) setContent(src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock')
+    if (step === 'content' && content === null) setContent(derivedContent)
     if (content === null) { setWantVideo(!!it('video')?.on); setWantGraphic(it('graphic')?.on !== false) }
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the choice writes the lines the plan reads: the shoot on or off, where the graphic comes from, the Reel */
+  const derivedContent: Content = src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock'
   const applyContent = () => {
-    const c = content ?? 'stock'
+    const c = content ?? derivedContent
     const shoot = c === 'newshoot' || c === 'shoot'
     const extra = dishes.map((d) => d.name.trim()).filter(Boolean)
     const list = [...new Set([...extra, ...alsoItems])]
@@ -744,7 +745,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* the simple road: facts, three cards, done. The old screens stay reachable from What is inside */
   const simple = !!kind && !isSlow && !kind.hidden
   const dishRows = kind?.id === 'dish' && simple
-  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', ...(kind?.picture ? ['content' as Step, 'make' as Step] : []), 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', ...(kind?.picture && kind.id !== 'dish' ? ['content' as Step, 'make' as Step] : []), 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
   const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('plans'); return } if (simple && step === 'plans' && openItem) { setOpenItem(null); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(visible[i + 1]) }
@@ -875,6 +876,91 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                and opens one small picker. More dishes are added on the next page. */}
             {dishRows && (() => {
               const fromSet = !!a.from && a.from !== isoPlus(0)
+              const effContent = content ?? derivedContent
+              const contentUI = (() => {
+          const c = effContent
+          const opt = (id: Content, label: string, small: string, scene: Scene, hue: string, first: boolean, body?: React.ReactNode) => (
+            <div key={id}>
+              <button type="button" onClick={() => { setContent(id); if ((id === 'newshoot' || id === 'shoot') && c !== 'newshoot' && c !== 'shoot') setWantVideo(true) }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
+                <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
+                <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${c === id ? C.greenDk : C.line}`, background: c === id ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{c === id && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
+              </button>
+              {c === id && body && <div style={{ padding: '0 14px 14px 70px' }}>{body}</div>}
+            </div>
+          )
+          const names = [a.what?.trim() || kind.label, ...dishes.map((d) => d.name.trim()).filter(Boolean)]
+          const okay = c === 'own' ? media.length > 0 : c === 'library' ? libSel.size > 0 : !!c
+          const check = (on: boolean, set: () => void, label: string, small?: string) => (
+            <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', padding: '9px 0', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', textAlign: 'left' }}>
+              <span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{label}</b>{small && <small style={sub}>{small}</small>}</span>
+              <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+            </button>
+          )
+          const shootBody = (
+            <div style={{ fontSize: 13 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>What we shoot</div>
+              {names.map((n, i) => <div key={i} style={{ padding: '5px 0', fontWeight: 600 }}>{i + 1}. {n}</div>)}
+              <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Anything else? The patio, the team" style={{ ...input, marginTop: 6, fontSize: 13.5, padding: '9px 11px' }} />
+              <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}{c === 'shoot' && (!openShoot || !openShoot.requestId) ? ' when it is booked' : ''}: {sizeOf(names.length + alsoItems.length)}</div>
+              {c === 'newshoot' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}><span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>The day</b><small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
+              {c === 'shoot' && openShoot && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. {openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}{openShoot.used + 1 > openShoot.spots ? ` That makes it ${TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you first.` : ''}</div>}
+              {c === 'shoot' && (!openShoot || !openShoot.requestId) && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>Nothing to pay now. We book the day when the list is worth the visit, or when your monthly plan's shoot day comes, and you pay then.</div>}
+            </div>
+          )
+          const ownBody = (
+            <div>
+              {mediaStrip}
+              <button type="button" onClick={() => fileRef.current?.click()} style={{ ...chip(false), marginTop: media.length ? 8 : 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{uploading ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} {media.length ? 'Add another' : 'Add a photo or video'}</button>
+              {media[0]?.video && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>A vertical video becomes a Reel.</div>}
+            </div>
+          )
+          const libBody = (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -14px 0 -70px', padding: '0 14px 2px 70px' }}>
+              {(library ?? []).map((ph) => { const on = libSel.has(ph.id); return <button key={ph.id} type="button" onClick={() => pickLibrary(ph)} aria-label={ph.name} style={{ flex: 'none', width: 84, height: 84, borderRadius: 12, border: `2px solid ${on ? C.greenDk : 'transparent'}`, padding: 0, cursor: 'pointer', background: `center/cover url(${ph.url})`, position: 'relative' }}>{on && <span style={{ position: 'absolute', right: 5, top: 5, width: 20, height: 20, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={12} color="#fff" strokeWidth={3} /></span>}</button> })}
+            </div>
+          )
+          const rows: React.ReactNode[] = []
+          rows.push(opt('newshoot', openShoot ? 'Book another content day' : 'Book a content day', `We come shoot photos and video in one visit. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
+          const queued = !!openShoot && !openShoot.requestId
+          rows.push(opt('shoot',
+            openShoot && !queued ? `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day` : 'Add it to the next content day',
+            openShoot ? `${openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} ${queued ? 'waiting' : 'on the list already'}` : 'Nothing on the list yet'}${queued && openShoot.date ? `, planned for ${niceDate(openShoot.date).replace(/^\w+, /, '')}` : ''}` : ctx?.planShoot ? `Planned for ${niceDate(ctx.planShoot).replace(/^\w+, /, '')} with your monthly plan` : 'Nothing booked yet. It waits on the list',
+            'calendar', '#3b6fd4', false, shootBody))
+          rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
+          if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
+          rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
+          rows.push(opt('none', 'No content needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
+          return <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>{rows}</div>
+              })()
+
+              const makeUI = (() => {
+                const c = effContent
+                if (c === 'none') return null
+                const shoot = c === 'newshoot' || c === 'shoot'
+                const hasClip = media.some((m) => m.video)
+                const vSmall = shoot ? `Filmed on the shoot day · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : c === 'own' || c === 'library' ? (hasClip ? `A Reel from your clips · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : `Send ten seconds from your phone · ${dollars(ctx?.prices.video ?? null) || 'Priced'}`) : `We come film it · ${dollars(ctx?.prices.video ?? null) || 'Priced'} + $150`
+                const gSmall = `Designed for the post${a.price ? ', with the price on it' : ''} · ${dollars(ctx?.prices.graphic ?? null) || 'Priced'}`
+                const mk = (on: boolean, set: () => void, scene: Scene, hue: string, label: string, small: string, first: boolean) => (
+                  <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                    <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
+                    <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
+                    <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                  </button>
+                )
+                return (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '14px 0 6px' }}>What we make</div>
+                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>
+                      {mk(wantVideo, () => setWantVideo((v) => !v), 'reel', '#0f97a8', 'A video', vSmall, true)}
+                      {mk(wantGraphic, () => setWantGraphic((v) => !v), 'graphic', '#d99a1e', 'A graphic', gSmall, false)}
+                    </div>
+                    {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos from the day land in your library either way.</div>}
+                  </>
+                )
+              })()
+
+              const contentWord = effContent === 'newshoot' ? 'A content day' : effContent === 'shoot' ? (openShoot && openShoot.requestId ? `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day` : 'The next content day') : effContent === 'own' ? (media.length ? `${media.length} of yours` : 'My own photos') : effContent === 'library' ? `${libSel.size || ''} from my library`.trim() : effContent === 'stock' ? 'A licensed photo' : 'Words only'
               const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean, body: React.ReactNode) => { const open = detail === k; return (
                 <div key={k}>
                   <button type="button" onClick={() => setDetail(open ? null : k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
@@ -906,6 +992,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true)}
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
+                    {row('content', 'Content', contentWord, content !== null, <>{contentUI}{makeUI}</>)}
                     {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited, dateBody)}
                     {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0, tagsBody)}
                     {row('note', 'Additional comments', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim(), noteBody)}
@@ -987,100 +1074,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             </>}
-            {simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>{visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button>}
+            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' ? media.length > 0 : cc === 'library' ? libSel.size > 0 : true); const can = ready && okay; return <button type="button" onClick={() => { if (dishRows) applyContent(); next() }} disabled={!can} style={{ ...cta_, opacity: can ? 1 : .5 }}>{visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}
-
-        {step === 'content' && kind && (() => {
-          const c = content
-          const opt = (id: Content, label: string, small: string, scene: Scene, hue: string, first: boolean, body?: React.ReactNode) => (
-            <div key={id}>
-              <button type="button" onClick={() => { setContent(id); if ((id === 'newshoot' || id === 'shoot') && c !== 'newshoot' && c !== 'shoot') setWantVideo(true) }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
-                <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
-                <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${c === id ? C.greenDk : C.line}`, background: c === id ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{c === id && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
-              </button>
-              {c === id && body && <div style={{ padding: '0 14px 14px 70px' }}>{body}</div>}
-            </div>
-          )
-          const names = [a.what?.trim() || kind.label, ...dishes.map((d) => d.name.trim()).filter(Boolean)]
-          const okay = c === 'own' ? media.length > 0 : c === 'library' ? libSel.size > 0 : !!c
-          const check = (on: boolean, set: () => void, label: string, small?: string) => (
-            <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', padding: '9px 0', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', textAlign: 'left' }}>
-              <span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{label}</b>{small && <small style={sub}>{small}</small>}</span>
-              <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-            </button>
-          )
-          const shootBody = (
-            <div style={{ fontSize: 13 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>What we shoot</div>
-              {names.map((n, i) => <div key={i} style={{ padding: '5px 0', fontWeight: 600 }}>{i + 1}. {n}</div>)}
-              <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Anything else? The patio, the team" style={{ ...input, marginTop: 6, fontSize: 13.5, padding: '9px 11px' }} />
-              <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}{c === 'shoot' && (!openShoot || !openShoot.requestId) ? ' when it is booked' : ''}: {sizeOf(names.length + alsoItems.length)}</div>
-              {c === 'newshoot' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}><span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>The day</b><small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
-              {c === 'shoot' && openShoot && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. {openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}{openShoot.used + 1 > openShoot.spots ? ` That makes it ${TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you first.` : ''}</div>}
-              {c === 'shoot' && (!openShoot || !openShoot.requestId) && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>Nothing to pay now. We book the day when the list is worth the visit, or when your monthly plan's shoot day comes, and you pay then.</div>}
-            </div>
-          )
-          const ownBody = (
-            <div>
-              {mediaStrip}
-              <button type="button" onClick={() => fileRef.current?.click()} style={{ ...chip(false), marginTop: media.length ? 8 : 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{uploading ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} {media.length ? 'Add another' : 'Add a photo or video'}</button>
-              {media[0]?.video && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>A vertical video becomes a Reel.</div>}
-            </div>
-          )
-          const libBody = (
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -14px 0 -70px', padding: '0 14px 2px 70px' }}>
-              {(library ?? []).map((ph) => { const on = libSel.has(ph.id); return <button key={ph.id} type="button" onClick={() => pickLibrary(ph)} aria-label={ph.name} style={{ flex: 'none', width: 84, height: 84, borderRadius: 12, border: `2px solid ${on ? C.greenDk : 'transparent'}`, padding: 0, cursor: 'pointer', background: `center/cover url(${ph.url})`, position: 'relative' }}>{on && <span style={{ position: 'absolute', right: 5, top: 5, width: 20, height: 20, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={12} color="#fff" strokeWidth={3} /></span>}</button> })}
-            </div>
-          )
-          const rows: React.ReactNode[] = []
-          rows.push(opt('newshoot', openShoot ? 'Book another content day' : 'Book a content day', `We come shoot photos and video in one visit. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
-          const queued = !!openShoot && !openShoot.requestId
-          rows.push(opt('shoot',
-            openShoot && !queued ? `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content day` : 'Add it to the next content day',
-            openShoot ? `${openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} ${queued ? 'waiting' : 'on the list already'}` : 'Nothing on the list yet'}${queued && openShoot.date ? `, planned for ${niceDate(openShoot.date).replace(/^\w+, /, '')}` : ''}` : ctx?.planShoot ? `Planned for ${niceDate(ctx.planShoot).replace(/^\w+, /, '')} with your monthly plan` : 'Nothing booked yet. It waits on the list',
-            'calendar', '#3b6fd4', false, shootBody))
-          rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
-          if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
-          rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
-          rows.push(opt('none', 'No content needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
-          return (
-            <div style={hv(hue)}>
-              <div style={h2}>The content</div>
-              <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
-              {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
-              <button type="button" onClick={() => { if (c === 'none') { applyContent(); setStep('plans') } else next() }} disabled={!okay} style={{ ...cta_, opacity: okay ? 1 : .5 }}>{c === 'none' ? 'See my plan' : 'Next'}</button>
-            </div>
-          )
-        })()}
-
-        {step === 'make' && kind && (() => {
-                const c = content ?? 'stock'
-                const shoot = c === 'newshoot' || c === 'shoot'
-                const hasClip = media.some((m) => m.video)
-                const vSmall = shoot ? `Filmed on the shoot day · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : c === 'own' || c === 'library' ? (hasClip ? `A Reel from your clips · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : `Send ten seconds from your phone · ${dollars(ctx?.prices.video ?? null) || 'Priced'}`) : `We come film it · ${dollars(ctx?.prices.video ?? null) || 'Priced'} + $150`
-                const gSmall = `Designed for the post${a.price ? ', with the price on it' : ''} · ${dollars(ctx?.prices.graphic ?? null) || 'Priced'}`
-                const mk = (on: boolean, set: () => void, scene: Scene, hue: string, label: string, small: string, first: boolean) => (
-                  <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                    <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
-                    <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
-                    <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-                  </button>
-                )
-                return (
-                  <div style={hv(hue)}>
-                    <div style={h2}>What we make</div>
-                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
-                      {mk(wantVideo, () => setWantVideo((v) => !v), 'reel', '#0f97a8', 'A video', vSmall, true)}
-                      {mk(wantGraphic, () => setWantGraphic((v) => !v), 'graphic', '#d99a1e', 'A graphic', gSmall, false)}
-                    </div>
-                    {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos from the day land in your library either way.</div>}
-                    <button type="button" onClick={() => { applyContent(); next() }} style={cta_}>See my plan</button>
-                  </div>
-                )
-        })()}
 
         {step === 'picture' && kind && (
           <div style={hv(hue)}>
