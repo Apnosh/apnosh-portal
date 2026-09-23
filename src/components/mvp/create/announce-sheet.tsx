@@ -978,8 +978,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 150, display: 'grid', placeItems: 'center' }}>
                     <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
                   </div>
-                  <div style={sec}>Starting date</div>
-                  {dateBody}
                   <div style={sec}>Dishes</div>
                   <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
                     {Array.from({ length: count }, (_, i) => i).map((i) => { const d = getDish(i); const has = !!d.name.trim(); return (
@@ -991,6 +989,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     ) })}
                   </div>
                   {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(count); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '10px 2px 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={14} /> Add dish</button>}
+                  <div style={sec}>Starting date</div>
+                  {dateBody}
                   <div style={sec}>Content</div>
                   {contentUI}
                 </div>
