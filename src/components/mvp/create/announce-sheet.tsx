@@ -32,6 +32,7 @@ export type AnnounceKind = 'dish' | 'hours' | 'deal' | 'event' | 'hiring' | 'ope
 /* SOURCE AND PIECES (owner 2026-09-17): where the picture comes from is one choice; what gets
    made from it is a set. A shoot day holds several plans, each with its own pieces. */
 type Src = 'own' | 'shoot' | 'newshoot' | 'team' | 'words'
+type Content = 'newshoot' | 'shoot' | 'own' | 'library' | 'stock' | 'none'
 type Piece = 'graphic' | 'reel' | 'photos'
 type Tier = 'standard' | 'full' | 'works'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
@@ -381,8 +382,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [openDish, setOpenDish] = useState<number | null>(null)
   const [detail, setDetail] = useState<null | 'content' | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
-  /* THE CONTENT SCREEN (owner 2026-09-22): where the photo comes from, asked before the plan. */
-  type Content = 'newshoot' | 'shoot' | 'own' | 'library' | 'stock' | 'none'
+  const [building, setBuilding] = useState(false)
+  /* THE CONTENT CHOICE (owner 2026-09-22): where the pictures come from. It goes to the server, which shapes the plans by it. */
   const [content, setContent] = useState<Content | null>(null)
   const [library, setLibrary] = useState<{ id: string; name: string; url: string }[] | null>(null)
   const [libSel, setLibSel] = useState<Set<string>>(new Set())
@@ -660,7 +661,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
   /* hooks that need the plan helpers below run through a ref, so they sit above the early return */
   const simpleKind = !!kind && !isSlow && !kind.hidden
-  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; suggest: (budgetCents?: number | null) => Promise<void> } | null>(null)
+  const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; suggest: (budgetCents?: number | null, opt?: { content?: Content | null }) => Promise<void> } | null>(null)
   useEffect(() => { if ((step === 'words' || step === 'plans') && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the picker runs when the kind opens, and again when a photo lands */
   useEffect(() => {
@@ -671,25 +672,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the choice writes the lines the plan reads: the shoot on or off, where the graphic comes from, the Reel */
   const derivedContent: Content = src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock'
-  const applyContent = () => {
-    const c = content ?? derivedContent
-    const shoot = c === 'newshoot' || c === 'shoot'
-    const extra = dishes.map((d) => d.name.trim()).filter(Boolean)
-    const list = [...new Set([...extra, ...alsoItems])]
-    setItems((xs) => xs.map((it) => {
-      if (it.uid !== it.id) return it
-      /* HOW MUCH GETS MADE (owner 2026-09-23): a full content day makes more graphics and Reels and lands the photos;
-         the next shoot makes a little less; your own photos or a licensed one make one of each */
-      const nG = c === 'newshoot' ? 3 : c === 'shoot' ? 2 : 1
-      const nV = c === 'newshoot' ? 2 : 1
-      const nP = c === 'newshoot' ? (TIERS.find((t) => t.id === tierFor(1 + list.length))?.photos ?? 15) : c === 'shoot' && openShoot ? openShoot.photos : 15
-      if (it.id === 'photos') return shoot ? { ...it, on: true, options: { ...it.options, list, date: c === 'newshoot' ? shootDate : '', newDay: c === 'newshoot' && !!openShoot, queue: c === 'shoot' && !openShoot, reel: wantVideo, photos: nP } } : { ...it, on: false, options: { ...it.options, newDay: false, queue: false } }
-      if (it.id === 'graphic') return c === 'none' || !wantGraphic ? { ...it, on: false } : { ...it, on: true, options: { ...it.options, count: nG, from: shoot ? 'shoot' : c === 'own' || c === 'library' ? 'own' : 'stock' } }
-      if (it.id === 'video') return c === 'none' || !wantVideo ? { ...it, on: false, options: { ...it.options, count: nV } } : { ...it, on: true, options: { ...it.options, count: nV, filmed: shoot ? 'shoot' : (c === 'own' || c === 'library') && media.some((m) => m.video) ? 'clips' : c === 'own' || c === 'library' ? 'clips' : 'visit' } }
-      return it
-    }))
-  }
-  const keepLines = content === 'none' ? [] : [...(content === 'newshoot' || content === 'shoot' ? ['photos'] : []), ...(wantVideo ? ['video'] : []), ...(wantGraphic ? ['graphic'] : [])]
+  /* See my plan: the content choice goes to the server, which builds the pieces and the three plans from it */
+  const applyContent = async () => { setBuilding(true); try { await helpers.current?.suggest(undefined, { content: content ?? derivedContent }) } finally { setBuilding(false) } }
+  /* the server's sets already carry the content choice (the shoot day, the licensed graphic); nothing else is forced */
+  const keepLines: string[] = []
   const pickLibrary = (ph: { id: string; url: string }) => {
     setLibSel((st) => { const n = new Set(st); if (n.has(ph.id)) n.delete(ph.id); else n.add(ph.id); return n })
     setMedia((m) => (m.some((x) => x.url === ph.url) ? m.filter((x) => x.url !== ph.url) : [...m, { url: ph.url, preview: ph.url, video: false }]))
@@ -736,11 +722,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (it('apps')?.on) alsoSet.add('apps')
     setAlso(alsoSet); setStory(nextSrc !== 'words')
   }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
-  const suggest = async (budgetCents?: number | null) => {
+  const suggest = async (budgetCents?: number | null, opt?: { content?: Content | null }) => {
     if (!kind) return
     setSuggested(`${kind.id}:${media.length}:${a.picsrc ?? ''}`)
+    const ct = opt?.content === undefined ? null : opt.content
+    const contentFacts = ct ? { content: ct === 'newshoot' ? 'shoot' : ct === 'shoot' ? (openShoot && openShoot.requestId ? 'shoot' : 'queue') : ct === 'stock' ? 'licensed' : ct, shootBooked: !!(openShoot && openShoot.requestId), shootDate: ct === 'newshoot' ? (shootDate || null) : (openShoot?.date ?? null), shootPhotos: ct === 'newshoot' ? (TIERS.find((t) => t.id === tierFor(1 + alsoItems.length))?.photos ?? 15) : ct === 'shoot' && openShoot ? openShoot.photos : 15 } : {}
     try {
-      const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null, source: media.length ? 'mine' : (a.picsrc as 'licensed' | 'shoot' | 'none' | undefined) ?? 'none', look: a.look ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
+      const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { ...contentFacts, price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null, source: media.length ? 'mine' : (a.picsrc as 'licensed' | 'shoot' | 'none' | undefined) ?? 'none', look: a.look ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
       const j = await r.json().catch(() => ({}))
       if (r.ok && Array.isArray(j.items)) { setItems(j.items); setMe(j.me ?? null); setLadder((j.ladder as Ladder | undefined) ?? null) }
     } catch { /* the menu still works by hand */ }
@@ -1103,7 +1091,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             </>}
-            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' ? media.length > 0 : cc === 'library' ? libSel.size > 0 : true); const can = ready && okay; return dishRows && openDish !== null ? null : <button type="button" onClick={() => { if (dishRows) applyContent(); next() }} disabled={!can} style={{ ...cta_, opacity: can ? 1 : .5 }}>{visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
+            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' ? media.length > 0 : cc === 'library' ? libSel.size > 0 : true); const can = ready && okay; return dishRows && openDish !== null ? null : <button type="button" onClick={() => { if (dishRows) { void applyContent().then(() => next()) } else next() }} disabled={!can || building} style={{ ...cta_, opacity: can && !building ? 1 : .5 }}>{building ? <Loader2 size={16} className="mvp-spin" /> : null} {building ? 'Building your plans' : visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}

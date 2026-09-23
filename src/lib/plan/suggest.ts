@@ -14,7 +14,9 @@ export const MULTI: ItemId[] = ['graphic', 'video', 'print', 'creator']
 export const newUid = (id: ItemId) => `${id}-${Math.random().toString(36).slice(2, 8)}`
 export interface SuggestInput {
   kind: string
-  facts: { price?: string | null; hasMedia: boolean; hasVideo: boolean; limited?: boolean; date?: string | null; what?: string | null; source?: 'mine' | 'licensed' | 'shoot' | 'none'; look?: string | null }
+  facts: { price?: string | null; hasMedia: boolean; hasVideo: boolean; limited?: boolean; date?: string | null; what?: string | null; source?: 'mine' | 'licensed' | 'shoot' | 'none'; look?: string | null
+    /* THE CONTENT CHOICE (owner 2026-09-23): where the pictures come from decides what gets made and how much */
+    content?: 'shoot' | 'queue' | 'own' | 'library' | 'licensed' | 'none'; shootBooked?: boolean; shootDate?: string | null; shootPhotos?: number | null }
   /* the restaurant's shape: how many doors, what kind of place, what they said they want */
   profile?: { locations: number; footprint: string | null; concept: string | null; goal: string | null; canFilm: boolean | null }
   connected: { instagram: boolean; facebook: boolean; google: boolean; website: boolean; ordering: boolean; apps: boolean }
@@ -77,6 +79,21 @@ export function suggestItems(i: SuggestInput): ItemPick[] {
     let kept = false
     for (const id of ['graphic', 'boost', 'creator', 'video', 'photos', 'print'] as ItemId[]) { const x = out.find((y) => y.id === id); if (!x || !x.on || x.cents <= 0) continue; if (!kept) { kept = true; continue } x.on = false }
   }
+  /* the content choice has the last word on what gets made */
+  const ct = i.facts.content
+  if (ct) {
+    const g = out.find((x) => x.id === 'graphic')!, v = out.find((x) => x.id === 'video')!, ph = out.find((x) => x.id === 'photos')!
+    const shootish = ct === 'shoot' || ct === 'queue'
+    const nG = ct === 'shoot' ? 3 : ct === 'queue' ? 2 : 1
+    g.on = ct !== 'none'; g.options = { ...g.options, count: nG, from: shootish ? 'shoot' : ct === 'licensed' ? 'stock' : 'own' }
+    g.why = ct === 'shoot' ? `${nG} designs from the day's photos, the price on them` : ct === 'queue' ? `${nG} designs once the shoot lands` : ct === 'licensed' ? 'Designed on a licensed photo in your style' : ct === 'none' ? 'No picture, so no graphic' : 'Designed from your photo'
+    if (ct === 'shoot') { v.on = true; v.options = { ...v.options, count: 2, filmed: 'shoot' }; v.why = 'Two Reels cut from the day, no extra trip' }
+    else if (ct === 'queue') { v.on = true; v.options = { ...v.options, count: 1, filmed: 'shoot' }; v.why = 'A Reel from the shoot when it lands' }
+    else if ((ct === 'own' || ct === 'library') && i.facts.hasVideo) { v.on = true; v.options = { ...v.options, count: 1, filmed: 'clips' }; v.why = 'A Reel from the clips you added' }
+    else { v.on = false; v.options = { ...v.options, count: 1, filmed: i.creator?.nearby ? 'creator' : 'visit' } }
+    ph.on = shootish; ph.options = { ...ph.options, queue: ct === 'queue', newDay: ct === 'shoot' && !!i.facts.shootBooked, date: ct === 'shoot' ? (i.facts.shootDate ?? '') : '', photos: i.facts.shootPhotos ?? 15 }
+    ph.why = ct === 'shoot' ? 'The content day: photos and video in one visit' : ct === 'queue' ? 'On the next content day, nothing to pay now' : ph.why
+  }
   return out
 }
 export const itemsTotal = (items: ItemPick[]) => items.filter((x) => x.on).reduce((s, x) => s + x.cents, 0)
@@ -95,36 +112,46 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
   const it = (id: ItemId) => items.find((x) => x.id === id) ?? null
   const centsOf = (id: ItemId) => it(id)?.cents ?? 0
   const first = i.creator?.name.split(' ')[0] ?? 'a creator'
-  /* Just be seen: the post on their channels and the Google update. Nothing else, on purpose. */
+  const ct = i.facts.content ?? (src === 'shoot' ? 'shoot' : src === 'mine' ? 'own' : src === 'licensed' ? 'licensed' : 'none')
+  const shootish = ct === 'shoot' || ct === 'queue'
+  /* Just be seen: the post on their channels and the Google update. With a shoot chosen, the day itself rides in
+     every level (it is the content); with a licensed photo, the one graphic does, since the post needs a picture. */
   const simple: LadderSet = { post: true }
+  if (shootish) simple.photos = true
+  if (ct === 'licensed') simple.graphic = { count: 1 }
   /* Drive actions: a boost sized to how far their posts already go, the graphic unless the photo is their own,
      a table tent, the taste at the counter, a launch offer with a code the team counts */
   const low = i.usualReach == null || i.usualReach < 300
   const boostRec = isHours ? null : (isDeal || isEvent || isOpen) ? 4000 : low ? 5000 : 2000
   const recommended: LadderSet = { ...simple }
-  if (src !== 'mine' || isDeal || isEvent || isOpen) recommended.graphic = true
-  if (i.facts.hasVideo) recommended.video = { filmed: 'clips', style: 'dish', captions: true }
+  /* what gets made follows the content: a content day feeds designs and Reels; your own photo needs little; a
+     licensed photo needs the one design; no picture means words and the room only */
+  if (ct === 'shoot') { recommended.graphic = { count: 3 }; recommended.video = { count: 2, filmed: 'shoot', style: 'dish', captions: true } }
+  else if (ct === 'queue') { recommended.graphic = { count: 2 }; recommended.video = { count: 1, filmed: 'shoot', style: 'dish', captions: true } }
+  else if (ct === 'own' || ct === 'library') { if (isDeal || isEvent || isOpen) recommended.graphic = { count: 1 }; if (i.facts.hasVideo) recommended.video = { count: 1, filmed: 'clips', style: 'dish', captions: true } }
+  else if (ct === 'licensed') recommended.graphic = { count: 1 }
   if (boostRec) recommended.boost = { cents: boostRec, days: 3 }
-  if (isDish || isDeal) recommended.print = { kinds: ['tent'] }
+  if ((isDish || isDeal) && ct !== 'none') recommended.print = { kinds: ['tent'] }
   if (isDish && it('taste')) recommended.taste = true
   if (isDish || isDeal) recommended.offer = { text: isDish ? 'A free drink with it this week' : 'This week only', code: true }
   const spent = (set: LadderSet) => Object.keys(set).reduce((sum, id) => sum + (id === 'boost' ? Number((set.boost as Record<string, unknown>)?.cents ?? 0) : centsOf(id as ItemId)), 0)
   /* the budget law for the middle plan: drop the dearest extras first, never the boost */
-  if (i.budgetCents != null) for (const id of ['video', 'print', 'graphic'] as ItemId[]) { if (spent(recommended) <= i.budgetCents) break; delete recommended[id] }
+  if (i.budgetCents != null) for (const id of ['video', 'print', 'graphic'] as ItemId[]) { if (spent(recommended) <= i.budgetCents) break; if (id === 'graphic' && ct === 'licensed') continue; delete recommended[id] }
   /* The full push: the creator, a Reel, tent and poster, the bigger boost, the delivery apps, and the room
      working on reputation: ask for a review, the guest photo sign */
   const creatorOk = !!i.creator?.nearby && (isDish || isDeal || isEvent || isOpen)
   const bigger: LadderSet = { ...recommended }
   if (creatorOk) bigger.creator = { slug: i.creator!.slug, code: true, repost: true }
-  if (!isHours) bigger.video = { filmed: creatorOk ? 'creator' : src === 'shoot' ? 'shoot' : i.facts.hasVideo ? 'clips' : 'visit', style: 'dish', captions: true }
-  if (!isHours) bigger.print = { kinds: ['tent', 'poster'] }
+  if (!isHours && ct !== 'none') bigger.video = ct === 'shoot' ? { count: 2, filmed: 'shoot', style: 'dish', captions: true } : ct === 'queue' ? { count: 1, filmed: 'shoot', style: 'dish', captions: true } : { count: 1, filmed: creatorOk ? 'creator' : i.facts.hasVideo ? 'clips' : 'visit', style: 'dish', captions: true }
+  if (!isHours && ct !== 'none') bigger.print = { kinds: ['tent', 'poster'] }
+  if (ct === 'shoot') bigger.graphic = { count: 3 }; else if (ct === 'queue') bigger.graphic = { count: 2 }; else if (ct !== 'none') bigger.graphic = { count: 1 }
   if (!isHours) bigger.boost = { cents: 10000, days: 5 }
   if (isDish && i.connected.apps) bigger.apps = true
   if (it('review')) bigger.review = true
   if (it('sign')) bigger.sign = true
   if (isDish || isDeal) bigger.offer = { text: isDish ? 'A free drink with it this week' : 'This week only', code: true }
   const notes = {
-    simple: 'Your channels and Google. Free',
+    simple: ct === 'shoot' ? 'The content day, then the post and Google' : ct === 'queue' ? 'The post now, more when the shoot lands' : ct === 'licensed' ? 'A designed post and Google' : ct === 'none' ? 'Words on Google and Facebook. Free' : 'Your photo on your channels and Google. Free',
     recommended: [recommended.boost ? `a $${Math.round(Number((recommended.boost as Record<string, unknown>).cents) / 100)} boost` : '', recommended.graphic ? 'a graphic' : '', recommended.print ? 'a table tent' : '', recommended.offer ? 'a code' : '', recommended.taste ? 'a taste' : ''].filter(Boolean).join(', '),
     bigger: [bigger.creator ? `${first} visits` : '', 'a Reel', 'print', 'the bigger boost', bigger.apps ? 'the delivery apps' : '', 'reviews'].filter(Boolean).join(', '),
   }
