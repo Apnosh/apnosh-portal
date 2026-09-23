@@ -841,7 +841,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                Price and Description straight into the details, each detail a row whose answer sits on the right
                and opens one small picker. More dishes are added on the next page. */}
             {dishRows && (() => {
-              const looks = (a.look ?? '').split(',').map((x) => x.trim()).filter(Boolean)
               const fromSet = !!a.from && a.from !== isoPlus(0)
               const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean) => (
                 <button key={k} type="button" onClick={() => setDetail(k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
@@ -860,9 +859,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
                     {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited)}
-                    {row('look', 'The look', looks.length ? looks.join(', ') : 'We choose', looks.length > 0)}
                     {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0)}
-                    {row('note', 'A note for the team', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim())}
+                    {row('note', 'Additional comments', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim())}
                   </div>
                 </div>
               )
@@ -1130,7 +1128,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <div className="cr" role="dialog" aria-modal="true" onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(20,22,26,.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                 <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '24px 24px 0 0', padding: '12px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
                   <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
-                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'Starting date', look: 'The look', tags: 'Good to know', note: 'A note for the team', dish: 'Another dish' }[detail]}</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'Starting date', look: 'The look', tags: 'Good to know', note: 'Additional comments', dish: 'Another dish' }[detail]}</div>
                   {detail === 'from' && <>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0 12px' }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
                     <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
@@ -1150,7 +1148,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     const full = detail === 'look' && looks.length >= 3
                     const flip = (t: string) => { if (detail === 'look') setA((x) => { const cur = looks.includes(t) ? looks.filter((y) => y !== t) : full ? looks : [...looks, t]; return { ...x, look: cur.join(', ') } }); else setTags((st) => { const n = new Set(st); if (n.has(t)) n.delete(t); else n.add(t); return n }) }
                     return <>
-                      <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 6 }}>{detail === 'look' ? 'Goes to the designer and the photographer. Up to three.' : 'Only what you pick is ever said.'}</div>
+                      {detail === 'look' && <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 6 }}>Goes to the designer and the photographer. Up to three.</div>}
                       <div style={{ margin: '0 -4px' }}>{opts.map((t) => { const o = on(t); const dim = !o && full; return (
                         <button key={t} type="button" disabled={dim} onClick={() => flip(t)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 4px', border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', fontSize: 15, fontWeight: 600, color: dim ? C.faint : C.ink, cursor: dim ? 'default' : 'pointer' }}>
                           {t}<span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${o ? C.greenDk : C.line}`, background: o ? C.greenDk : '#fff', display: 'grid', placeItems: 'center' }}>{o && <Check size={13} color="#fff" strokeWidth={3} />}</span>
