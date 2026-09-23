@@ -371,7 +371,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const ready = required.every((f) => (a[f.key] ?? '').trim())
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
-  const [detail, setDetail] = useState<null | 'from' | 'limited' | 'look' | 'tags' | 'note' | 'dish'>(null)
+  const [detail, setDetail] = useState<null | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
   const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean, required?: boolean) => (
@@ -859,8 +859,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true, false, true)}
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
-                    {row('from', 'From when', fromSet ? niceDate(a.from ?? null) : 'Today', fromSet)}
-                    {row('limited', 'For a limited time', limited ? (a.until ? `Until ${niceDate(a.until)}` : 'Yes') : 'No', limited)}
+                    {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited)}
                     {row('look', 'The look', looks.length ? looks.join(', ') : 'We choose', looks.length > 0)}
                     {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0)}
                     {row('note', 'A note for the team', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim())}
@@ -1131,15 +1130,16 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               <div className="cr" role="dialog" aria-modal="true" onClick={() => setDetail(null)} style={{ position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(20,22,26,.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                 <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '24px 24px 0 0', padding: '12px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
                   <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 12px' }} />
-                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'From when', limited: 'For a limited time', look: 'The look', tags: 'Good to know', note: 'A note for the team', dish: 'Another dish' }[detail]}</div>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 4 }}>{{ from: 'Starting date', look: 'The look', tags: 'Good to know', note: 'A note for the team', dish: 'Another dish' }[detail]}</div>
                   {detail === 'from' && <>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0 12px' }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
                     <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                  </>}
-                  {detail === 'limited' && <>
-                    <div style={{ ...rowS, borderBottom: 0 }}><span>Only for a while<small style={sub}>The posts say so, and we stop when it ends</small></span><Switch on={limited} set={(v) => { setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} /></div>
+                    <button type="button" onClick={() => { const v = !limited; setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 0 12px', marginTop: 8, border: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                      <span><b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>For a limited time</b><small style={sub}>The posts say so, and we stop when it ends</small></span>
+                      <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${limited ? C.greenDk : C.line}`, background: limited ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{limited && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                    </button>
                     {limited && <>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '0 0 12px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
                       <input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />
                     </>}
                   </>}
