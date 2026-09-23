@@ -327,6 +327,10 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     }
     return -1
   })()
+  /* the page opens on Recommended (owner 2026-09-22): the first suggestion is close to it but not the same set,
+     so the middle plan is applied once when the ladder arrives, never again after the owner starts editing */
+  const seeded = useRef(false)
+  useEffect(() => { if (simplePlans && ladder && items.length && !seeded.current) { seeded.current = true; if (currentStep < 0) applyStep(1) } }, [ladder, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const stepLabels = stepSets.map((st, i) => (i === 0 ? 'Free' : dollars(costOf(st.on))))
   /* a step that adds nothing (the shoot was already on) is not a step */
   const stepIdx = stepSets.map((_, i) => i).filter((i, k, arr) => i === 0 || costOf(stepSets[i].on) !== costOf(stepSets[arr[k - 1]].on))
