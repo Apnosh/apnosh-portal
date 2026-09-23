@@ -35,7 +35,7 @@ type Piece = 'graphic' | 'reel' | 'photos'
 type Tier = 'standard' | 'full' | 'works'
 type Also = 'gmenu' | 'sitemenu' | 'ordering' | 'apps' | 'email' | 'print' | 'team' | 'ghours' | 'fbevent' | 'sitepage' | 'creators' | 'gattr' | 'banner' | 'pos'
 type Cta = 'order' | 'visit' | 'reserve' | 'message'
-type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'plans' | 'picture' | 'where' | 'words' | 'plan' | 'done'
+type Step = 'kind' | 'ekind' | 'night' | 'goal' | 'play' | 'facts' | 'content' | 'plans' | 'picture' | 'where' | 'words' | 'plan' | 'done'
 type GetIn = 'show' | 'rsvp' | 'tickets' | 'book'
 
 interface Field { key: string; label: string; hint?: string; optional?: boolean; kind?: 'text' | 'date' | 'long' | 'time' }
@@ -373,6 +373,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string }[]>([])
   const [detail, setDetail] = useState<null | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
+  /* THE CONTENT SCREEN (owner 2026-09-22): where the photo comes from, asked before the plan. */
+  type Content = 'newshoot' | 'shoot' | 'own' | 'library' | 'stock' | 'none'
+  const [content, setContent] = useState<Content | null>(null)
+  const [library, setLibrary] = useState<{ id: string; name: string; url: string }[] | null>(null)
+  const [libSel, setLibSel] = useState<Set<string>>(new Set())
+  const [reelOnShoot, setReelOnShoot] = useState(false)
   const isoPlus = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
   const dishRow = (label: string, v: string, set: (v: string) => void, ph: string, first?: boolean, money?: boolean, required?: boolean) => (
     <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: first ? 0 : `0.5px solid ${C.line}`, cursor: 'text' }}>
@@ -644,6 +650,30 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const helpers = useRef<{ write: (stay?: boolean) => Promise<unknown>; suggest: (budgetCents?: number | null) => Promise<void> } | null>(null)
   useEffect(() => { if ((step === 'words' || step === 'plans') && simpleKind && !social.trim() && !writing) void helpers.current?.write(true) }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the picker runs when the kind opens, and again when a photo lands */
+  useEffect(() => {
+    if (step !== 'content') return
+    if (library === null) { void fetch(`/api/dashboard/assets?clientId=${encodeURIComponent(clientId)}`).then((r) => (r.ok ? r.json() : { photos: [] })).then((j) => setLibrary((j.photos ?? []) as { id: string; name: string; url: string }[])).catch(() => setLibrary([])) }
+    if (content === null) setContent(src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock')
+  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  /* the choice writes the lines the plan reads: the shoot on or off, where the graphic comes from, the Reel */
+  const applyContent = () => {
+    const c = content ?? 'stock'
+    const shoot = c === 'newshoot' || c === 'shoot'
+    const extra = dishes.map((d) => d.name.trim()).filter(Boolean)
+    const list = [...new Set([...extra, ...alsoItems])]
+    setItems((xs) => xs.map((it) => {
+      if (it.uid !== it.id) return it
+      if (it.id === 'photos') return shoot ? { ...it, on: true, options: { ...it.options, list, date: c === 'newshoot' ? shootDate : '', newDay: c === 'newshoot' && !!openShoot, reel: reelOnShoot } } : { ...it, on: false, options: { ...it.options, newDay: false } }
+      if (it.id === 'graphic') return c === 'none' ? { ...it, on: false } : { ...it, on: it.on || c === 'stock', options: { ...it.options, from: shoot ? 'shoot' : c === 'own' || c === 'library' ? 'own' : 'stock' } }
+      if (it.id === 'video') return c === 'none' ? { ...it, on: false } : shoot && reelOnShoot ? { ...it, on: true, options: { ...it.options, filmed: 'shoot' } } : shoot ? { ...it, on: false } : it
+      return it
+    }))
+  }
+  const keepLines = content === 'newshoot' || content === 'shoot' ? ['photos', ...(reelOnShoot ? ['video'] : [])] : content === 'stock' ? ['graphic'] : []
+  const pickLibrary = (ph: { id: string; url: string }) => {
+    setLibSel((st) => { const n = new Set(st); if (n.has(ph.id)) n.delete(ph.id); else n.add(ph.id); return n })
+    setMedia((m) => (m.some((x) => x.url === ph.url) ? m.filter((x) => x.url !== ph.url) : [...m, { url: ph.url, preview: ph.url, video: false }]))
+  }
   useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}:${a.picsrc ?? ''}`) void helpers.current?.suggest() }, [step, kind?.id, media.length, a.picsrc]) // eslint-disable-line react-hooks/exhaustive-deps
   /* ── the menu ── */
   const usual = ctx?.usualReach ?? null
@@ -666,7 +696,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const p = new Set<Piece>()
     if (g?.on) p.add('graphic'); if (v?.on) p.add('reel')
     let nextSrc: Src = media.length ? 'own' : 'words'
-    if (ph?.on || v?.on && v.options.filmed === 'shoot' || g?.on && g.options.from === 'shoot') { nextSrc = openShoot ? 'shoot' : 'newshoot'; p.add('photos'); setAlsoShoot(((ph?.options.list as string[]) ?? []).join(', ')); setShootDate(String(ph?.options.date ?? '')) }
+    if (ph?.on || v?.on && v.options.filmed === 'shoot' || g?.on && g.options.from === 'shoot') { nextSrc = openShoot && !ph?.options.newDay ? 'shoot' : 'newshoot'; p.add('photos'); setAlsoShoot(((ph?.options.list as string[]) ?? []).join(', ')); setShootDate(String(ph?.options.date ?? '')) }
     else if (g?.on) nextSrc = g.options.from === 'own' && media.length ? 'own' : 'team'
     setSrc(nextSrc); setPieces(p); settle(nextSrc, p); setWithReel(!!v?.on)
     setPic(nextSrc === 'newshoot' ? 'shoot' : nextSrc === 'shoot' ? 'booked' : nextSrc === 'team' ? 'graphic' : nextSrc === 'own' ? 'own' : 'words')
@@ -711,7 +741,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* the simple road: facts, three cards, done. The old screens stay reachable from What is inside */
   const simple = !!kind && !isSlow && !kind.hidden
   const dishRows = kind?.id === 'dish' && simple
-  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
+  const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', ...(kind?.picture ? ['content' as Step] : []), 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
   const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('plans'); return } if (simple && step === 'plans' && openItem) { setOpenItem(null); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(visible[i + 1]) }
@@ -939,10 +969,70 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             </>}
-            {simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>See my plan</button>}
+            {simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>{visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button>}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}
+
+        {step === 'content' && kind && (() => {
+          const c = content
+          const opt = (id: Content, label: string, small: string, scene: Scene, hue: string, first: boolean, body?: React.ReactNode) => (
+            <div key={id}>
+              <button type="button" onClick={() => setContent(id)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
+                <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
+                <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${c === id ? C.greenDk : C.line}`, background: c === id ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{c === id && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
+              </button>
+              {c === id && body && <div style={{ padding: '0 14px 14px 70px' }}>{body}</div>}
+            </div>
+          )
+          const names = [a.what?.trim() || kind.label, ...dishes.map((d) => d.name.trim()).filter(Boolean)]
+          const okay = c === 'own' ? media.length > 0 : c === 'library' ? libSel.size > 0 : !!c
+          const check = (on: boolean, set: () => void, label: string, small?: string) => (
+            <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', padding: '9px 0', border: 0, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer', textAlign: 'left' }}>
+              <span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{label}</b>{small && <small style={sub}>{small}</small>}</span>
+              <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+            </button>
+          )
+          const shootBody = (
+            <div style={{ fontSize: 13 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>The shot list</div>
+              {names.map((n, i) => <div key={i} style={{ padding: '5px 0', fontWeight: 600 }}>{i + 1}. {n}</div>)}
+              <input value={alsoShoot} onChange={(e) => setAlsoShoot(e.target.value)} placeholder="Anything else? The patio, the team" style={{ ...input, marginTop: 6, fontSize: 13.5, padding: '9px 11px' }} />
+              <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{TIERS.find((t) => t.id === tierFor(names.length + alsoItems.length))?.label}: {sizeOf(names.length + alsoItems.length)}</div>
+              {c === 'newshoot' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}><span><b style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>The day</b><small style={sub}>Leave it and the team offers two dates</small></span><input type="date" min={plusDays(todayIso(), 3)} value={shootDate} onChange={(e) => setShootDate(e.target.value)} style={{ ...input, width: 'auto', marginTop: 0, padding: '7px 10px', fontSize: 13 }} /></div>}
+              {c === 'shoot' && openShoot && <div style={{ color: C.mute, marginTop: 8, lineHeight: 1.4 }}>{openShoot.tierLabel}, about {openShoot.photos} photos. {openShoot.attached.length ? `On the list: ${openShoot.attached.map((x) => x.label).join(', ')}. Yours makes ${openShoot.used + 1}.` : 'Nothing on the list yet. Yours is the first.'}{openShoot.used + 1 > openShoot.spots ? ` That makes it ${TIERS.find((t) => t.id === tierFor(openShoot.used + 1))?.label.toLowerCase()}. The team confirms the bigger day with you first.` : ''}</div>}
+              {check(reelOnShoot, () => setReelOnShoot((v) => !v), 'Film a Reel the same day', `${dollars(ctx?.prices.video ?? null) || 'Priced'} · clips from the day`)}
+            </div>
+          )
+          const ownBody = (
+            <div>
+              {mediaStrip}
+              <button type="button" onClick={() => fileRef.current?.click()} style={{ ...chip(false), marginTop: media.length ? 8 : 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{uploading ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} {media.length ? 'Add another' : 'Add a photo or video'}</button>
+              {media[0]?.video && <div style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, marginTop: 8 }}>A vertical video becomes a Reel.</div>}
+            </div>
+          )
+          const libBody = (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -14px 0 -70px', padding: '0 14px 2px 70px' }}>
+              {(library ?? []).map((ph) => { const on = libSel.has(ph.id); return <button key={ph.id} type="button" onClick={() => pickLibrary(ph)} aria-label={ph.name} style={{ flex: 'none', width: 84, height: 84, borderRadius: 12, border: `2px solid ${on ? C.greenDk : 'transparent'}`, padding: 0, cursor: 'pointer', background: `center/cover url(${ph.url})`, position: 'relative' }}>{on && <span style={{ position: 'absolute', right: 5, top: 5, width: 20, height: 20, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={12} color="#fff" strokeWidth={3} /></span>}</button> })}
+            </div>
+          )
+          const rows: React.ReactNode[] = []
+          rows.push(opt('newshoot', openShoot ? 'Book another shoot day' : 'Book a shoot day', `A photographer comes. From ${dollars(tierCents('standard')) || '$385'}`, 'creator', '#6a39de', true, shootBody))
+          if (openShoot) rows.push(opt('shoot', `Add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot`, openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} on the list already` : 'Nothing on the list yet', 'calendar', '#3b6fd4', false, shootBody))
+          rows.push(opt('own', 'My own photo or video', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
+          if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
+          rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
+          rows.push(opt('none', 'No photo needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
+          return (
+            <div style={hv(hue)}>
+              <div style={h2}>The photo</div>
+              <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
+              {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
+              <button type="button" onClick={() => { applyContent(); next() }} disabled={!okay} style={{ ...cta_, opacity: okay ? 1 : .5 }}>See my plan</button>
+            </div>
+          )
+        })()}
 
         {step === 'picture' && kind && (
           <div style={hv(hue)}>
@@ -1182,7 +1272,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 {dishes.length < 5 && <button type="button" onClick={() => setDetail('dish')} style={{ width: '100%', height: 46, marginTop: 10, borderRadius: 18, border: `1.5px dashed ${hexa(C.greenDk, 0.5)}`, background: 'none', font: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={15} /> Another dish</button>}
               </div>
             )}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} preview={{ name: a.what?.trim() || kind.label, price: a.price?.trim() || null, caption: social, image: media[0] && !media[0].video ? media[0].preview : null, video: !!media[0]?.video, onWords: () => setStep('words'), onPhoto: () => fileRef.current?.click() }} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={go} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
 

@@ -79,13 +79,18 @@ const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
   print: { kinds: ['tent'] },
   creator: { code: true, repost: true },
 }
-export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach }: {
+export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
   /* the calm plan screen (owner 2026-09-18): a small preview, a five-step how-far, date tiles */
   preview?: { name: string; price: string | null; caption: string; image: string | null; video?: boolean; onWords: () => void; onPhoto: () => void }
   dates?: { posts: string | null; ready: string | null; results: string | null }
   usualReach?: number | null
+  /* THREE PLANS (owner 2026-09-22): Keep it simple, Recommended, Go bigger, and a text link to build your own.
+     No preview, no ladder, no line rows until they build their own. `keep` holds the lines the content screen
+     chose (the shoot, the licensed graphic) in every plan. */
+  simplePlans?: boolean
+  keep?: string[]
 }) {
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [fits, setFits] = useState<Fit[]>([])
@@ -276,12 +281,13 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     const usualOn: Record<string, Record<string, unknown> | true> = {}
     for (const it of items) if (it.on && it.uid === it.id) usualOn[it.id] = true
     const free: Record<string, Record<string, unknown> | true> = { post: true, taste: true, review: true, sign: true }
+    for (const k of keep ?? []) free[k] = true
     const s1 = { ...free, ...usualOn }
     const s2 = { ...s1, ...(cn ? { creator: { slug: cn.slug } } : { boost: { cents: 10000 } }) }
     const s3 = { ...s2, video: { filmed: cn ? 'creator' : 'clips', count: 1, style: 'dish', captions: true }, print: { kinds: ['poster'] } }
     const s4 = { ...s3, photos: { list: [], reel: false }, boost: { cents: 10000 } }
     return [{ label: 'Free', note: 'Your channels only', on: free }, { label: '', note: 'The usual pick', on: s1 }, { label: '', note: cn ? `${cn.name.split(' ')[0]} posts it` : 'A bigger boost', on: s2 }, { label: '', note: 'A Reel and a poster', on: s3 }, { label: '', note: 'A shoot day too', on: s4 }]
-  }, [items.length, cn?.slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items.length, cn?.slug, (keep ?? []).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
   const costOf = (set: Record<string, Record<string, unknown> | true>) => items.filter((x) => x.uid === x.id).reduce((sum, it) => { const v = set[it.id]; if (!v) return sum; const opt = v === true ? baseOpts(it) : { ...baseOpts(it), ...v }; return sum + itemCents({ ...it, on: true, options: opt }, prices, profile) }, 0)
   const applyStep = (n: number) => {
     const set = stepSets[n].on
@@ -332,7 +338,36 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
 
   return (
     <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
-      {mode === 'plan' ? <>
+      {mode === 'plan' && simplePlans ? <>
+        {(() => {
+          /* Go bigger is the first step that really adds something past the recommended one */
+          const c1 = costOf(stepSets[1].on)
+          const bigger = [2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > c1) ?? 2
+          const three = [0, 1, bigger]
+          const inside = (set: Record<string, Record<string, unknown> | true>) => { const names = Object.keys(set).filter((id) => META[id as ItemId] && META[id as ItemId].group !== 'inside').map((id) => (id === 'creator' && cn ? `${cn.name.split(' ')[0]} posts it` : META[id as ItemId].name.toLowerCase())); if (Object.keys(set).some((id) => META[id as ItemId]?.group === 'inside')) names.push('in the restaurant'); return names.join(', ') }
+          const titles: Record<number, string> = { 0: 'Keep it simple', 1: 'Recommended', [bigger]: 'Go bigger' }
+          const chosen = currentStep
+          return (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-.01em', marginBottom: 10 }}>Pick a plan</div>
+              {three.map((i) => { const on = chosen === i; const cents = costOf(stepSets[i].on); return (
+                <button key={i} type="button" onClick={() => applyStep(i)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '13px 14px', marginTop: 8, borderRadius: 18, border: `1.5px solid ${on ? C.ink : C.line}`, boxShadow: on ? `inset 0 0 0 1px ${C.ink}` : 'none', background: '#fff', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ display: 'block', fontSize: 15 }}>{titles[i]}{i === 1 && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk }}>Our pick</span>}</b>
+                    <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>{inside(stepSets[i].on)}</small>
+                  </span>
+                  <b style={{ fontSize: 15, whiteSpace: 'nowrap', color: cents ? C.ink : C.greenDk }}>{cents ? dollars(cents) : 'Free'}</b>
+                  <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
+                </button>
+              ) })}
+              {chosen < 0 && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>Your own plan: {picked.map((it) => nameOf(it).toLowerCase()).join(', ') || 'nothing yet'}. {dollars(total) || 'Free'}.</div>}
+              <div style={{ textAlign: 'center', marginTop: 14 }}><button type="button" onClick={() => setMode('add')} style={{ font: 'inherit', fontSize: 13.5, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '6px 10px', cursor: 'pointer' }}>I'll build my own</button></div>
+              {reach != null && <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 4 }}>About {round2(reach).toLocaleString()} people{usualReach ? `. Your posts usually reach about ${usualReach.toLocaleString()}` : ''}</div>}
+            </div>
+          )
+        })()}
+        {dates && <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>{[['Posts', dates.posts], ['Graphic ready', items.some((x) => x.on && x.id === 'graphic') ? dates.ready : '—'], ['Results', dates.results]].map(([k, v]) => <div key={k} style={{ flex: 1, background: '#f6f6f8', borderRadius: 12, padding: '8px 10px', fontSize: 11.5, color: C.mute }}>{k}<b style={{ display: 'block', color: C.ink, fontSize: 13, marginTop: 2 }}>{v ? (v.length === 10 ? nice(v).replace(/^(\w+), /, '$1 ') : v) : '—'}</b></div>)}</div>}
+      </> : mode === 'plan' ? <>
         {preview && (
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 10, border: `0.5px solid ${C.line}`, borderRadius: 16 }}>
             <button type="button" onClick={preview.onPhoto} aria-label="Change the photo" style={{ width: 96, height: 96, borderRadius: 12, flex: 'none', position: 'relative', border: 0, padding: 0, cursor: 'pointer', overflow: 'hidden', background: preview.image ? `center/cover url(${preview.image})` : 'linear-gradient(160deg,#f3e3c8,#c98a3a)' }}>
