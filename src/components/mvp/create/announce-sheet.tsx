@@ -960,24 +960,27 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 const i = openDish; const d = getDish(i)
                 const dTagsBody = <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setDish(i, { tags: d.tags.includes(t) ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={chip(d.tags.includes(t))}>{t}</button>)}</div>
                 const dNoteBody = <textarea rows={3} autoFocus value={d.note} onChange={(e) => setDish(i, { note: e.target.value })} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.45 }} />
+                const mine = media.filter((m) => m.dish === i)
+                const pick = () => { uploadFor.current = i; fileRef.current?.click() }
                 return (
                   <div>
-                    <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 120, display: 'grid', placeItems: 'center' }}>
-                      <span style={{ width: 104 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
-                    </div>
+                    {/* THE UPLOAD (owner 2026-09-22): the dish's photos and videos, several at once, in place of the tile */}
+                    {mine.length === 0 ? (
+                      <button type="button" onClick={pick} style={{ width: '100%', height: 150, marginTop: 4, borderRadius: 22, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', fontFamily: 'inherit', color: C.ink }}>
+                        {uploading && uploadFor.current === i ? <Loader2 size={24} className="mvp-spin" color={C.greenDk} /> : <span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span>}
+                        <b style={{ fontSize: 14 }}>Add photos or videos</b>
+                        <small style={{ fontSize: 12, color: C.mute }}>Optional. As many as you like</small>
+                      </button>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
+                        {mine.map((m) => <span key={m.url} style={{ position: 'relative', aspectRatio: '1', borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', left: 8, bottom: 8, color: '#fff', fontSize: 11, fontWeight: 800 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((y) => y.url !== m.url))} style={{ position: 'absolute', right: 6, top: 6, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(255,255,255,.92)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={12} /></button></span>)}
+                        {media.length < 10 && <button type="button" onClick={pick} style={{ aspectRatio: '1', borderRadius: 14, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontFamily: 'inherit', color: C.greenDk, fontSize: 12, fontWeight: 700 }}>{uploading && uploadFor.current === i ? <Loader2 size={16} className="mvp-spin" /> : <Plus size={18} />}Add more</button>}
+                      </div>
+                    )}
                     <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
                       {dishRow('Name', d.name, (v) => setDish(i, { name: v }), 'Pork belly bánh mì', true)}
                       {dishRow('Price', d.price, (v) => setDish(i, { price: v }), '14', false, true)}
                       {dishRow('Description', d.line, (v) => setDish(i, { line: v }), 'A line about it')}
-                      {(() => { const mine = media.filter((m) => m.dish === i); return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: `0.5px solid ${C.line}` }}>
-                          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>Photo<small style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginLeft: 6 }}>optional</small></span>
-                          <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, overflowX: 'auto' }}>
-                            {mine.map((m) => <span key={m.url} style={{ position: 'relative', flex: 'none', width: 44, height: 44, borderRadius: 10, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}><button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((y) => y.url !== m.url))} style={{ position: 'absolute', right: 2, top: 2, width: 16, height: 16, borderRadius: 99, border: 0, background: 'rgba(255,255,255,.92)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={9} /></button></span>)}
-                            {mine.length < 4 && <button type="button" onClick={() => { uploadFor.current = i; fileRef.current?.click() }} style={{ flex: 'none', height: 32, padding: '0 11px', borderRadius: 99, border: `1.5px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>{uploading && uploadFor.current === i ? <Loader2 size={12} className="mvp-spin" /> : <Plus size={12} />} {mine.length ? 'Add' : 'Add a photo'}</button>}
-                          </span>
-                        </div>
-                      ) })()}
                       {row('tags', 'Good to know', d.tags.length ? d.tags.join(', ') : 'Nothing to add', d.tags.length > 0, dTagsBody)}
                       {row('note', 'Additional comments', d.note.trim() ? d.note : 'None', !!d.note.trim(), dNoteBody)}
                     </div>
