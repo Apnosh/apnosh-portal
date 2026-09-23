@@ -915,31 +915,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           return <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>{rows}</div>
               })()
 
-              const makeUI = (() => {
-                const c = effContent
-                if (c === 'none') return null
-                const shoot = c === 'newshoot' || c === 'shoot'
-                const hasClip = media.some((m) => m.video)
-                const vSmall = shoot ? `Filmed on the shoot day · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : c === 'own' || c === 'library' ? (hasClip ? `A Reel from your clips · ${dollars(ctx?.prices.video ?? null) || 'Priced'}` : `Send ten seconds from your phone · ${dollars(ctx?.prices.video ?? null) || 'Priced'}`) : `We come film it · ${dollars(ctx?.prices.video ?? null) || 'Priced'} + $150`
-                const gSmall = `Designed for the post${a.price ? ', with the price on it' : ''} · ${dollars(ctx?.prices.graphic ?? null) || 'Priced'}`
-                const mk = (on: boolean, set: () => void, scene: Scene, hue: string, label: string, small: string, first: boolean) => (
-                  <button type="button" onClick={set} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', border: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                    <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
-                    <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
-                    <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-                  </button>
-                )
-                return (
-                  <>
-                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '14px 0 6px' }}>What we make</div>
-                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>
-                      {mk(wantVideo, () => setWantVideo((v) => !v), 'reel', '#0f97a8', 'A video', vSmall, true)}
-                      {mk(wantGraphic, () => setWantGraphic((v) => !v), 'graphic', '#d99a1e', 'A graphic', gSmall, false)}
-                    </div>
-                    {shoot && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8 }}>The edited photos from the day land in your library either way.</div>}
-                  </>
-                )
-              })()
 
               const contentWord = effContent === 'newshoot' ? 'Full content shoot' : effContent === 'shoot' ? (openShoot && openShoot.requestId ? `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content shoot` : 'The next content shoot') : effContent === 'own' ? (media.length ? `${media.length} of yours` : 'My own photos') : effContent === 'library' ? `${libSel.size || ''} from my library`.trim() : effContent === 'stock' ? 'A licensed photo' : 'Words only'
               const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean, body: React.ReactNode) => { const open = detail === k; return (
@@ -973,7 +948,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                     {dishRow('Name', a.what ?? '', (v) => setA((x) => ({ ...x, what: v })), 'Pork belly bánh mì', true)}
                     {dishRow('Price', a.price ?? '', (v) => setA((x) => ({ ...x, price: v })), '14', false, true)}
                     {dishRow('Description', a.line ?? '', (v) => setA((x) => ({ ...x, line: v })), 'A line about it')}
-                    {row('content', 'Content', contentWord, content !== null, <>{contentUI}{makeUI}</>)}
+                    {row('content', 'Content', contentWord, content !== null, contentUI)}
                     {row('from', 'Starting date', `${fromSet ? niceDate(a.from ?? null) : 'Today'}${limited && a.until ? `, until ${niceDate(a.until)}` : ''}`, fromSet || limited, dateBody)}
                     {row('tags', 'Good to know', tags.size ? [...tags].join(', ') : 'Nothing to add', tags.size > 0, tagsBody)}
                     {row('note', 'Additional comments', (a.note ?? '').trim() ? (a.note ?? '') : 'None', !!(a.note ?? '').trim(), noteBody)}
