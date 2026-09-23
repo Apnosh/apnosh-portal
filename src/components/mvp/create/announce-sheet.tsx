@@ -887,16 +887,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               ) }
               const dateBody = (
                 <>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>{([['Today', 0], ['Tomorrow', 1], ['In a week', 7]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, from: isoPlus(d) }))} style={chip((a.from ?? isoPlus(0)) === isoPlus(d))}>{l}</button>)}</div>
                   <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                  <button type="button" onClick={() => { const v = !limited; setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: isoPlus(14) })) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 0 10px', marginTop: 4, border: 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                  <button type="button" onClick={() => { const v = !limited; setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: plusDays(a.from ?? isoPlus(0), 7) })) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 0 10px', marginTop: 4, border: 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
                     <span><b style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink }}>For a limited time</b><small style={sub}>The posts say so, and we stop when it ends</small></span>
                     <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${limited ? C.greenDk : C.line}`, background: limited ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{limited && <Check size={13} color="#fff" strokeWidth={3} />}</span>
                   </button>
-                  {limited && <>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '0 0 10px' }}>{([['One week', 7], ['Two weeks', 14], ['A month', 30]] as const).map(([l, d]) => <button key={l} type="button" onClick={() => setA((x) => ({ ...x, until: isoPlus(d) }))} style={chip(a.until === isoPlus(d))}>{l}</button>)}</div>
-                    <input type="date" value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                  </>}
+                  {limited && <input type="date" min={a.from ?? isoPlus(0)} value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />}
                 </>
               )
               const tagsBody = <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setTags((st) => { const n = new Set(st); if (n.has(t)) n.delete(t); else n.add(t); return n })} style={chip(tags.has(t))}>{t}</button>)}</div>
