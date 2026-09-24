@@ -8,7 +8,7 @@
  * bar is the cart: how many things, how many people, the total.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronRight, Loader2, Plus } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Loader2, Plus, Minus, Trash2 } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { MULTI, newUid, type ItemId, type ItemPick, type Ladder } from '@/lib/plan/suggest'
@@ -359,75 +359,78 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
       {mode === 'plan' && simplePlans ? <>
         {(() => {
-          /* THE LANES (owner 2026-09-23, "go with A, no people, no animation"): the pill picks a level, and the plan
-             is told by the funnel's five stages, each a lane in its colour holding the pieces that serve it, with
-             the day or price under each and one small fact where it earns it. A stage the plan does not work on
-             stays as a dim lane with two dotted empty discs. Above, the price and the honest reach. */
+          /* THE CART (owner 2026-09-23, "the Airbnb lens, only what this plan includes, like a DoorDash order"):
+             the pill picks a level; below it, what the plan includes as cart rows grouped by stage, each with its
+             drawing, name, one line, price, a quantity stepper where counts make sense, Change or Swap, and a
+             remove; then Add to your plan for the pieces not in it; then the subtotal and Continue. */
           const three = ladder ? [0, 1, 2] : [0, 1, ([2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > costOf(stepSets[1].on)) ?? 2)]
           const titles: Record<number, string> = { [three[0]]: 'Just be seen', [three[1]]: 'Drive actions', [three[2]]: 'The full push' }
           const chosen = currentStep
           const pos = three.indexOf(chosen)
           const first = cn ? cn.name.split(' ')[0] : (profile?.name.split(' ')[0] ?? null)
-          const on = (id: ItemId) => items.find((x) => x.on && x.id === id) ?? null
-          const cents = (id: ItemId) => items.filter((x) => x.on && x.id === id).reduce((sum, it) => sum + itemCents(it, prices, profile), 0)
           const day = (iso: string | null | undefined) => (iso && iso.length === 10 ? nice(iso).replace(/^(\w+), /, '$1 ') : iso ?? '')
-          const money = (id: ItemId) => (cents(id) ? dollars(cents(id)) : 'Free')
-          const short = (n: number) => (n >= 1000 ? `${Math.round(n / 100) / 10}k`.replace('.0k', 'k') : String(n))
-          type Piece = { key: string; scene: Scene; hue: string; label: string; under: string; fact?: string }
-          const push = (lane: number, pc: Piece) => lanes[lane].pieces.push(pc)
-          const lanes: { name: string; hue: string; tile: string; pieces: Piece[] }[] = [
-            { name: 'Get seen', hue: '#2e9a78', tile: '#e3f3ee', pieces: [] },
-            { name: 'Create interest', hue: '#3b6fd4', tile: '#e6eef9', pieces: [] },
-            { name: 'Drive actions', hue: '#6a39de', tile: '#ece7fb', pieces: [] },
-            { name: 'Get orders', hue: '#d99a1e', tile: '#fbf3e3', pieces: [] },
-            { name: 'Build reputation', hue: '#0f97a8', tile: '#e2f4f6', pieces: [] },
+          const STAGES: { name: string; hue: string; ids: ItemId[] }[] = [
+            { name: 'Get seen', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] },
+            { name: 'Create interest', hue: '#3b6fd4', ids: ['graphic', 'video', 'photos', 'print'] },
+            { name: 'Drive actions', hue: '#6a39de', ids: ['taste', 'offer'] },
+            { name: 'Get orders', hue: '#d99a1e', ids: ['apps'] },
+            { name: 'Build reputation', hue: '#0f97a8', ids: ['review', 'sign'] },
           ]
-          const postDay = day(dates?.posts)
-          if (on('post')) { push(0, { key: 'post', scene: 'post', hue: '#2e9a78', label: 'Post', under: postDay || 'Free', fact: platformsWord ? platformsWord.split(', ').map((w) => ({ Instagram: 'IG', Facebook: 'FB', TikTok: 'TT' } as Record<string, string>)[w] ?? w).join(' · ') : undefined }); push(0, { key: 'google', scene: 'google', hue: '#2e9a78', label: 'Google', under: postDay || 'Free' }) }
-          const b = on('boost'); if (b) push(0, { key: 'boost', scene: 'boost', hue: '#6a39de', label: 'Boost', under: money('boost'), fact: reachParts?.measured != null ? `${short(reachParts.measured)} → ${short(reachParts.boost)}` : `${(Number(b.options.days) || 3)} days` })
-          const c = on('creator'); if (c) push(0, { key: 'creator', scene: 'creator', hue: '#0f97a8', label: first ?? 'Creator', under: c.options.date ? day(String(c.options.date)) : money('creator'), fact: reachParts?.creator ? `${short(reachParts.creator)} nearby` : undefined })
-          const g = on('graphic'); if (g) { const n = Math.max(1, Number(g.options.count) || 1); push(1, { key: 'graphic', scene: 'graphic', hue: '#d99a1e', label: n > 1 ? `${n} graphics` : 'Graphic', under: money('graphic'), fact: g.options.priceOn !== false ? 'price on it' : undefined }) }
-          const v = on('video'); if (v) { const n = Math.max(1, Number(v.options.count) || 1); push(1, { key: 'video', scene: 'reel', hue: '#0f97a8', label: n > 1 ? `${n} Reels` : 'Reel', under: money('video'), fact: v.options.filmed === 'shoot' ? 'from the shoot' : v.options.filmed === 'clips' ? 'your clips' : v.options.filmed === 'creator' ? `${first ?? 'creator'} films` : undefined }) }
-          const ph = on('photos'); if (ph) { const n = Number(ph.options.photos) || 15; push(1, { key: 'photos', scene: 'photos', hue: '#6a39de', label: `${n} photos`, under: ph.options.queue ? 'next shoot' : money('photos'), fact: 'your library' }) }
-          const pr = on('print'); if (pr) { const kinds = (pr.options.kinds as string[] | undefined) ?? ['tent']; if (kinds.includes('tent')) push(1, { key: 'tent', scene: 'print', hue: '#d99a1e', label: 'Tent', under: money('print') }); if (kinds.includes('poster')) push(1, { key: 'poster', scene: 'print', hue: '#d99a1e', label: 'Poster', under: kinds.includes('tent') ? 'with it' : money('print') }) }
-          if (on('taste')) push(2, { key: 'taste', scene: 'dish', hue: '#2e9a78', label: 'Taste', under: day(startDay) || 'Free', fact: 'at the counter' })
-          if (orderButton && on('post')) push(2, { key: 'order', scene: 'order', hue: '#6a39de', label: 'Order button', under: postDay || 'Free' })
-          const o = on('offer'); if (o) { push(2, { key: 'offer', scene: 'offer', hue: '#3b6fd4', label: 'Offer', under: postDay || 'Free', fact: o.options.code ? 'a code' : undefined }); push(3, { key: 'code', scene: 'offer', hue: '#d99a1e', label: 'Code used', under: 'counted' }) }
-          if (on('apps')) push(3, { key: 'apps', scene: 'apps', hue: '#c92d32', label: 'Delivery apps', under: 'two weeks' })
-          if (on('review')) push(4, { key: 'review', scene: 'review', hue: '#d99a1e', label: 'Reviews', under: 'two weeks', fact: 'with the check' })
-          if (on('sign')) push(4, { key: 'sign', scene: 'story', hue: '#c2418f', label: 'Photo sign', under: 'Free' })
-          /* THE STAGE PAGE (owner 2026-09-23, "it should just go to their own page"): one stage at a time, its
-             pieces listed, the ones on with a check and their options, the ones off with Add and a Recommended tag */
-          if (openLane !== null && lanes[openLane]) {
-            const ln = lanes[openLane]
-            const CAT: ItemId[][] = [['post', 'boost', 'creator'], ['graphic', 'video', 'print', 'photos'], ['taste', 'offer'], ['apps', 'offer'], ['review', 'sign']]
-            const WHAT = ['Post it, boost it, have a creator post it', 'The graphic, the Reel, the print, the photos', 'The taste, the offer, the Order button', 'The delivery apps, the code at the counter', 'Reviews and guest photos']
-            return (
-              <div style={{ marginTop: 2 }}>
-                <button type="button" onClick={() => setOpenLane(null)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: C.mute, border: 0, background: 'none', padding: '4px 0', cursor: 'pointer' }}><ArrowLeft size={14} /> All stages</button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 99, background: ln.hue, flex: 'none' }} />
-                  <b style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 700, letterSpacing: '-.02em' }}>{ln.name}</b>
-                </div>
-                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4 }}>{WHAT[openLane]}</div>
-                <div style={{ marginTop: 10, borderRadius: 18, background: ln.tile, padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: '10px 6px', minHeight: 60 }}>
-                  {ln.pieces.length === 0 && <span style={{ fontSize: 12.5, color: C.mute, alignSelf: 'center' }}>Nothing here yet. Add from the list below.</span>}
-                  {ln.pieces.map((pc) => (
-                    <div key={pc.key} style={{ flex: 'none', width: 74, textAlign: 'center' }}>
-                      <span style={{ width: 44, height: 44, borderRadius: 99, display: 'grid', placeItems: 'center', margin: '0 auto', background: '#fff', ['--c2' as string]: pc.hue }}><span style={{ width: 28 }}><Drawing spec={{ scene: pc.scene }} name="" rating="" t={(x) => x} /></span></span>
-                      <b style={{ display: 'block', fontSize: 11.5, fontWeight: 700, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.label}</b>
-                      <small style={{ display: 'block', fontSize: 10.5, color: C.mute, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.under}</small>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 6 }}>
-                  {Array.from(new Set(CAT[openLane])).map((id) => { const lines = items.filter((x) => x.id === id); const it = lines.find((x) => x.uid === id) ?? lines[0]; if (!it) return null; const rec = !it.on && ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : undefined; return <AddRow key={id} it={it} tag={rec} /> })}
-                  {openLane === 2 && orderButton && <div style={{ fontSize: 12, color: C.mute, padding: '10px 0 4px' }}>The Order button rides on the post, from your ordering link.</div>}
-                </div>
-                <button type="button" onClick={() => setOpenLane(null)} style={{ width: '100%', height: 48, marginTop: 16, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, color: C.ink, cursor: 'pointer' }}>Done</button>
-              </div>
-            )
+          const COUNTED: ItemId[] = ['graphic', 'video']
+          const line = (it: ItemPick) => {
+            const o = it.options; const fallback = META[it.id].line
+            if (it.id === 'post') return `${platformsWord || 'Your channels'} · ${day(dates?.posts) || bestHourWord}`
+            if (it.id === 'boost') return `$${Math.round((Number(o.cents) || 2000) / 100)} · ${Number(o.days) || 3} days · about ${((Math.round((Number(o.cents) || 2000) / 100)) * 150).toLocaleString()} nearby, est.`
+            if (it.id === 'creator') return `${profile?.name ?? cn?.name ?? 'A local creator'}${o.date ? ` · ${day(String(o.date))}` : ''}`
+            if (it.id === 'graphic') return `${o.priceOn !== false ? 'Price on it · ' : ''}${o.from === 'shoot' ? 'from the shoot' : o.from === 'stock' ? 'licensed photo' : 'your photo'} · ready ${day(dates?.ready) || 'in 2 days'}`
+            if (it.id === 'video') return `${o.filmed === 'shoot' ? 'From the shoot' : o.filmed === 'clips' ? 'From your clips' : o.filmed === 'creator' ? `${first ?? 'The creator'} films it` : 'We come film it'}`
+            if (it.id === 'photos') return o.queue ? 'On the next content shoot' : `${Number(o.photos) || 15} photos${o.date ? ` · ${day(String(o.date))}` : ''}`
+            if (it.id === 'print') { const k = (o.kinds as string[] | undefined) ?? ['tent']; return k.map((x) => (x === 'tent' ? 'Table tent' : 'Window poster')).join(' + ') }
+            if (it.id === 'taste') return `At the counter · from ${day(startDay) || 'the start'}`
+            if (it.id === 'offer') return `A code the team counts${o.text ? ` · ${String(o.text)}` : ''}`
+            if (it.id === 'apps') return 'Featured on the item, two weeks'
+            if (it.id === 'review') return 'With the check, two weeks'
+            if (it.id === 'sign') return 'Post it, tag us'
+            return fallback
           }
+          const setCount = (uid: string, n: number) => { if (n <= 0) { toggle(uid); return } patchU(uid, (it) => ({ options: { ...it.options, count: Math.min(6, n) } })) }
+          const onRows = STAGES.map((st) => ({ st, rows: items.filter((x) => x.on && st.ids.includes(x.id)) })).filter((g) => g.rows.length)
+          const offRows = STAGES.map((st) => ({ st, rows: st.ids.map((id) => { const lines = items.filter((x) => x.id === id); return lines.find((x) => x.uid === id) ?? lines[0] }).filter((x): x is ItemPick => !!x && !x.on) })).filter((g) => g.rows.length)
+          const recTag = (id: ItemId) => (ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : null)
+          const stepper = (it: ItemPick) => { const n = Math.max(1, Number(it.options.count) || 1); return (
+            <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 99, height: 32, overflow: 'hidden' }}>
+              <button type="button" aria-label={n === 1 ? 'Remove' : 'One fewer'} onClick={() => setCount(it.uid, n - 1)} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}>{n === 1 ? <Trash2 size={13} /> : <Minus size={13} />}</button>
+              <b style={{ minWidth: 18, textAlign: 'center', fontSize: 13.5 }}>{n}</b>
+              <button type="button" aria-label="One more" onClick={() => setCount(it.uid, n + 1)} disabled={n >= 6} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: n >= 6 ? C.faint : C.ink }}><Plus size={13} /></button>
+            </span>
+          ) }
+          const cartRow = (it: ItemPick) => { const m = META[it.id]; const cents = itemCents(it, prices, profile); return (
+            <div key={it.uid} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 0', borderTop: `0.5px solid ${C.line}` }}>
+              <Thumb it={it} size={48} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <b style={{ fontSize: 14.5, lineHeight: 1.25 }}>{nameOf(it)}{COUNTED.includes(it.id) && Number(it.options.count) > 1 ? ` ×${it.options.count}` : ''}</b>
+                  <b style={{ fontSize: 14, whiteSpace: 'nowrap', color: cents ? C.ink : C.greenDk }}>{cents ? dollars(cents) : 'Free'}</b>
+                </div>
+                <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.35 }}>{line(it)}</small>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  {COUNTED.includes(it.id) ? stepper(it) : <button type="button" aria-label="Remove" onClick={() => (it.uid === it.id ? toggle(it.uid) : remove(it.uid))} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Trash2 size={13} /></button>}
+                  {m.hasOptions && <button type="button" onClick={() => setOpen(it.uid)} style={{ height: 32, padding: '0 12px', borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.ink, cursor: 'pointer' }}>{it.id === 'creator' ? 'Swap' : 'Change'}</button>}
+                </div>
+              </div>
+            </div>
+          ) }
+          const addRow = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; const tag = recTag(it.id); return (
+            <div key={it.uid} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: `0.5px solid ${C.line}` }}>
+              <Thumb it={it} size={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <b style={{ display: 'block', fontSize: 14 }}>{m.name}{tag && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 6px', verticalAlign: 'middle' }}>{tag}</span>}</b>
+                <small style={{ display: 'block', fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.line}</small>
+              </div>
+              <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</b>
+              <button type="button" aria-label="Add" onClick={() => (m.hasOptions && !free ? setOpen(it.uid) : toggle(it.uid))} style={{ width: 34, height: 34, borderRadius: 99, border: `1.5px solid ${C.ink}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink, flex: 'none' }}><Plus size={15} /></button>
+            </div>
+          ) }
           return (
             <div style={{ marginTop: 2 }}>
               <div style={{ position: 'relative', display: 'flex', background: '#f6f6f8', borderRadius: 99, padding: 3 }}>
@@ -435,55 +438,36 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                 {three.map((i, k) => (
                   <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: 40, borderRadius: 99, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', color: pos === k ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
                     <b style={{ fontSize: 13, fontWeight: 700 }}>{titles[i]}</b>
-                    {k === 1 && <small style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.08em', color: C.greenDk }}>OUR PICK</small>}
+                    <small style={{ fontSize: 9.5, fontWeight: 700, color: pos === k ? C.mute : C.faint }}>{k === 1 && pos !== 1 ? 'Our pick' : (costOf(stepSets[i].on) ? dollars(costOf(stepSets[i].on)) : 'Free')}</small>
                   </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 14 }}>
-                <b style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1, color: total ? C.ink : C.greenDk }}>{total ? dollars(total) : 'Free'}</b>
+              {pos < 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Your own mix. <button type="button" onClick={() => applyStep(three[1])} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Back to our pick</button></div>}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 16 }}>
+                <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>What this plan includes</b>
+                <small style={{ fontSize: 12.5, color: C.mute }}>{items.filter((x) => x.on).length} pieces</small>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {lanes.map((ln, li) => { const empty = ln.pieces.length === 0; return (
-                  <div key={ln.name} style={{ borderRadius: 18, background: empty ? '#f6f6f8' : ln.tile }}>
-                  <div role="button" tabIndex={0} onClick={() => setOpenLane(li)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenLane(li) } }} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 78, padding: '10px 12px', cursor: 'pointer' }}>
-                    <div style={{ width: 84, flex: 'none' }}>
-                      <span style={{ display: 'block', width: 8, height: 8, borderRadius: 99, background: empty ? 'transparent' : ln.hue, border: empty ? `1.5px solid ${C.faint}` : 0, marginBottom: 6 }} />
-                      <b style={{ display: 'block', fontSize: 12.5, fontWeight: 700, lineHeight: 1.2, color: empty ? C.faint : C.ink }}>{ln.name}</b>
+              {onRows.map(({ st, rows }) => (
+                <div key={st.name} style={{ marginTop: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '10px 0 2px' }}><span style={{ width: 8, height: 8, borderRadius: 99, background: st.hue }} />{st.name}</div>
+                  {rows.map(cartRow)}
+                </div>
+              ))}
+              {offRows.length > 0 && (
+                <div style={{ marginTop: 22 }}>
+                  <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
+                  {offRows.map(({ st, rows }) => (
+                    <div key={st.name} style={{ marginTop: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '8px 0 2px' }}><span style={{ width: 8, height: 8, borderRadius: 99, border: `1.5px solid ${C.faint}` }} />{st.name}</div>
+                      {rows.map(addRow)}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: '10px 6px' }}>
-                      {empty ? [0, 1].map((k) => <span key={k} style={{ width: 44, height: 44, borderRadius: 99, border: `1.5px dotted ${C.faint}`, flex: 'none', opacity: .6 }} />) : ln.pieces.map((pc) => (
-                        <div key={pc.key} style={{ flex: 'none', width: 74, textAlign: 'center' }}>
-                          <span style={{ width: 44, height: 44, borderRadius: 99, display: 'grid', placeItems: 'center', margin: '0 auto', background: '#fff', ['--c2' as string]: pc.hue }}><span style={{ width: 28 }}><Drawing spec={{ scene: pc.scene }} name="" rating="" t={(x) => x} /></span></span>
-                          <b style={{ display: 'block', fontSize: 11.5, fontWeight: 700, marginTop: 5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.label}</b>
-                          <small style={{ display: 'block', fontSize: 10.5, color: C.mute, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.under}</small>
-                          {pc.fact && <small style={{ display: 'inline-block', fontSize: 9.5, fontWeight: 700, color: C.mute, background: '#fff', borderRadius: 99, padding: '1px 6px', marginTop: 3, maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pc.fact}</small>}
-                        </div>
-                      ))}
-                    </div>
-                    <ChevronRight size={16} color={empty ? C.faint : C.mute} style={{ flex: 'none' }} />
-                  </div>
-                  </div>
-                ) })}
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 18, borderTop: `0.5px solid ${C.line}`, paddingTop: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700 }}><span>Subtotal</span><span>{total ? dollars(total) : 'Free'}</span></div>
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>Service fee ({Math.round(SERVICE_FEE_RATE * 100)}%) and taxes on the next screen</div>
               </div>
-              {(() => {
-                /* THE PRICING SUMMARY (owner 2026-09-23): what it costs, grouped the way an owner thinks: what gets made,
-                   getting it seen, and what comes free. The fee and taxes are on the next screen. */
-                const onItems = items.filter((x) => x.on)
-                const sum = (ids: ItemId[]) => onItems.filter((x) => ids.includes(x.id)).reduce((t, x) => t + itemCents(x, prices, profile), 0)
-                const setup = sum(['photos', 'graphic', 'video', 'print'])
-                const seen = sum(['boost', 'creator'])
-                const freeOnes = onItems.filter((x) => itemCents(x, prices, profile) === 0).map((x) => META[x.id].name.toLowerCase())
-                return (
-                  <div style={{ marginTop: 16, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 6 }}>Pricing</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Setup<small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{onItems.filter((x) => ['photos', 'graphic', 'video', 'print'].includes(x.id)).map((x) => META[x.id].name.toLowerCase()).join(', ') || 'nothing to make'}</small></span><b>{setup ? dollars(setup) : 'Free'}</b></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Getting it seen<small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{onItems.filter((x) => ['boost', 'creator'].includes(x.id)).map((x) => nameOf(x).toLowerCase()).join(', ') || 'your own channels'}</small></span><b>{seen ? dollars(seen) : 'Free'}</b></div>
-                    {freeOnes.length > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13.5, padding: '7px 0', borderTop: `0.5px solid ${C.line}` }}><span>Included<small style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{freeOnes.join(', ')}</small></span><b style={{ color: C.greenDk }}>Free</b></div>}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, padding: '10px 0 2px', borderTop: `0.5px solid ${C.line}` }}><span>Subtotal</span><span>{total ? dollars(total) : 'Free'}</span></div>
-                    <div style={{ fontSize: 11.5, color: C.mute }}>Service fee ({Math.round(SERVICE_FEE_RATE * 100)}%) and taxes on the next screen</div>
-                  </div>
-                )
-              })()}
             </div>
           )
         })()}
