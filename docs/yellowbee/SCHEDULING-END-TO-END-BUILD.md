@@ -1,11 +1,13 @@
 # Yellowbee Scheduling — end-to-end build plan
 
-**Prepared:** 2026-09-24 by Apnosh (Mark) with Claude, from the Yellow Bee developer handoff package
+**Prepared:** 2026-09-24 by Mark with Claude, from the Yellow Bee developer handoff package
 (prototype 0.6.1 and 0.6.0 source, guides, seed, screenshots, transcript U1–U8, DECISIONS.md) and
 the September 2026 workbook (26 weekly sheets, latest 0920-0926).
 **Supersedes:** `SCHEDULING-BUILD-PROMPT.md` sections 3–12 where they disagree (week start, roles,
 swap approval, time clock). That file stays as history; this one is what gets built.
 **Audience:** Mark (builder), Brian Hoang (owner), and any Claude Code session that starts the build.
+**Decisions:** settled by Brian on 2026-09-24 (section 3). This is Yellow Bee's own product and
+codebase: no Apnosh accounts, branding, or portal coupling anywhere in it.
 
 ---
 
@@ -21,19 +23,16 @@ It has never been hosted, no real account has ever logged in, and no text has ev
 **What is missing to "work fully end to end for all accounts."**
 
 1. A real login for real people. The prototype has email + password with hand-copied invitation
-   links, no automated invite delivery, no password reset, no phone login. The roster has no
+   links, no automated invite delivery, no password reset. The roster has no
    emails or phones, so nobody can be invited today.
 2. Hosting, backups, a domain, HTTPS. None exist.
 3. SMS that actually sends. Needs a Twilio account owned by Yellow Bee, A2P 10DLC registration
    (2–4 weeks lead time), staff consent, and a real-device test.
-4. Six owner decisions that change behaviour (section 3). The two prototype branches disagree on
-   import semantics; the September 16 brief disagreed with the prototype on swaps, week start,
-   roles, and availability approval.
-5. A maintainable codebase. The prototype stores the entire app as one JSON blob in one SQLite
+4. A maintainable codebase. The prototype stores the entire app as one JSON blob in one SQLite
    row, re-serialised on every write, on one process, in dense generated code. Fine for a pilot,
-   not a product Apnosh can keep evolving.
+   not a product Mark can keep evolving for Yellow Bee.
 
-**Recommendation.** Rebuild on the Apnosh stack (Next.js 16 + Supabase + Vercel), treating the
+**Recommendation.** Rebuild on Next.js 16 + Supabase + Vercel, treating the
 0.6.1 prototype as the executable specification: its permission matrix is the law, its
 `engine.js` rules port function by function, and its 294 test names become the acceptance suite.
 Do **not** add the brief's extras the owner never asked for (time clock, geofence, payroll,
@@ -42,7 +41,7 @@ roles). Ship what Brian asked for, working for every account type, then extend.
 
 **Optional bridge.** If the rebuild will take longer than ~6 weeks, host prototype 0.6.1 on a small
 VPS now (one day of work, section 10) so Brian and the store manager use it for real while the
-rebuild happens. Real usage settles the section 3 decisions faster than a meeting.
+rebuild happens. Note it does direct pickup, not the manager-approved pickup Brian chose.
 
 ---
 
@@ -54,7 +53,7 @@ Authority is **tier + store scope**, evaluated on every request. A job title nev
 
 | Situation | Tier | Sees | Example |
 |---|---|---|---|
-| Owner / back office, no shifts | Administrator, no roster | Every store, every admin screen | Brian; an Apnosh support login |
+| Owner / back office, no shifts | Administrator, no roster | Every store, every admin screen | Brian |
 | Owner who also works shifts | Administrator, on roster | Everything, plus "My schedule" | Brian if he schedules himself |
 | Store manager at their store | Manager, `manages = true` at that store | All 8 manager workspaces for that store | Emma at YB1 |
 | Same manager at another store they only work at | Manager, member of store, `manages = false` | Member self-service only, with a notice and a link back to their managed store | Emma picking up a shift at YB2 |
@@ -128,18 +127,19 @@ Two things, linked, never merged:
 A standalone administrator is an employee row with `roster_status = 'no_roster'` so there is
 exactly one place authority lives. Name-only matching never links a login to an employee.
 
-### 1.4 How people log in (decision A, default given)
+### 1.4 How people log in (decision A: email + password for everyone)
 
-Supabase Auth, both channels enabled:
+Supabase Auth, email + password only. Minimum 12 characters. "Forgot password" sends a reset
+email. No phone login, no magic links, no social login.
 
-- **Managers and administrators:** email + password, with magic-link reset.
-- **Crew:** phone number + 6-digit SMS code (Supabase phone OTP via Twilio Verify). No password.
-  Email + password also allowed for anyone who prefers it.
+Invitation flow: administrator enters an email on the employee record and clicks Invite. The
+app emails the invite itself (Resend); no more copying links by hand. The link opens an accept
+page where the person sets their password; that login is linked to that employee and lands on
+My schedule. Single-use, expires in 7 days, re-issuable (re-issuing also works as a reset for
+someone locked out). Changing tier or stores later never needs a new invite.
 
-Invitation flow: administrator enters a phone or email on the employee record and clicks Invite.
-The app sends the invite (SMS or email) itself; no more copying links by hand. The link opens an
-accept page that asks for the code, links the login to that employee, and lands on My schedule.
-Single-use, expires in 7 days, re-issuable. Changing tier or stores later never needs a new invite.
+Consequence: every active person needs an email address before they can be invited. Phone
+numbers are only for team texts and are optional.
 
 ---
 
@@ -197,24 +197,29 @@ Everything Brian asked for in U1–U7, plus what going live needs. Nothing else.
 
 ### 2.5 Shift Release & Available (U4)
 - A person offers their own **future, published** shift. They stay assigned and responsible.
-- Eligible pickup: active member of that store, matching job function at that store, no overlap
+- Eligible request: active member of that store, matching job function at that store, no overlap
   anywhere, not blocked by their published availability, not the same person, offer still open.
-  The first eligible confirm wins; the transfer updates the draft and published copy of that one
-  shift in one transaction and conserves hours, break, budget, and publish timestamp. Nobody else's
-  draft edits leak.
-- No manager approval step (decision C default). A per-store toggle "require manager approval
-  for pickups" ships off; if Brian turns it on, pickup goes to "accepted, awaiting manager" and
-  the manager approves or declines with a note.
+  The first eligible person to confirm becomes the **pending taker**; the offer shows "waiting
+  for manager" to everyone else and nobody else can request it while it is pending.
+- **Manager approval (decision C).** A manager of that store (or an administrator) approves or
+  declines with an optional note. Approval re-runs every eligibility check and the budget/hours
+  review at that moment, then transfers the draft and published copy of that one shift in one
+  transaction, conserving hours, break, budget, and publish timestamp. Nobody else's draft edits
+  leak. Until approval the original person stays assigned and responsible.
+- Decline reopens the offer for others. The pending taker can back out before approval, which
+  also reopens it. Pending requests older than 48 hours, or for a shift that starts within 12
+  hours, are surfaced at the top of the manager's board.
 - Withdraw an offer; manager can release on someone's behalf and assign an eligible teammate
-  (with the hours-review reason where it applies). Offers close automatically when the shift
-  starts, is deleted, or is edited.
+  directly (no approval step needed since the manager is the actor; hours-review reason where it
+  applies). Offers close automatically when the shift starts, is deleted, or is edited.
 - Shift board shows offers for the selected store with the coworker's name and the shift, nothing
   private.
 
 ### 2.6 Notifications (U4)
-- Events: shift released, shift picked up (team-wide, that store, per U4); week published or
-  republished (one summary to each affected person, not one text per shift); pickup approved or
-  declined if the toggle is on.
+- Events: shift released (team-wide, that store, per U4); pickup requested (to the store's
+  managers only); pickup approved, meaning the shift is assigned (team-wide, per U4, plus the two
+  people); pickup declined (to the requester only); week published or republished (one summary to
+  each affected person, not one text per shift).
 - Recipients: the store's active, assigned, **SMS-opted-in** team. Standalone admins with no
   roster record get nothing. Skipped recipients (no number, no consent, duplicate number) are
   recorded, not hidden.
@@ -262,27 +267,28 @@ Everything Brian asked for in U1–U7, plus what going live needs. Nothing else.
 ### 2.10 Explicitly not in v1
 Time clock, geofence, punches, pay periods, payroll export, wages and labor cost, overtime law,
 minors rules, drag-and-drop templates, coverage hard blocks on publish, Monday weeks, travel
-buffers, email notifications, Vietnamese copy (decision F), AI scheduling, POS, training links.
+buffers, phone login, email notifications beyond invites and resets, Vietnamese copy
+(decision F), AI scheduling, POS, training links, anything Apnosh-specific.
 Each is a phase-2 item that starts with Brian asking.
 
 ---
 
-## 3. Decisions Brian must make (defaults so nothing blocks)
+## 3. Decisions (settled by Brian, 2026-09-24)
 
-| # | Decision | Default we build unless Brian says otherwise | Why |
+| # | Decision | Settled | Effect on the build |
 |---|---|---|---|
-| A | How crew log in | Phone + SMS code for crew; email + password for managers/admins | Roster has no emails; phones are how a cafe crew lives |
-| B | Which prototype branch is the baseline | 0.6.1 for access and everything except import; import rules from 2.8 | 0.6.1 has the manager fix Brian asked for; 0.6.0's import is more conservative in some places, less in others |
-| C | Pickup: direct or manager-approved | Direct (U4 wording), with a per-store toggle to require approval | Brian's own words; toggle is cheap |
-| D | Import blank cells and reset scope | Grid blank = off for included people; store-scoped Replace only; no all-store reset button | Excel sheet is the whole week; a company-wide wipe should never be one click |
-| E | Week start | Sunday | Workbook, prototype, and 26 weeks of history are Sunday. Changing it regroups every budget and target |
-| F | Bilingual (English/Vietnamese) staff screens | Not in v1; strings externalised so it can be added | Never requested; adds a translation review loop |
-| G | Who is a manager at each store today, and are there two stores in the data already ("Thanh YB2") | Confirm on setup call | Data has one location placeholder (YB1); Yesler vs Mountlake Terrace mapping is unverified |
-| H | Budgets and targets per store for the first live week | Brian enters them on go-live day; nothing invented | Prototype screenshots' numbers are illustrative |
+| A | How people log in | Simple email + password for everyone | No phone OTP, no Twilio Verify. Invites and resets go by email. Every active person needs an email before invite |
+| B | Prototype baseline | 0.6.1 for access and everything except import; import rules from 2.8 | 0.6.1 has the manager fix; the import merges the safer parts of both branches |
+| C | Pickup | Manager approved | Offer → one pending taker → manager approves/declines → transfer. Owner stays assigned until approval. No direct-pickup toggle |
+| D | Import blank cells and reset scope | Default: grid blank = off for included people; store-scoped Replace only; no all-store reset button | |
+| E | Week start | Default: Sunday | 26 weeks of history stay grouped as they are |
+| F | Bilingual staff screens | Not in v1 | Strings still externalised so it can be added later |
+| G | Store mapping and who manages each store | Confirm on the setup call | Blocks M6 (migration), not the build |
+| H | First-week budgets and targets | Default: Brian enters them on go-live day | Nothing invented |
 
-Also needed from Yellow Bee before go-live: a roster with a phone or email per active person;
-which store each person belongs to; Twilio account in Yellow Bee's name (EIN for 10DLC); the
-domain to use (e.g. schedule.shopyellowbee.com).
+Still needed from Yellow Bee before go-live: a roster with an email per active person (phone
+optional, for texts); which store each person belongs to; Twilio account in Yellow Bee's name
+(EIN for 10DLC); the domain to use (e.g. schedule.shopyellowbee.com).
 
 ---
 
@@ -290,7 +296,7 @@ domain to use (e.g. schedule.shopyellowbee.com).
 
 - **Next.js 16** App Router, React 19, TypeScript strict, Tailwind v4, lucide-react, zod,
   date-fns + date-fns-tz. Read `node_modules/next/dist/docs/` before writing routes.
-- **Supabase**: Postgres, Auth (email + phone), RLS on every table, Realtime for the schedule
+- **Supabase**: Postgres, Auth (email + password), RLS on every table, Realtime for the schedule
   grid and shift board, Storage for import files and backups, `pg_cron` for outbox dispatch
   and stale-offer cleanup.
 - **Every mutation is a Postgres function** (`security definer`, all checks inside, one
@@ -302,9 +308,9 @@ domain to use (e.g. schedule.shopyellowbee.com).
   action is the one the referenced week/shift/offer belongs to, not a posted `locationId`.
 - **Service role key** only in the import parser route, the invite sender, the Twilio webhook,
   and cron jobs. Never in a browser bundle.
-- **Twilio**: Verify for OTP login (through Supabase Auth); Messaging Service for team texts,
-  called from an Edge/Route handler that reads the outbox; status webhook validates
-  `X-Twilio-Signature` with the Twilio SDK against the exact public URL.
+- **Twilio**: Messaging Service for team texts only, called from a Route handler that reads the
+  outbox; status webhook validates `X-Twilio-Signature` with the Twilio SDK against the exact
+  public URL. **Resend** for invitation and password-reset email.
 - **Vercel** for the app, custom domain, one preview per branch. Supabase project in us-west.
 - Business timezone `America/Los_Angeles` on every location; times stored as `date` +
   `time` per shift (the domain is store-local wall-clock, exactly like the workbook), with a
@@ -331,8 +337,8 @@ employee_locations   employee_id, location_id, job_function ('Manager'|'Assistan
                      'Shift Lead'|'Front Staff'|'Kitchen Staff'|'Grocery Staff'|'Unassigned'|
                      legacy text), manages bool, status ('active'|'removed'), added_by, added_at,
                      removed_by, removed_at, pk (employee_id, location_id)
-invitations          id, employee_id, channel ('sms'|'email'), destination, token_hash,
-                     expires_at, used_at, created_by, created_at
+invitations          id, employee_id, email, token_hash, expires_at, used_at, created_by,
+                     created_at
 weeks                id, location_id, start_date (check: Sunday), source_sheet, status
                      ('draft'|'published'), published_at, published_by, budget_hours numeric null,
                      budget_source_week_id, budget_set_by, budget_set_at, targets jsonb
@@ -358,10 +364,12 @@ availability         id, employee_id, kind ('recurring'|'date'), weekday int nul
 preferences          employee_id pk, preferred_min_hours, preferred_max_hours, windows jsonb,
                      published_at
 shift_releases       id, shift_id, week_id, location_id, offered_by, note, status
-                     ('open'|'accepted'|'picked_up'|'withdrawn'|'closed'), created_at,
-                     accepted_by, accepted_at, picked_up_by, resolved_by, resolved_at
-shift_events         id, location_id, kind ('release'|'pickup'|'withdraw'|'assign'|'publish'|
-                     'approve'|'decline'), release_id, week_id, message, actor, at
+                     ('open'|'pending_approval'|'approved'|'withdrawn'|'closed'), created_at,
+                     requested_by, requested_at, decided_by, decided_at, decision_note,
+                     decline_count
+shift_events         id, location_id, kind ('release'|'pickup_requested'|'pickup_backed_out'|
+                     'approved'|'declined'|'withdraw'|'assign'|'publish'), release_id, week_id,
+                     message, actor, at
 notification_outbox  id, event_id, employee_id, destination, body, status ('queued'|'submitted'|
                      'delivered'|'failed'|'skipped'|'cancelled'|'unknown'), skip_reason,
                      provider_message_id, attempts, created_at, submitted_at, final_at
@@ -372,8 +380,7 @@ workbook_imports     id, actor, filename, sha256, bytes, storage_path, mode ('me
                      preview_expires_at, state_revision, backup_path, status ('previewed'|
                      'committed'|'discarded'|'expired'), committed_at
 member_removals      id, employee_id, location_id null, actor, reason, at
-settings             key pk, value jsonb   -- review_hours=40, coverage_times, sms_enabled,
-                                          -- pickup_requires_approval per location
+settings             key pk, value jsonb   -- review_hours=40, coverage_times, sms_enabled
 audit_log            id, actor, action, entity, entity_id, location_id, before jsonb, after jsonb,
                      reason, at   -- contacts redacted in before/after
 ```
@@ -407,8 +414,9 @@ of member-tier at managed store only; self: contacts + preferences only), `set_a
 `remove_member`, `create_invitation`, `accept_invitation`, `create_week`, `copy_week`,
 `save_shift`, `delete_shift`, `save_budget` (admin), `record_override`, `publish_week`,
 `save_targets`, `publish_availability`, `review_legacy_availability`, `release_shift`,
-`cancel_release`, `pickup_shift` (row lock on the release; one winner), `assign_release`,
-`approve_pickup` / `decline_pickup` (only when the store toggle is on), `save_sms_preferences`,
+`cancel_release`, `request_pickup` (row lock on the release; one pending taker), `back_out_pickup`,
+`approve_pickup` (re-checks eligibility and budget, then transfers), `decline_pickup`,
+`assign_release`, `save_sms_preferences`,
 `commit_import` (server route wraps it), `record_audit` (internal).
 
 ---
@@ -416,7 +424,7 @@ of member-tier at managed store only; self: contacts + preferences only), `set_a
 ## 6. Screens and routes
 
 ```
-/login                      email+password, phone OTP, magic link; /accept/[token]
+/login                      email + password; /forgot; /accept/[token] sets the password
 /me                         My schedule (published, own, store switcher)        member+
 /me/availability            Publish My Availability, preferences, history        member+
 /me/board                   Shift Release & Available (offers at this store)     member+
@@ -470,8 +478,8 @@ project, repo `yellowbee-scheduling`, domain, Twilio account created in Yellow B
 `docs/BUILD-PLAN.md` in the new repo.
 
 **M1 — Identity and access (1.5 weeks).** Migrations for locations, employees, contacts,
-memberships, invitations, settings, audit, helpers, RLS. Auth: email+password, phone OTP, invite
-send + accept, magic-link reset. Layout shells for `/me`, `/store`, `/admin`, store switcher,
+memberships, invitations, settings, audit, helpers, RLS. Auth: email + password, emailed invite
++ accept page, password reset by email. Layout shells for `/me`, `/store`, `/admin`, store switcher,
 manager default-store rule, not-managed notice. Admin: Locations & access, Team members
 (Add/Edit access with the "workspace access after saving" panel), Invite, Remove member.
 Tests: the whole 1.2 matrix as negative tests against local Supabase (each tier attempts each
@@ -489,11 +497,12 @@ application, published-week warnings, legacy review screen. Tests: `unapproved a
 never applies`, `publication does not cancel shifts`, `preferred windows cannot lie outside
 availability`, effective dates.
 
-**M4 — Release & pickup, notifications (2 weeks).** Releases, events, outbox, in-app feed,
-consent screens, dispatcher (cron), Twilio send + status webhook, per-store approval toggle.
-Tests: one-winner pickup under concurrency; owner stays assigned until commit; forged targets
-ignored; outbox rows idempotent; disabled transport records reality; webhook signature
-rejection; stale-offer cancellation. Then a real-device test with two consented staff phones.
+**M4 — Release & pickup, notifications (2 weeks).** Releases, pending requests, manager
+approve/decline, events, outbox, in-app feed, consent screens, dispatcher (cron), Twilio send +
+status webhook. Tests: one pending taker under concurrency; owner stays assigned until approval;
+approval re-validates eligibility and budget; decline reopens; forged targets ignored; outbox
+rows idempotent; disabled transport records reality; webhook signature rejection; stale-offer
+cancellation. Then a real-device test with two consented staff phones.
 
 **M5 — Analytics and import (2 weeks).** Analytics queries + charts + CSV. Import route
 (bounded parser for the grid and table layouts, .xls via a maintained reader library, not a
@@ -528,8 +537,8 @@ integration tests against a local Supabase plus Playwright for the golden flows.
   cannot be removed by a manager.
 - Standalone administrator with no roster record: everything admin works, nothing on the roster
   counts them, they receive no texts.
-- Invitation: single-use, expiring, matches destination only, re-issue works, changed phone
-  drops consent.
+- Invitation: single-use, expiring, matches the invited email only, re-issue works as a reset,
+  password minimum enforced, changed phone drops SMS consent.
 - Member queries (`select *` on every table, the REST API, Realtime) never return contacts,
   drafts, budgets, notes, other people's availability notes, or audit rows.
 
@@ -552,13 +561,18 @@ integration tests against a local Supabase plus Playwright for the golden flows.
   published unavailable date blocks pickup and warns on publish; preferences don't guarantee.
 
 **Release & pickup**
-- Offered shift stays with owner and visible as theirs; two simultaneous claimants → one winner,
-  one event, hours conserved, other store untouched; forged pickup target ignored; role
-  mismatch, non-member, overlap, unavailability all block; withdraw retains assignment; started
-  shifts cannot be offered; manager edit closes the offer; unrelated drafts not published.
+- Offered shift stays with owner and visible as theirs until a manager approves; two
+  simultaneous requesters → one pending taker, one event, the other gets a clear "already
+  requested" response; a member cannot approve, not even their own request; a manager of a
+  different store cannot approve; approval re-checks role, membership, overlap, availability,
+  and budget at that moment and fails cleanly if anything changed; decline reopens the offer;
+  the pending taker can back out; on approval hours are conserved and the other store is
+  untouched; forged pickup target ignored; started shifts cannot be offered; manager edit closes
+  the offer; unrelated drafts not published.
 
 **Notifications**
-- Release and pickup notify the whole active opted-in store team; skipped recipients recorded;
+- Release and approved assignment notify the whole active opted-in store team; a pickup request
+  texts only that store's managers; a decline texts only the requester; skipped recipients recorded;
   duplicate numbers get one row; disabled transport records "not sent"; "submitted" ≠
   "delivered"; unsent messages cancel when the offer is superseded; forged/replayed Twilio
   webhook rejected; restart converts interrupted submissions to unknown, never double-sends.
@@ -572,11 +586,13 @@ integration tests against a local Supabase plus Playwright for the golden flows.
   state change; contact columns never touch tier/consent; imported weeks are drafts.
 
 **Golden Playwright flows**
-1. Admin adds a store, adds a manager with the workspace panel, invites by SMS; manager accepts
-   on a phone, lands on Schedule; builds a week, hits the budget, overrides with a reason,
-   publishes; a member gets the text and sees the week.
-2. Member offers a shift; a second member picks it up; the first no longer sees it as theirs; the
-   team gets both texts; the manager sees both events in Team notifications.
+1. Admin adds a store, adds a manager with the workspace panel, invites by email; manager accepts
+   on a phone and sets a password, lands on Schedule; builds a week, hits the budget, overrides
+   with a reason, publishes; a member gets the text and sees the week.
+2. Member offers a shift; a second member requests it; the manager gets the request, approves
+   it; the first member no longer sees it as theirs; the team gets the release and assignment
+   texts; the manager sees all three events in Team notifications. Repeat with a decline: the
+   offer reopens.
 3. Admin imports the next week's workbook with Merge, reviews the preview, commits; the grid
    shows the new draft; a repeat import changes nothing.
 
@@ -596,8 +612,9 @@ One day of work so real usage starts now:
 4. Brian and Emma use it for 4–6 weeks. Their behaviour answers decisions C and D; their JSON
    export becomes the seed for the rebuild (section 7 step 5).
 
-Not a substitute for the rebuild: single process, no automated invites, no password reset, no
-phone login, no texts until 10DLC and consent are done, and code Apnosh should not extend.
+Not a substitute for the rebuild: single process, no automated invites, no password reset,
+direct pickup instead of the manager approval Brian chose, no texts until 10DLC and consent are
+done, and code that should not be extended.
 
 ---
 
