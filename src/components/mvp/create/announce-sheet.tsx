@@ -378,10 +378,11 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const ready = required.every((f) => (a[f.key] ?? '').trim())
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string; tags?: string[]; note?: string }[]>([])
-  /* THE DISHES PAGE (owner 2026-09-22): the first screen lists the dishes; tapping one opens its own form.
+  /* THE DISHES (owner 2026-09-24): every dish is an open form on the first page; Add dish adds another form.
      Dish 0 lives in the answers (what, line, price, note, the tags set); the rest in `dishes`. */
-  const [openDish, setOpenDish] = useState<number | null>(null)
-  const [detail, setDetail] = useState<null | 'content' | 'from' | 'look' | 'tags' | 'note' | 'dish'>(null)
+  const [detail, setDetail] = useState<string | null>(null)
+  /* PERMANENT (owner 2026-09-24): a dish that stays on the menu has no end date */
+  const [permanent, setPermanent] = useState(false)
   const [newDish, setNewDish] = useState({ name: '', line: '', price: '' })
   const [building, setBuilding] = useState(false)
   /* RUSH (owner 2026-09-23): the pieces we make come two days sooner, a quarter more on those pieces */
@@ -516,6 +517,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
     if (tags.size) facts.tags = Array.from(tags).join(', ')
     if (kind?.limited) { if (limited && a.until) facts.until = longDate(a.until); else delete facts.until }
+    if (kind?.id === 'dish' && permanent) facts.note = [facts.note, 'A permanent item on the menu, no end date'].filter(Boolean).join('\n')
     if (hoursOn) facts.hours = closed ? `Closed that day` : `Open ${clock(openAt)} to ${clock(closeAt)} that day`
     if (isDeal && weekly) {
       facts.weekly = `Every ${DAYS[dealDay()]}, ${a.when ?? ''}`.trim()
@@ -776,7 +778,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const dishRows = kind?.id === 'dish' && simple
   const visible: Step[] = isSlow ? ['night', 'play'] : simple ? [...(isEvent ? ['ekind' as Step] : []), 'facts', ...(kind?.picture && kind.id !== 'dish' ? ['content' as Step, 'make' as Step] : []), 'plans'] : [...(isEvent ? ['ekind' as Step] : []), ...steps.filter((s) => s !== 'picture' || kind?.picture)]
   const inside = simple && (step === 'picture' || step === 'where' || step === 'words')
-  const back = () => { if (dishRows && openDish !== null) { setOpenDish(null); setDetail(null); return } if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('plans'); return } if (simple && step === 'plans' && openItem) { setOpenItem(null); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
+  const back = () => { if (inside) { setStep('plan'); return } if (simple && step === 'plan') { setStep('plans'); return } if (simple && step === 'plans' && openItem) { setOpenItem(null); return } const i = visible.indexOf(step); setStep(i <= 0 ? 'kind' : visible[i - 1]) }
   const next = () => { if (inside) { setStep('plan'); return } const i = visible.indexOf(step); setStep(visible[i + 1]) }
   /* ONE TAP (owner 2026-09-18): Make it happen from the facts screen. The words are written on the
      way if they are not yet, then everything is made. */
@@ -884,7 +886,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
         {step === 'facts' && kind && (
           <div style={hv(hue)}>
-            {!openItem && <div style={h2}>{kind.id === 'dish' ? (dishRows && openDish !== null ? (openDish === 0 && !dishes.length ? 'The dish' : `Dish ${openDish + 1}`) : 'What is new?') : 'Tell us about it'}</div>}
+            {!openItem && <div style={h2}>{kind.id === 'dish' ? 'What is new?' : 'Tell us about it'}</div>}
             {!openItem && <>
             {kind.photo && (!kind.picture || simple) && (
               <div style={{ margin: '4px 0 6px' }}>
@@ -946,7 +948,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
 
               const contentWord = effContent === 'newshoot' ? 'Full content shoot' : effContent === 'shoot' ? (openShoot && openShoot.requestId ? `The ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content shoot` : 'The next content shoot') : effContent === 'own' ? (media.length ? `${media.length} of yours` : 'My own photos') : effContent === 'library' ? `${libSel.size || ''} from my library`.trim() : effContent === 'stock' ? 'A licensed photo' : 'Words only'
-              const row = (k: Exclude<NonNullable<typeof detail>, 'dish'>, label: string, value: string, set: boolean, body: React.ReactNode) => { const open = detail === k; return (
+              const row = (k: string, label: string, value: string, set: boolean, body: React.ReactNode) => { const open = detail === k; return (
                 <div key={k}>
                   <button type="button" onClick={() => setDetail(open ? null : k)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', borderLeft: 0, borderRight: 0, borderBottom: 0, borderTop: `0.5px solid ${C.line}`, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{label}</span>
@@ -956,14 +958,19 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                   {open && <div style={{ padding: '0 14px 14px' }}>{body}</div>}
                 </div>
               ) }
+              const setUntil = (v: string) => { setA((x) => ({ ...x, until: v })); setLimited(!!v && !permanent) }
+              const togglePermanent = () => { const v = !permanent; setPermanent(v); setLimited(!v && !!a.until) }
+              const dateLabel: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginBottom: 6 }
               const dateBody = (
                 <>
-                  <input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0 }} />
-                  <button type="button" onClick={() => { const v = !limited; setLimited(v); if (v && !a.until) setA((x) => ({ ...x, until: plusDays(a.from ?? isoPlus(0), 7) })) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 0 10px', marginTop: 4, border: 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                    <span><b style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink }}>For a limited time</b><small style={sub}>The posts say so, and we stop when it ends</small></span>
-                    <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${limited ? C.greenDk : C.line}`, background: limited ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{limited && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: permanent ? '1fr' : '1fr 1fr', gap: 10 }}>
+                    <label style={{ display: 'block', minWidth: 0 }}><span style={dateLabel}>From</span><input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0, width: '100%', boxSizing: 'border-box' }} /></label>
+                    {!permanent && <label style={{ display: 'block', minWidth: 0 }}><span style={dateLabel}>Until</span><input type="date" min={a.from ?? isoPlus(0)} value={a.until ?? ''} onChange={(e) => setUntil(e.target.value)} style={{ ...input, marginTop: 0, width: '100%', boxSizing: 'border-box' }} /></label>}
+                  </div>
+                  <button type="button" onClick={togglePermanent} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '12px 0 4px', marginTop: 2, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 7, border: `1.5px solid ${permanent ? C.greenDk : C.line}`, background: permanent ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{permanent && <Check size={13} color="#fff" strokeWidth={3} />}</span>
+                    <b style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>It is a permanent item on the menu</b>
                   </button>
-                  {limited && <input type="date" min={a.from ?? isoPlus(0)} value={a.until ?? ''} onChange={(e) => setA((x) => ({ ...x, until: e.target.value }))} style={{ ...input, marginTop: 0 }} />}
                 </>
               )
               /* one accessor for every dish: 0 is the answers, the rest are the extras */
@@ -975,25 +982,29 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               }
               const count = 1 + dishes.length
                             const removeDish = (i: number) => { if (i === 0) { const [first, ...rest] = dishes; if (first) { setA((x) => ({ ...x, what: first.name, line: first.line, price: first.price, note: first.note ?? '' })); setTags(new Set(first.tags ?? [])); setDishes(rest) } else { setA((x) => ({ ...x, what: '', line: '', price: '', note: '' })); setTags(new Set()) } } else setDishes((x) => x.filter((_, j) => j !== i - 1)) }
-              const priceWord = (v: string) => (v.trim() ? (/^\d/.test(v.trim()) ? `$${v.trim()}` : v.trim()) : '')
 
-              if (openDish !== null) {
-                const i = openDish; const d = getDish(i)
+              const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 2px 8px' }
+              const dishForm = (i: number) => {
+                const d = getDish(i)
                 const dTagsBody = <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setDish(i, { tags: d.tags.includes(t) ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={chip(d.tags.includes(t))}>{t}</button>)}</div>
                 const dNoteBody = <textarea rows={3} autoFocus value={d.note} onChange={(e) => setDish(i, { note: e.target.value })} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.45 }} />
                 const mine = media.filter((m) => m.dish === i)
                 const pick = () => { uploadFor.current = i; fileRef.current?.click() }
                 return (
-                  <div>
-                    {/* THE UPLOAD (owner 2026-09-22): the dish's photos and videos, several at once, in place of the tile */}
+                  <div key={i}>
+                    <div style={{ ...sec, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: i ? 22 : 4 }}>
+                      <span>{count > 1 ? `Dish ${i + 1}` : 'The dish'}</span>
+                      {count > 1 && <button type="button" onClick={() => { removeDish(i); setMedia((x) => x.filter((m) => m.dish !== i).map((m) => (m.dish != null && m.dish > i ? { ...m, dish: m.dish - 1 } : m))); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: C.mute, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Remove</button>}
+                    </div>
+                    {/* THE UPLOAD (owner 2026-09-22): the dish's photos and videos, several at once */}
                     {mine.length === 0 ? (
-                      <button type="button" onClick={pick} style={{ width: '100%', height: 150, marginTop: 4, borderRadius: 22, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', fontFamily: 'inherit', color: C.ink }}>
-                        {uploading && uploadFor.current === i ? <Loader2 size={24} className="mvp-spin" color={C.greenDk} /> : <span style={{ width: 64 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span>}
+                      <button type="button" onClick={pick} style={{ width: '100%', height: 124, borderRadius: 22, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', fontFamily: 'inherit', color: C.ink }}>
+                        {uploading && uploadFor.current === i ? <Loader2 size={24} className="mvp-spin" color={C.greenDk} /> : <span style={{ width: 56 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span>}
                         <b style={{ fontSize: 14 }}>Add photos or videos</b>
                         <small style={{ fontSize: 12, color: C.mute }}>Optional. As many as you like</small>
                       </button>
                     ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                         {mine.map((m) => <span key={m.url} style={{ position: 'relative', aspectRatio: '1', borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', left: 8, bottom: 8, color: '#fff', fontSize: 11, fontWeight: 800 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((y) => y.url !== m.url))} style={{ position: 'absolute', right: 6, top: 6, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(255,255,255,.92)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={12} /></button></span>)}
                         {media.length < 10 && <button type="button" onClick={pick} style={{ aspectRatio: '1', borderRadius: 14, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontFamily: 'inherit', color: C.greenDk, fontSize: 12, fontWeight: 700 }}>{uploading && uploadFor.current === i ? <Loader2 size={16} className="mvp-spin" /> : <Plus size={18} />}Add more</button>}
                       </div>
@@ -1002,32 +1013,17 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       {dishRow('Name', d.name, (v) => setDish(i, { name: v }), 'Pork belly bánh mì', true)}
                       {dishRow('Price', d.price, (v) => setDish(i, { price: v }), '14', false, true)}
                       {dishRow('Description', d.line, (v) => setDish(i, { line: v }), 'A line about it')}
-                      {row('tags', 'Good to know', d.tags.length ? d.tags.join(', ') : 'Nothing to add', d.tags.length > 0, dTagsBody)}
-                      {row('note', 'Additional comments', d.note.trim() ? d.note : 'None', !!d.note.trim(), dNoteBody)}
+                      {row(`tags-${i}`, 'Good to know', d.tags.length ? d.tags.join(', ') : 'Nothing to add', d.tags.length > 0, dTagsBody)}
+                      {row(`note-${i}`, 'Additional comments', d.note.trim() ? d.note : 'None', !!d.note.trim(), dNoteBody)}
                     </div>
-                    <button type="button" onClick={() => { setOpenDish(null); setDetail(null) }} disabled={!d.name.trim()} style={{ ...cta_, opacity: d.name.trim() ? 1 : .5 }}>Done</button>
-                    {(count > 1 || d.name.trim()) && <div style={{ textAlign: 'center', marginTop: 2 }}><button type="button" onClick={() => { removeDish(i); setOpenDish(null); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 600, color: C.mute, border: 0, background: 'none', padding: '8px 12px', cursor: 'pointer' }}>Remove this dish</button></div>}
                   </div>
                 )
               }
-              const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 2px 8px' }
               return (
                 <div>
-                  <div style={{ marginTop: 4, borderRadius: 22, background: 'var(--t1)', height: 150, display: 'grid', placeItems: 'center' }}>
-                    <span style={{ width: 132 }}><Drawing spec={{ scene: 'dish' }} name="" rating="" t={(s) => s} /></span>
-                  </div>
-                  <div style={sec}>Dishes</div>
-                  <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
-                    {Array.from({ length: count }, (_, i) => i).map((i) => { const d = getDish(i); const has = !!d.name.trim(); return (
-                      <button key={i} type="button" onClick={() => { setOpenDish(i); setDetail(null) }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', borderLeft: 0, borderRight: 0, borderBottom: 0, borderTop: i ? `0.5px solid ${C.line}` : 0, background: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                        <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{has ? d.name : `Dish ${i + 1}`}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{has ? (d.line.trim() || 'Tap to add a line') : 'Tap to add the name and price'}</small></span>
-                        {priceWord(d.price) && <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{priceWord(d.price)}</span>}
-                        <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4 }} />
-                      </button>
-                    ) })}
-                  </div>
-                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(count); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '12px 10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 auto' }}><Plus size={14} /> Add dish</button>}
-                  <div style={sec}>Starting date</div>
+                  {Array.from({ length: count }, (_, i) => dishForm(i))}
+                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '14px 10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 auto' }}><Plus size={14} /> Add dish</button>}
+                  <div style={sec}>Dish available</div>
                   {dateBody}
                   <div style={sec}>Content</div>
                   {contentUI}
@@ -1108,7 +1104,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             </>}
-            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' ? media.length > 0 : cc === 'library' ? libSel.size > 0 : true); const can = ready && okay; return dishRows && openDish !== null ? null : <button type="button" onClick={() => { if (dishRows) { void applyContent().then(() => next()) } else next() }} disabled={!can || building} style={{ ...cta_, opacity: can && !building ? 1 : .5 }}>{building ? <Loader2 size={16} className="mvp-spin" /> : null} {building ? 'Building your plans' : visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
+            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' ? media.length > 0 : cc === 'library' ? libSel.size > 0 : true); const can = ready && okay; return <button type="button" onClick={() => { if (dishRows) { void applyContent().then(() => next()) } else next() }} disabled={!can || building} style={{ ...cta_, opacity: can && !building ? 1 : .5 }}>{building ? <Loader2 size={16} className="mvp-spin" /> : null} {building ? 'Building your plans' : visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}
