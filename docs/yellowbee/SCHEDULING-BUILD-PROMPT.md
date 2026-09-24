@@ -1,3 +1,8 @@
+> **Superseded 2026-09-24.** The prototype handoff arrived and changed several assumptions in this
+> draft (Sunday weeks, six fixed job functions, direct pickup with no manager approval, no time
+> clock or payroll in v1). Build from `SCHEDULING-END-TO-END-BUILD.md`. This file is kept as the
+> September 16 starting point.
+
 # Yellowbee Scheduling — build prompt & context pack
 
 **Purpose:** Paste this whole file as the opening message of a fresh Claude Code (or ChatGPT) session
