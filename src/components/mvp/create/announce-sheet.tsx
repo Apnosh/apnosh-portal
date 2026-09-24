@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, Check, ChevronRight, Loader2, X, Plus, Copy } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
+import { TAG_ICON } from './dish-tags'
 import { Drawing, DRAW_CSS, type Scene } from './drawings'
 import AnnounceMenu, { itemCents, type MenuMe, type MenuPrices } from './announce-menu'
 import type { Ladder } from '@/lib/plan/suggest'
@@ -1004,35 +1005,48 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
               const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 2px 8px' }
               const focusDish = (i: number, total = count) => setOpenDishes((o) => Array.from(new Set([...o.filter((j) => j < total && !getDish(j).name.trim()), i])).sort((x, y) => x - y))
+              /* THE ITEM EDITOR (owner 2026-09-24, round thirteen C): each dish a numbered card. Labels over soft
+                 boxes, Name and Price on one row, Description with a count, Good to know as equal tiles with icons. */
+              const lab: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12.5, fontWeight: 600, color: C.mute, padding: '0 2px', marginBottom: 6 }
+              const box: React.CSSProperties = { display: 'block', width: '100%', boxSizing: 'border-box', height: 48, margin: 0, borderRadius: 12, background: '#f6f6f8', border: '1.5px solid transparent', fontFamily: 'inherit', fontSize: 16, fontWeight: 500, lineHeight: '22px', color: C.ink, padding: '0 12px', outline: 'none', WebkitAppearance: 'none' }
+              const num = (n: number, open: boolean) => <span style={{ width: open ? 24 : 28, height: open ? 24 : 28, borderRadius: 99, background: open ? C.ink : C.greenSoft, color: open ? '#fff' : C.greenDk, fontSize: open ? 13 : 14, fontWeight: 700, display: 'grid', placeItems: 'center', flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{n}</span>
               const dishForm = (i: number) => {
                 const d = getDish(i)
+                const priceWord = d.price.trim() ? (/^\d/.test(d.price.trim()) ? `$${d.price.trim()}` : d.price.trim()) : ''
+                const removeIt = () => { removeDish(i); setOpenDishes((o) => { const n = o.filter((j) => j !== i).map((j) => (j > i ? j - 1 : j)); return n.length ? n : [Math.max(0, i - 1)] }); setMedia((x) => x.filter((m) => m.dish !== i).map((m) => (m.dish != null && m.dish > i ? { ...m, dish: m.dish - 1 } : m))); setDetail(null) }
                 return (
-                  <div key={i}>
-                    <div style={{ ...sec, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: i ? 22 : 4 }}>
-                      <span>{count > 1 ? `Dish ${i + 1}` : 'The dish'}</span>
-                      {count > 1 && <button type="button" onClick={() => { removeDish(i); setOpenDishes((o) => { const n = o.filter((j) => j !== i).map((j) => (j > i ? j - 1 : j)); return n.length ? n : [Math.max(0, i - 1)] }); setMedia((x) => x.filter((m) => m.dish !== i).map((m) => (m.dish != null && m.dish > i ? { ...m, dish: m.dish - 1 } : m))); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: C.mute, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Remove</button>}
-                    </div>
-                    {/* no upload on the dish (owner 2026-09-24): photos come from the Content choice below */}
+                  <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 20, background: '#fff', marginBottom: 10, boxShadow: '0 1px 2px rgba(29,29,31,.04)' }}>
                     {!openDishes.includes(i) ? (
-                      <button type="button" onClick={() => { focusDish(i); setDetail(null) }} aria-expanded={false} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: d.name.trim() ? C.ink : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name.trim() || 'Add the name and price'}</b>
-                          {(d.line.trim() || d.tags.length > 0) && <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[d.line.trim(), d.tags.join(', ')].filter(Boolean).join(' · ')}</small>}
-                        </span>
-                        {d.price.trim() && <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{/^\d/.test(d.price.trim()) ? `$${d.price.trim()}` : d.price.trim()}</span>}
-                        <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4, transform: 'rotate(90deg)' }} />
+                      <button type="button" onClick={() => { focusDish(i); setDetail(null) }} aria-expanded={false} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 64, padding: '0 12px 0 14px', border: 0, borderRadius: 20, background: 'none', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: C.ink }}>
+                        {num(i + 1, false)}
+                        <b style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name.trim()}</b>
+                        {d.tags.length > 0 && <span style={{ display: 'flex', gap: 4, flex: 'none', color: C.greenDk }}>{d.tags.map((t) => <i key={t} title={t} style={{ width: 26, height: 26, borderRadius: 99, background: C.greenSoft, display: 'grid', placeItems: 'center', ['--cut' as string]: C.greenSoft, transform: 'scale(.85)' }}>{TAG_ICON[t]}</i>)}</span>}
+                        {priceWord && <span style={{ fontSize: 16, fontWeight: 700, flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{priceWord}</span>}
+                        <ChevronRight size={18} color={C.faint} style={{ flex: 'none', transform: 'rotate(90deg)' }} />
                       </button>
                     ) : (
-                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
-                      {dishRow('Name', d.name, (v) => setDish(i, { name: v }), i ? 'Dish name' : 'Pork belly bánh mì', true)}
-                      {dishRow('Price', d.price, (v) => setDish(i, { price: v }), i ? '0' : '14', false, true)}
-                      {dishRow('Description', d.line, (v) => setDish(i, { line: v }), 'A line about it')}
-                      {/* GOOD TO KNOW (owner 2026-09-24): the chips always show, one tap each */}
-                      <div style={{ padding: '12px 14px 14px', borderTop: `0.5px solid ${C.line}` }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 10 }}>Good to know</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => { const on = d.tags.includes(t); return <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>{on && <Check size={12} strokeWidth={3} />}{t}</button> })}</div>
+                      <div style={{ padding: '12px 12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 12px' }}>
+                          {num(i + 1, true)}
+                          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Dish {i + 1}</span>
+                          {count > 1 && <button type="button" onClick={removeIt} style={{ marginLeft: 'auto', background: 'none', border: 0, padding: '6px 2px', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, color: C.mute, cursor: 'pointer' }}>Remove</button>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <label style={{ flex: 1, minWidth: 0 }}><span style={lab}>Name</span><input className="dfi" type="text" value={d.name} onChange={(e) => setDish(i, { name: e.target.value })} placeholder={i ? 'Dish name' : 'Pork belly bánh mì'} style={box} /></label>
+                          <label style={{ width: 92, flex: 'none' }}><span style={lab}>Price</span><span style={{ position: 'relative', display: 'block' }}><span style={{ position: 'absolute', left: 12, top: 13, fontSize: 16, fontWeight: 600, color: d.price ? C.ink : C.faint, pointerEvents: 'none' }}>$</span><input className="dfi" type="text" inputMode="decimal" value={d.price} onChange={(e) => setDish(i, { price: e.target.value.replace(/^\$/, '') })} placeholder={i ? '0' : '14'} style={{ ...box, paddingLeft: 27, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }} /></span></label>
+                        </div>
+                        <label style={{ display: 'block', marginTop: 12 }}><span style={lab}><span>Description</span><span style={{ fontWeight: 500, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.line.length} / 80</span></span><textarea className="dfi" rows={2} maxLength={80} value={d.line} onChange={(e) => setDish(i, { line: e.target.value.replace(/\n/g, ' ') })} placeholder="A line about it" style={{ ...box, height: 72, padding: 12, resize: 'none' }} /></label>
+                        <div style={{ ...lab, marginTop: 12 }}>Good to know</div>
+                        {/* equal tiles (owner 2026-09-24): four across, the last row centred */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 7 }}>
+                          {TAGS.map((t) => { const on = d.tags.includes(t); return (
+                            <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ position: 'relative', width: 'calc((100% - 21px) / 4)', height: 62, borderRadius: 14, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, lineHeight: 1, color: on ? '#1d6f55' : C.ink, padding: '0 2px', cursor: 'pointer', whiteSpace: 'nowrap', ['--cut' as string]: on ? C.greenSoft : '#fff', transition: 'background .15s, border-color .15s' }}>
+                              <span style={{ color: on ? C.greenDk : C.mute }}>{TAG_ICON[t]}</span>{t}
+                              {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 14, height: 14, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={9} color="#fff" strokeWidth={3.5} /></span>}
+                            </button>
+                          ) })}
+                        </div>
                       </div>
-                    </div>
                     )}
                   </div>
                 )
@@ -1040,7 +1054,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               return (
                 <div>
                   {Array.from({ length: count }, (_, i) => dishForm(i))}
-                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); focusDish(count, count + 1); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '14px 10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 auto' }}><Plus size={14} /> Add another dish</button>}
+                  <style>{`.dfi:focus{background:#fff!important;border-color:${C.greenDk}!important;box-shadow:0 0 0 4px ${C.greenSoft}}.dfi::placeholder{color:${C.faint}}`}</style>
+                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); focusDish(count, count + 1); setDetail(null) }} style={{ width: '100%', height: 52, marginTop: 2, borderRadius: 16, border: '1.5px dashed #b9dfd1', background: '#fff', color: C.greenDk, fontFamily: 'inherit', fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}><span style={{ width: 24, height: 24, borderRadius: 99, background: C.greenSoft, display: 'grid', placeItems: 'center' }}><Plus size={14} strokeWidth={2.6} /></span> Add another dish</button>}
                   <div style={sec}>Dish available</div>
                   {dateBody}
                   <div style={sec}>Content</div>
