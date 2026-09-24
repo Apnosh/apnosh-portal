@@ -685,9 +685,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     if (content === null) { setWantVideo(!!it('video')?.on); setWantGraphic(it('graphic')?.on !== false) }
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   /* the choice writes the lines the plan reads: the shoot on or off, where the graphic comes from, the Reel */
-  const derivedContent: Content = src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock'
+  /* TWO ANSWERS (owner 2026-09-24): a dish says "I need photos or video" (a content day, or the shoot already booked)
+     or "I have photos or video" (their upload, or their library when that is what they picked) */
+  const needContent: Content = openShoot && openShoot.requestId ? 'shoot' : 'newshoot'
+  const haveContent = (): Content => (media.length || !libSel.size ? 'own' : 'library')
+  const derivedContent: Content = kind?.id === 'dish' ? (media.length ? 'own' : needContent) : src === 'newshoot' ? 'newshoot' : src === 'shoot' ? 'shoot' : src === 'own' ? 'own' : src === 'team' ? 'stock' : media.length ? 'own' : 'stock'
   /* See my plan: the content choice goes to the server, which builds the pieces and the three plans from it */
-  const applyContent = async () => { setBuilding(true); try { await helpers.current?.suggest(undefined, { content: content ?? derivedContent }) } finally { setBuilding(false) } }
+  const applyContent = async () => { setBuilding(true); try { const ct = content ?? derivedContent; await helpers.current?.suggest(undefined, { content: kind?.id === 'dish' && (ct === 'own' || ct === 'library') ? haveContent() : ct }) } finally { setBuilding(false) } }
   /* the server's sets already carry the content choice (the shoot day, the licensed graphic); nothing else is forced */
   const keepLines: string[] = []
   const pickLibrary = (ph: { id: string; url: string }) => {
@@ -932,17 +936,27 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               {(library ?? []).map((ph) => { const on = libSel.has(ph.id); return <button key={ph.id} type="button" onClick={() => pickLibrary(ph)} aria-label={ph.name} style={{ flex: 'none', width: 84, height: 84, borderRadius: 12, border: `2px solid ${on ? C.greenDk : 'transparent'}`, padding: 0, cursor: 'pointer', background: `center/cover url(${ph.url})`, position: 'relative' }}>{on && <span style={{ position: 'absolute', right: 5, top: 5, width: 20, height: 20, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={12} color="#fff" strokeWidth={3} /></span>}</button> })}
             </div>
           )
-          const rows: React.ReactNode[] = []
-          rows.push(opt('newshoot', openShoot ? 'Another full content shoot' : 'Full content shoot', 'We come shoot photos and video in one visit', 'creator', '#6a39de', true))
-          const queued = !!openShoot && !openShoot.requestId
-          rows.push(opt('shoot',
-            openShoot && !queued ? `Add to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} content shoot` : 'Add to the next content shoot',
-            openShoot ? `${openShoot.used ? `${openShoot.used} thing${openShoot.used === 1 ? '' : 's'} ${queued ? 'waiting' : 'on the list already'}` : 'Nothing on the list yet'}${queued && openShoot.date ? `, planned for ${niceDate(openShoot.date).replace(/^\w+, /, '')}` : ''}` : ctx?.planShoot ? `Planned for ${niceDate(ctx.planShoot).replace(/^\w+, /, '')} with your monthly plan` : 'Nothing booked yet. It waits on the list, nothing to pay now',
-            'calendar', '#3b6fd4', false))
-          rows.push(opt('own', 'My own photos or videos', media.length ? `${media.length} added` : 'From your phone', 'photos', '#2e9a78', false, ownBody))
-          if (library && library.length) rows.push(opt('library', 'From my library', `${library.length} photo${library.length === 1 ? '' : 's'} with Apnosh`, 'grid', '#0f97a8', false, libBody))
-          rows.push(opt('stock', 'A licensed photo', 'The team picks one in your style', 'graphic', '#d99a1e', false))
-          rows.push(opt('none', 'No content needed', igChosen ? 'Words only. Instagram needs a picture, so Google and Facebook' : 'Words only, on Google and Facebook', 'google', '#8a928e', false))
+          const have = c === 'own' || c === 'library'
+          const two = (on: boolean, pickIt: () => void, label: string, small: string, scene: Scene, hue: string, first: boolean, body?: React.ReactNode) => (
+            <div key={label}>
+              <button type="button" onClick={pickIt} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', borderLeft: 0, borderRight: 0, borderBottom: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', fontFamily: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
+                <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
+                <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
+              </button>
+              {on && body && <div style={{ padding: '0 14px 14px 70px' }}>{body}</div>}
+            </div>
+          )
+          const haveBody = (
+            <div>
+              {ownBody}
+              {library && library.length > 0 && <><div style={{ fontSize: 12, fontWeight: 600, color: C.mute, margin: '12px 0 6px' }}>Or from your library</div>{libBody}</>}
+            </div>
+          )
+          const rows: React.ReactNode[] = [
+            two(c === 'newshoot' || c === 'shoot', () => { setContent(needContent); setWantVideo(true) }, 'I need photos or video', openShoot && openShoot.requestId ? `We add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot` : 'We shoot them. Your plan sets how much', 'creator', '#6a39de', true),
+            two(have, () => setContent('own'), 'I have photos or video', media.length ? `${media.length} added` : libSel.size ? `${libSel.size} from your library` : 'Add them from your phone', 'photos', '#2e9a78', false, haveBody),
+          ]
           return <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
               })()
 
@@ -1090,7 +1104,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             )}
             {err && <div style={{ fontSize: 12.5, color: '#c92d32', marginTop: 10 }}>{err}</div>}
             </>}
-            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' ? media.length > 0 : cc === 'library' ? libSel.size > 0 : true); const can = ready && okay; return <button type="button" onClick={() => { if (dishRows) { void applyContent().then(() => next()) } else next() }} disabled={!can || building} style={{ ...cta_, opacity: can && !building ? 1 : .5 }}>{building ? <Loader2 size={16} className="mvp-spin" /> : null} {building ? 'Building your plans' : visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
+            {simple && (() => { const cc = content ?? derivedContent; const okay = !dishRows || (cc === 'own' || cc === 'library' ? media.length > 0 || libSel.size > 0 : true); const can = ready && okay; return <button type="button" onClick={() => { if (dishRows) { void applyContent().then(() => next()) } else next() }} disabled={!can || building} style={{ ...cta_, opacity: can && !building ? 1 : .5 }}>{building ? <Loader2 size={16} className="mvp-spin" /> : null} {building ? 'Building your plans' : visible[visible.indexOf('facts') + 1] === 'content' ? 'Next' : 'See my plan'}</button> })()}
             {!simple && <button type="button" onClick={next} disabled={!ready} style={{ ...cta_, opacity: ready ? 1 : .5 }}>Next</button>}
           </div>
         )}
