@@ -379,9 +379,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* MORE THAN ONE DISH (owner 2026-09-22): the first lives in the fields; the rest here, each a name, a line, a price */
   const [dishes, setDishes] = useState<{ name: string; line: string; price: string; tags?: string[]; note?: string }[]>([])
   /* THE DISHES (owner 2026-09-24): one dish form open at a time. Add dish folds the earlier ones into a one-line
-     summary; tapping a summary opens that dish's form in place.
+     summary; tapping a summary opens that dish's form in place. A dish folds only once it has a name, and only
+     when the owner moves on (never mid-typing), so the open set changes on a tap, not on a keystroke.
      Dish 0 lives in the answers (what, line, price, note, the tags set); the rest in `dishes`. */
-  const [openDish, setOpenDish] = useState(0)
+  const [openDishes, setOpenDishes] = useState<number[]>([0])
   const [detail, setDetail] = useState<string | null>(null)
   /* PERMANENT (owner 2026-09-24): a dish that stays on the menu has no end date */
   const [permanent, setPermanent] = useState(false)
@@ -1002,33 +1003,35 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                             const removeDish = (i: number) => { if (i === 0) { const [first, ...rest] = dishes; if (first) { setA((x) => ({ ...x, what: first.name, line: first.line, price: first.price, note: first.note ?? '' })); setTags(new Set(first.tags ?? [])); setDishes(rest) } else { setA((x) => ({ ...x, what: '', line: '', price: '', note: '' })); setTags(new Set()) } } else setDishes((x) => x.filter((_, j) => j !== i - 1)) }
 
               const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 2px 8px' }
+              const focusDish = (i: number, total = count) => setOpenDishes((o) => Array.from(new Set([...o.filter((j) => j < total && !getDish(j).name.trim()), i])).sort((x, y) => x - y))
               const dishForm = (i: number) => {
                 const d = getDish(i)
-                const dTagsBody = <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setDish(i, { tags: d.tags.includes(t) ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={chip(d.tags.includes(t))}>{t}</button>)}</div>
-                const dNoteBody = <textarea rows={3} autoFocus value={d.note} onChange={(e) => setDish(i, { note: e.target.value })} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.45 }} />
                 return (
                   <div key={i}>
                     <div style={{ ...sec, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: i ? 22 : 4 }}>
                       <span>{count > 1 ? `Dish ${i + 1}` : 'The dish'}</span>
-                      {count > 1 && <button type="button" onClick={() => { removeDish(i); setOpenDish((o) => (o === i ? Math.max(0, i - 1) : o > i ? o - 1 : o)); setMedia((x) => x.filter((m) => m.dish !== i).map((m) => (m.dish != null && m.dish > i ? { ...m, dish: m.dish - 1 } : m))); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: C.mute, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Remove</button>}
+                      {count > 1 && <button type="button" onClick={() => { removeDish(i); setOpenDishes((o) => { const n = o.filter((j) => j !== i).map((j) => (j > i ? j - 1 : j)); return n.length ? n : [Math.max(0, i - 1)] }); setMedia((x) => x.filter((m) => m.dish !== i).map((m) => (m.dish != null && m.dish > i ? { ...m, dish: m.dish - 1 } : m))); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: C.mute, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Remove</button>}
                     </div>
                     {/* no upload on the dish (owner 2026-09-24): photos come from the Content choice below */}
-                    {openDish !== i ? (
-                      <button type="button" onClick={() => { setOpenDish(i); setDetail(null) }} aria-expanded={false} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                    {!openDishes.includes(i) ? (
+                      <button type="button" onClick={() => { focusDish(i); setDetail(null) }} aria-expanded={false} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '13px 14px', border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <b style={{ display: 'block', fontSize: 15, fontWeight: 600, color: d.name.trim() ? C.ink : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name.trim() || 'Add the name and price'}</b>
-                          {d.line.trim() && <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.line.trim()}</small>}
+                          {(d.line.trim() || d.tags.length > 0) && <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[d.line.trim(), d.tags.join(', ')].filter(Boolean).join(' · ')}</small>}
                         </span>
                         {d.price.trim() && <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, flex: 'none' }}>{/^\d/.test(d.price.trim()) ? `$${d.price.trim()}` : d.price.trim()}</span>}
                         <ChevronRight size={16} color={C.faint} style={{ flex: 'none', marginRight: -4, transform: 'rotate(90deg)' }} />
                       </button>
                     ) : (
                     <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
-                      {dishRow('Name', d.name, (v) => setDish(i, { name: v }), 'Pork belly bánh mì', true)}
-                      {dishRow('Price', d.price, (v) => setDish(i, { price: v }), '14', false, true)}
+                      {dishRow('Name', d.name, (v) => setDish(i, { name: v }), i ? 'Dish name' : 'Pork belly bánh mì', true)}
+                      {dishRow('Price', d.price, (v) => setDish(i, { price: v }), i ? '0' : '14', false, true)}
                       {dishRow('Description', d.line, (v) => setDish(i, { line: v }), 'A line about it')}
-                      {row(`tags-${i}`, 'Good to know', d.tags.length ? d.tags.join(', ') : 'Nothing to add', d.tags.length > 0, dTagsBody)}
-                      {row(`note-${i}`, 'Additional comments', d.note.trim() ? d.note : 'None', !!d.note.trim(), dNoteBody)}
+                      {/* GOOD TO KNOW (owner 2026-09-24): the chips always show, one tap each */}
+                      <div style={{ padding: '12px 14px 14px', borderTop: `0.5px solid ${C.line}` }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 10 }}>Good to know</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => { const on = d.tags.includes(t); return <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>{on && <Check size={12} strokeWidth={3} />}{t}</button> })}</div>
+                      </div>
                     </div>
                     )}
                   </div>
@@ -1037,7 +1040,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               return (
                 <div>
                   {Array.from({ length: count }, (_, i) => dishForm(i))}
-                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); setOpenDish(count); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '14px 10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 auto' }}><Plus size={14} /> Add dish</button>}
+                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); focusDish(count, count + 1); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: '14px 10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '0 auto' }}><Plus size={14} /> Add another dish</button>}
                   <div style={sec}>Dish available</div>
                   {dateBody}
                   <div style={sec}>Content</div>
