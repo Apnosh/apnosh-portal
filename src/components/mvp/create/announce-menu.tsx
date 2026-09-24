@@ -14,7 +14,7 @@ import { Drawing, type Scene } from './drawings'
 import { MULTI, newUid, type ItemId, type ItemPick, type Ladder } from '@/lib/plan/suggest'
 import { SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 
-export interface MenuMe { usualReach: number | null; budgetCents: number | null; creator: { slug: string; name: string; fromCents: number | null; nearby: number | null; date?: string | null } | null }
+export interface MenuMe { usualReach: number | null; budgetCents: number | null; creator: { slug: string; name: string; fromCents: number | null; nearby: number | null; date?: string | null } | null; connected?: { instagram: boolean; facebook: boolean; google: boolean; website: boolean; ordering: boolean; apps: boolean } }
 export interface MenuPrices { graphic: number; video: number; print: number; shootFor: (n: number) => number; shootLabel: (n: number) => string }
 interface CreatorProfile { name: string; slug: string; avatarUrl: string | null; audience: { nearby?: number | null; followers: number | null; avgViews: number | null; localPct: number | null; city: string | null; mealCapCents: number; partySize: number; repostOk: boolean; whitelistCents: number | null; responseHours: number | null } | null; offers: { slug: string; title: string; tiers: { id: string; name: string; priceCents: number; deliverables: string[] }[]; startingCents: number | null }[]; schedule: { slots: { date: string; start: string }[]; confirmMode: string }; avgRating: number | null; collabs: number }
 interface Fit { slug: string; tag: string; reasons: string[]; card?: { name: string; avatarUrl: string | null; fromCents: number | null; audience: { avgViews: number | null; localPct: number | null; followers: number | null } | null } }
@@ -39,6 +39,7 @@ const META: Record<ItemId, { name: string; line: string; scene: Scene; hue: stri
   review: { name: 'Ask for a review', line: 'With the check, two weeks', scene: 'review', hue: '#d99a1e', group: 'inside', free: true },
   sign: { name: 'Guest photo sign', line: 'Post it, tag us, dessert is on us', scene: 'story', hue: '#c2418f', group: 'inside', free: true },
   offer: { name: 'Launch offer', line: 'A code, free drink with it this week', scene: 'offer', hue: '#3b6fd4', group: 'inside', free: true, hasOptions: true },
+  custom: { name: 'Something else', line: 'Not on the menu? Say what you need. The team quotes it', scene: 'else', hue: '#8a928e', group: 'make', free: true, hasOptions: true },
 }
 const GROUPS: { id: 'make' | 'seen' | 'inside'; label: string }[] = [{ id: 'make', label: 'Make' }, { id: 'seen', label: 'Get it seen' }, { id: 'inside', label: 'In the restaurant' }]
 
@@ -46,6 +47,7 @@ const GROUPS: { id: 'make' | 'seen' | 'inside'; label: string }[] = [{ id: 'make
 export function itemCents(it: ItemPick, p: MenuPrices, profile?: CreatorProfile | null): number {
   const o = it.options
   switch (it.id) {
+    case 'custom': return 0
     case 'graphic': { const where = (o.where as string[] | undefined) ?? ['post']; const n = Math.max(1, Math.min(6, Number(o.count) || 1)); return Math.round(n * (p.graphic + (where.includes('tent') ? 2500 : 0) + (where.includes('poster') ? 2500 : 0) + (o.spanish ? 4000 : 0)) * (n >= 2 ? 0.9 : 1)) }
     case 'video': { const n = Math.max(1, Math.min(3, Number(o.count) || 1)); const each = p.video + (o.style === 'chef' ? 7500 : 0) + (o.tiktok ? 6000 : 0) + (o.spanish ? 2500 : 0); return Math.round(each * n * (n >= 2 ? 0.9 : 1)) + (o.filmed === 'visit' ? 15000 : 0) }
     case 'photos': return o.queue ? 0 : p.shootFor(1 + ((o.list as string[] | undefined)?.length ?? 0))
@@ -71,10 +73,12 @@ export function itemSummary(it: ItemPick, p: MenuPrices, profile?: CreatorProfil
     case 'review': return 'Two weeks'
     case 'sign': return 'A sign with a QR'
     case 'offer': return `${o.text ? String(o.text) : 'Free drink with it this week'}${o.code ? ' · a code' : ''}`
+    case 'custom': return o.what ? String(o.what) : 'The team quotes it'
   }
 }
 
 const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
+  custom: { what: '', tell: '', when: '' },
   graphic: { where: ['post'], priceOn: true, brandKit: true, from: 'ours' },
   video: { count: 1, filmed: 'clips', style: 'dish', captions: true },
   print: { kinds: ['tent'] },
@@ -153,9 +157,12 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     const m = META[it.id]
     const o = it.options
     const cents = itemCents(it, prices, profile)
-    const done = () => { patchU(open, () => ({ on: true })); setOpen(null); setMode('plan') }
-    const head = <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}><button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button><span style={{ flex: 1, fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{m.name}</span><b style={{ fontSize: 17 }}>{cents ? dollars(cents) : 'Free'}</b></div>
-    const foot = <button type="button" onClick={done} style={cta}><span>{it.on ? 'Done' : 'Add to the plan'}</span><span>{cents ? dollars(cents) : 'Free'}</span></button>
+    const done = () => { patchU(open, (x) => ({ on: true, options: x.id === 'offer' ? { ...x.options, confirmed: true } : x.options })); setOpen(null); setMode('plan') }
+    const head = <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}><button type="button" onClick={back} aria-label="Back" style={{ width: 34, height: 34, borderRadius: 99, border: `0.5px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={16} /></button><span style={{ flex: 1, fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em' }}>{m.name}</span><b style={{ fontSize: 17 }}>{it.id === 'custom' ? 'Quote' : cents ? dollars(cents) : 'Free'}</b></div>
+    const foot = <>
+      {it.on && <div style={{ textAlign: 'center', marginTop: 14 }}><button type="button" onClick={() => { if (it.uid === it.id) toggle(it.uid); else remove(it.uid); setOpen(null) }} style={{ fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, color: '#c92d32', border: 0, background: 'none', padding: '6px 10px', cursor: 'pointer' }}>Remove from plan</button></div>}
+      <button type="button" onClick={done} disabled={it.id === 'custom' && !String(o.what ?? '').trim()} style={{ ...cta, opacity: it.id === 'custom' && !String(o.what ?? '').trim() ? .5 : 1 }}><span>{it.on ? 'Done' : 'Add to the plan'}</span><span>{it.id === 'custom' ? 'Quote to come' : cents ? dollars(cents) : 'Free'}</span></button>
+    </>
     const where = (o.where as string[] | undefined) ?? ['post']
     const tw = (k: string) => setOpt('graphic', { where: where.includes(k) ? where.filter((x) => x !== k) : [...where, k] })
     return (
@@ -264,11 +271,22 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <div style={{ fontSize: 12, color: C.mute, marginTop: 8 }}>Printed, or a file to print yourself. The team quotes printing.</div>
           {foot}
         </>}
+        {it.id === 'custom' && <>
+          <Hero scene="else" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Not on the menu? Say what you need. The team prices it and sends the quote to you.</div>
+          <div style={h3}>What do you need?</div>
+          <input value={String(o.what ?? '')} onChange={(e) => setOpt('custom', { what: e.target.value })} placeholder="Chalkboard for the window" style={input} />
+          <div style={h3}>Tell the team</div>
+          <textarea rows={3} value={String(o.tell ?? '')} onChange={(e) => setOpt('custom', { tell: e.target.value })} placeholder="The dish and the price, our colours" style={{ ...input, resize: 'none', lineHeight: 1.45 }} />
+          <div style={h3}>When</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="date" value={String(o.when ?? '')} onChange={(e) => setOpt('custom', { when: e.target.value })} style={{ ...input, flex: 1 }} /><button type="button" onClick={() => setOpt('custom', { when: '' })} style={{ height: 40, padding: '0 14px', borderRadius: 99, border: `1.5px solid ${!o.when ? C.ink : C.line}`, background: !o.when ? C.ink : '#fff', color: !o.when ? '#fff' : C.ink, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>No rush</button></div>
+          <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 12, background: '#fff4e0', color: '#8a5a0c', fontSize: 12.5, lineHeight: 1.45 }}>The team quotes it within a day. Nothing is charged until you say yes to the price.</div>
+          {foot}
+        </>}
         {it.id === 'offer' && <>
           <Hero scene="offer" hue={m.hue} />
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>The offer<input value={String(o.text ?? '')} onChange={(e) => setOpt('offer', { text: e.target.value })} placeholder="Free drink with it this week" style={input} /></label>
-          <div style={h3}>How it is counted</div>
-          <Opt kind="cb" on={o.code !== false} label="A code the team counts" small="On the team card and the post" price="free" onClick={() => setOpt('offer', { code: o.code === false })} />
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>The code<input value={String(o.codeText ?? '')} onChange={(e) => setOpt('offer', { codeText: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) })} placeholder="BANHMI10" style={{ ...input, letterSpacing: '.08em', fontWeight: 700 }} /></label>
+          <div style={{ fontSize: 12.5, color: C.greenDk, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} /> The team counts the code</div>
           {foot}
         </>}
       </div>
@@ -305,10 +323,11 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   const costOf = (set: Record<string, Record<string, unknown> | true>) => items.filter((x) => x.uid === x.id).reduce((sum, it) => { const v = set[it.id]; if (!v) return sum; const opt = v === true ? baseOpts(it) : { ...baseOpts(it), ...v }; return sum + itemCents({ ...it, on: true, options: opt }, prices, profile) }, 0)
   const applyStep = (n: number) => {
     const set = stepSets[n].on
-    setItems((xs) => xs.filter((x) => x.uid === x.id).map((it) => { const v = set[it.id]; return v ? { ...it, on: true, options: v === true ? baseOpts(it) : { ...baseOpts(it), ...v } } : { ...it, on: false } }))
+    /* a level sets the base lines; custom lines the owner wrote ride along untouched */
+    setItems((xs) => xs.filter((x) => x.uid === x.id || x.id === 'custom').map((it) => { if (it.id === 'custom') return it; const v = set[it.id]; return v ? { ...it, on: true, options: v === true ? baseOpts(it) : { ...baseOpts(it), ...v } } : { ...it, on: false } }))
   }
   const currentStep = (() => {
-    const onIds = items.filter((x) => x.on).map((x) => x.id).sort().join(',')
+    const onIds = items.filter((x) => x.on && x.id !== 'custom').map((x) => x.id).sort().join(',')
     const boostNow = Number(items.find((x) => x.id === 'boost' && x.on)?.options.cents) || 0
     for (let i = 0; i < stepSets.length; i++) {
       const set = stepSets[i].on
@@ -359,76 +378,84 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     <div key={mode} className={mode === 'add' ? 'an-fwd' : switched ? 'an-back' : undefined}>
       {mode === 'plan' && simplePlans ? <>
         {(() => {
-          /* THE CART (owner 2026-09-23, "the Airbnb lens, only what this plan includes, like a DoorDash order"):
-             the pill picks a level; below it, what the plan includes as cart rows grouped by stage, each with its
-             drawing, name, one line, price, a quantity stepper where counts make sense, Change or Swap, and a
-             remove; then Add to your plan for the pieces not in it; then the subtotal and Continue. */
+          /* THE CART, WITH REAL PRODUCTS (owner 2026-09-24): every line is a product with a spec, a quantity where one
+             makes sense, a price, and a state that says whether it is ready to buy. Rows are laid out like a DoorDash
+             item: the disc, the bold name, a chevron; the choices as short lines; at the bottom the stepper or bin and
+             the state chip on the left, the price on the right. Then Add to your plan, then the subtotal. */
           const three = ladder ? [0, 1, 2] : [0, 1, ([2, 3, 4].find((i) => stepSets[i] && costOf(stepSets[i].on) > costOf(stepSets[1].on)) ?? 2)]
           const titles: Record<number, string> = { [three[0]]: 'Just be seen', [three[1]]: 'Drive actions', [three[2]]: 'The full push' }
           const chosen = currentStep
           const pos = three.indexOf(chosen)
-          const first = cn ? cn.name.split(' ')[0] : (profile?.name.split(' ')[0] ?? null)
           const day = (iso: string | null | undefined) => (iso && iso.length === 10 ? nice(iso).replace(/^(\w+), /, '$1 ') : iso ?? '')
-          const STAGES: { name: string; hue: string; ids: ItemId[] }[] = [
-            { name: 'Get seen', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] },
-            { name: 'Create interest', hue: '#3b6fd4', ids: ['graphic', 'video', 'photos', 'print'] },
-            { name: 'Drive actions', hue: '#6a39de', ids: ['taste', 'offer'] },
-            { name: 'Get orders', hue: '#d99a1e', ids: ['apps'] },
-            { name: 'Build reputation', hue: '#0f97a8', ids: ['review', 'sign'] },
+          const chans = platformsWord ? platformsWord.split(', ') : []
+          const postName = chans.length ? `Post on ${chans.length > 1 ? `${chans.slice(0, -1).join(', ')} and ${chans[chans.length - 1]}` : chans[0]}` : 'Post on your channels'
+          type Row = { key: string; uid: string; id: ItemId; name: string; lines: string[]; price: string; cents: number; state: { ok: boolean; word: string }; count?: number; onMinus?: () => void; onPlus?: () => void; onBin: () => void; blocks: boolean }
+          const rows: Row[] = []
+          const on = (id: ItemId) => items.filter((x) => x.on && x.id === id)
+          const ready = (word = 'Ready') => ({ ok: true, word })
+          const needs = (word: string) => ({ ok: false, word })
+          for (const it of on('post')) rows.push({ key: it.uid, uid: it.uid, id: 'post', name: postName, lines: [day(dates?.posts) ? `${day(dates?.posts)}, ${bestHourWord}` : bestHourWord, ...(it.options.story !== false ? ['Story included'] : []), ...(orderButton ? ['Order button on'] : [])], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
+          for (const it of on('boost')) { const c = Math.round((Number(it.options.cents) || 2000) / 100); rows.push({ key: it.uid, uid: it.uid, id: 'boost', name: 'Boost the post', lines: [`${c <= 20 ? 'Small' : c >= 100 ? 'Big' : 'Standard'}, $${c}`, `${Number(it.options.days) || 3} days`, `About ${(c * 150).toLocaleString()} nearby, est.`], price: dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), onBin: () => toggle(it.uid), blocks: false }) }
+          for (const it of on('creator')) { const picked = !!it.options.slug && (profile || cn); const nm = profile?.name ?? cn?.name ?? null; const code = nm ? `${nm.split(' ')[0].replace(/[^a-z]/gi, '').toUpperCase().slice(0, 8)}10` : ''; rows.push({ key: it.uid, uid: it.uid, id: 'creator', name: 'Creator visit and post', lines: picked && nm ? [nm, ...(it.options.date ? [day(String(it.options.date))] : []), ...(it.options.code !== false ? [`Code ${code}`] : [])] : [`${Math.max(1, fits.length)} near you, ranked`, 'Visits, eats, posts it'], price: picked ? dollars(itemCents(it, prices, profile)) : `from ${dollars(itemCents(it, prices, profile))}`, cents: itemCents(it, prices, profile), state: picked ? ready() : needs('Choose a creator'), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: !picked }) }
+          for (const it of on('graphic')) { const n = Math.max(1, Number(it.options.count) || 1); rows.push({ key: it.uid, uid: it.uid, id: 'graphic', name: `Instagram graphic${it.options.priceOn !== false ? ', price on it' : ''}`, lines: [it.options.from === 'shoot' ? 'From the shoot photos' : it.options.from === 'stock' ? 'Licensed photo' : 'Your photo', `Ready ${day(dates?.ready) || 'in 2 days'}`], price: dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), count: n, onMinus: () => (n <= 1 ? (it.uid === it.id ? toggle(it.uid) : remove(it.uid)) : patchU(it.uid, (x) => ({ options: { ...x.options, count: n - 1 } }))), onPlus: () => patchU(it.uid, (x) => ({ options: { ...x.options, count: Math.min(6, n + 1) } })), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: false }) }
+          for (const it of on('video')) { const n = Math.max(1, Number(it.options.count) || 1); const f = it.options.filmed; const src = f === 'shoot' ? 'From the shoot' : f === 'clips' ? (hasVideo ? 'From your clips' : 'Send clips from your phone') : f === 'creator' ? `${(profile?.name ?? cn?.name ?? 'The creator').split(' ')[0]} films it` : 'We come film it'; rows.push({ key: it.uid, uid: it.uid, id: 'video', name: 'Reel', lines: [src, '15 to 30 seconds, captions'], price: dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), count: n, onMinus: () => (n <= 1 ? (it.uid === it.id ? toggle(it.uid) : remove(it.uid)) : patchU(it.uid, (x) => ({ options: { ...x.options, count: n - 1 } }))), onPlus: () => patchU(it.uid, (x) => ({ options: { ...x.options, count: Math.min(6, n + 1) } })), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: false }) }
+          for (const it of on('photos')) { const n = Number(it.options.photos) || 15; rows.push({ key: it.uid, uid: it.uid, id: 'photos', name: it.options.queue ? 'Next content shoot' : `Content shoot, ${n >= 40 ? 'a full day' : n >= 25 ? 'half a day' : 'a quick visit'}`, lines: [`${n} photos`, it.options.queue ? 'Waits for the next visit' : it.options.date ? day(String(it.options.date)) : 'Team offers two dates'], price: it.options.queue ? 'Paid when booked' : dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), onBin: () => toggle(it.uid), blocks: false }) }
+          for (const it of on('print')) { const kinds = (it.options.kinds as string[] | undefined) ?? ['tent']; for (const k of kinds) rows.push({ key: `${it.uid}-${k}`, uid: it.uid, id: 'print', name: k === 'poster' ? 'Window poster print' : 'Table tent print', lines: [k === 'poster' ? '1 poster, from the graphic' : '25 cards, from the graphic', `Delivered ${day(dates?.ready) || 'in 3 days'}`], price: dollars(prices.print), cents: prices.print, state: ready(), onBin: () => { const rest = kinds.filter((x) => x !== k); if (rest.length) patchU(it.uid, (x) => ({ options: { ...x.options, kinds: rest } })); else toggle(it.uid) }, blocks: false }) }
+          for (const it of on('taste')) rows.push({ key: it.uid, uid: it.uid, id: 'taste', name: 'Taste at the counter', lines: [`All week from ${day(startDay) || 'the start'}`, 'On the team card'], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
+          for (const it of on('offer')) { const okd = it.options.confirmed === true; const txt = String(it.options.text ?? '') || 'A free drink with it this week'; const code = String(it.options.codeText ?? ''); rows.push({ key: it.uid, uid: it.uid, id: 'offer', name: 'Launch offer with a code', lines: [txt, code ? `Code ${code}` : 'Code to fill in'], price: 'Free', cents: 0, state: okd ? ready() : needs('Fill in the code'), onBin: () => toggle(it.uid), blocks: !okd }) }
+          for (const it of on('apps')) rows.push({ key: it.uid, uid: it.uid, id: 'apps', name: 'DoorDash feature', lines: ['Two weeks on the item'], price: 'Free', cents: 0, state: me?.connected?.apps ? ready() : needs('Connect DoorDash'), onBin: () => toggle(it.uid), blocks: false })
+          for (const it of on('review')) rows.push({ key: it.uid, uid: it.uid, id: 'review', name: 'Review ask with the check', lines: ['Two weeks', 'The printed card'], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
+          for (const it of on('sign')) rows.push({ key: it.uid, uid: it.uid, id: 'sign', name: 'Guest photo sign', lines: ['1 sign', 'Post it, tag us'], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
+          for (const it of on('custom')) rows.push({ key: it.uid, uid: it.uid, id: 'custom', name: String(it.options.what ?? '') || 'Something else', lines: [String(it.options.tell ?? '') || 'The team quotes it', it.options.when ? day(String(it.options.when)) : 'No rush'], price: 'Quote to come', cents: 0, state: needs('Quote pending'), onBin: () => remove(it.uid), blocks: false })
+          const STAGE: { name: string; hue: string; ids: ItemId[] }[] = [
+            { name: 'Get seen', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] }, { name: 'Create interest', hue: '#3b6fd4', ids: ['graphic', 'video', 'photos', 'print'] },
+            { name: 'Drive actions', hue: '#6a39de', ids: ['taste', 'offer'] }, { name: 'Get orders', hue: '#d99a1e', ids: ['apps'] }, { name: 'Build reputation', hue: '#0f97a8', ids: ['review', 'sign'] }, { name: 'Custom', hue: '#8a928e', ids: ['custom'] },
           ]
-          const COUNTED: ItemId[] = ['graphic', 'video']
-          const line = (it: ItemPick) => {
-            const o = it.options; const fallback = META[it.id].line
-            if (it.id === 'post') return `${platformsWord || 'Your channels'} · ${day(dates?.posts) || bestHourWord}`
-            if (it.id === 'boost') return `$${Math.round((Number(o.cents) || 2000) / 100)} · ${Number(o.days) || 3} days · about ${((Math.round((Number(o.cents) || 2000) / 100)) * 150).toLocaleString()} nearby, est.`
-            if (it.id === 'creator') return `${profile?.name ?? cn?.name ?? 'A local creator'}${o.date ? ` · ${day(String(o.date))}` : ''}`
-            if (it.id === 'graphic') return `${o.priceOn !== false ? 'Price on it · ' : ''}${o.from === 'shoot' ? 'from the shoot' : o.from === 'stock' ? 'licensed photo' : 'your photo'} · ready ${day(dates?.ready) || 'in 2 days'}`
-            if (it.id === 'video') return `${o.filmed === 'shoot' ? 'From the shoot' : o.filmed === 'clips' ? 'From your clips' : o.filmed === 'creator' ? `${first ?? 'The creator'} films it` : 'We come film it'}`
-            if (it.id === 'photos') return o.queue ? 'On the next content shoot' : `${Number(o.photos) || 15} photos${o.date ? ` · ${day(String(o.date))}` : ''}`
-            if (it.id === 'print') { const k = (o.kinds as string[] | undefined) ?? ['tent']; return k.map((x) => (x === 'tent' ? 'Table tent' : 'Window poster')).join(' + ') }
-            if (it.id === 'taste') return `At the counter · from ${day(startDay) || 'the start'}`
-            if (it.id === 'offer') return `A code the team counts${o.text ? ` · ${String(o.text)}` : ''}`
-            if (it.id === 'apps') return 'Featured on the item, two weeks'
-            if (it.id === 'review') return 'With the check, two weeks'
-            if (it.id === 'sign') return 'Post it, tag us'
-            return fallback
-          }
-          const setCount = (uid: string, n: number) => { if (n <= 0) { toggle(uid); return } patchU(uid, (it) => ({ options: { ...it.options, count: Math.min(6, n) } })) }
-          const onRows = STAGES.map((st) => ({ st, rows: items.filter((x) => x.on && st.ids.includes(x.id)) })).filter((g) => g.rows.length)
-          const offRows = STAGES.map((st) => ({ st, rows: st.ids.map((id) => { const lines = items.filter((x) => x.id === id); return lines.find((x) => x.uid === id) ?? lines[0] }).filter((x): x is ItemPick => !!x && !x.on) })).filter((g) => g.rows.length)
+          const groups = STAGE.map((st) => ({ st, rows: rows.filter((r) => st.ids.includes(r.id)) })).filter((g) => g.rows.length)
+          const missing = rows.filter((r) => r.blocks)
+          const offIds: ItemId[] = ['creator', 'boost', 'video', 'photos', 'print', 'graphic', 'taste', 'offer', 'apps', 'review', 'sign']
+          const offRows = offIds.map((id) => { const lines = items.filter((x) => x.id === id); return lines.find((x) => x.uid === id) ?? lines[0] }).filter((x): x is ItemPick => !!x && !x.on)
+          const offName: Record<string, string> = { creator: 'Creator visit and post', boost: 'Boost the post', video: 'Reel', photos: 'Content shoot, a quick visit', print: 'Table tent print', graphic: 'Instagram graphic, price on it', taste: 'Taste at the counter', offer: 'Launch offer with a code', apps: 'DoorDash feature', review: 'Review ask with the check', sign: 'Guest photo sign' }
+          const offLines: Record<string, string[]> = { creator: ['A local creator visits and posts', `${Math.max(1, fits.length)} near you, ranked`], boost: ['Shown to people nearby', '3 days'], video: ['From your clips, or filmed here', '15 to 30 seconds'], photos: ['15 photos, one visit', 'Team offers two dates'], print: ['25 cards, from the graphic'], graphic: ['Designed for the post', 'Ready in 2 days'], taste: ['All week', 'On the team card'], offer: ['A code the team counts'], apps: ['Two weeks on the item'], review: ['Two weeks', 'The printed card'], sign: ['1 sign', 'Post it, tag us'] }
           const recTag = (id: ItemId) => (ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : null)
-          const stepper = (it: ItemPick) => { const n = Math.max(1, Number(it.options.count) || 1); return (
-            <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 99, height: 32, overflow: 'hidden' }}>
-              <button type="button" aria-label={n === 1 ? 'Remove' : 'One fewer'} onClick={() => setCount(it.uid, n - 1)} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}>{n === 1 ? <Trash2 size={13} /> : <Minus size={13} />}</button>
-              <b style={{ minWidth: 18, textAlign: 'center', fontSize: 13.5 }}>{n}</b>
-              <button type="button" aria-label="One more" onClick={() => setCount(it.uid, n + 1)} disabled={n >= 6} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: n >= 6 ? C.faint : C.ink }}><Plus size={13} /></button>
-            </span>
-          ) }
-          const cartRow = (it: ItemPick) => { const m = META[it.id]; const cents = itemCents(it, prices, profile); return (
-            <div key={it.uid} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 0', borderTop: `0.5px solid ${C.line}` }}>
-              <Thumb it={it} size={48} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <b style={{ fontSize: 14.5, lineHeight: 1.25 }}>{nameOf(it)}{COUNTED.includes(it.id) && Number(it.options.count) > 1 ? ` ×${it.options.count}` : ''}</b>
-                  <b style={{ fontSize: 14, whiteSpace: 'nowrap', color: cents ? C.ink : C.greenDk }}>{cents ? dollars(cents) : 'Free'}</b>
+          const chip = (st: { ok: boolean; word: string }) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, background: st.ok ? C.greenSoft : '#fff4e0', color: st.ok ? C.greenDk : '#8a5a0c' }}>{st.ok ? <Check size={11} strokeWidth={3} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: '#d99a1e' }} />}{st.word}</span>
+          const cartRow = (r: Row) => (
+            <div key={r.key} style={{ borderTop: `0.5px solid ${C.line}`, padding: '14px 0' }}>
+              <div role="button" tabIndex={0} onClick={() => setOpen(r.uid)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(r.uid) }} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <span style={{ width: 56, height: 56, borderRadius: 16, flex: 'none', display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${META[r.id].hue} 14%, #fff)`, ['--c2' as string]: META[r.id].hue }}><span style={{ width: 36 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}><b style={{ flex: 1, fontSize: 15, lineHeight: 1.25 }}>{r.name}</b><ChevronRight size={18} color={C.faint} style={{ flex: 'none', marginTop: 1 }} /></div>
+                  <div style={{ marginTop: 4 }}>{r.lines.slice(0, 4).map((l, i) => <div key={i} style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l}</div>)}</div>
                 </div>
-                <small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.35 }}>{line(it)}</small>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  {COUNTED.includes(it.id) ? stepper(it) : <button type="button" aria-label="Remove" onClick={() => (it.uid === it.id ? toggle(it.uid) : remove(it.uid))} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Trash2 size={13} /></button>}
-                  {m.hasOptions && <button type="button" onClick={() => setOpen(it.uid)} style={{ height: 32, padding: '0 12px', borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.ink, cursor: 'pointer' }}>{it.id === 'creator' ? 'Swap' : 'Change'}</button>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingLeft: 68 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {r.count != null ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 99, height: 32, overflow: 'hidden' }}>
+                      <button type="button" aria-label={r.count === 1 ? 'Remove' : 'One fewer'} onClick={r.onMinus} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}>{r.count === 1 ? <Trash2 size={13} /> : <Minus size={13} />}</button>
+                      <b style={{ minWidth: 16, textAlign: 'center', fontSize: 13.5 }}>{r.count}</b>
+                      <button type="button" aria-label="One more" onClick={r.onPlus} disabled={r.count >= 6} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: r.count >= 6 ? C.faint : C.ink }}><Plus size={13} /></button>
+                    </span>
+                  ) : <button type="button" aria-label="Remove" onClick={r.onBin} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Trash2 size={13} /></button>}
+                  {chip(r.state)}
                 </div>
+                <b style={{ fontSize: 15, whiteSpace: 'nowrap', color: r.cents || r.price.startsWith('from') ? C.ink : C.greenDk }}>{r.price}</b>
               </div>
             </div>
-          ) }
+          )
           const addRow = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; const tag = recTag(it.id); return (
-            <div key={it.uid} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: `0.5px solid ${C.line}` }}>
-              <Thumb it={it} size={40} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <b style={{ display: 'block', fontSize: 14 }}>{m.name}{tag && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 6px', verticalAlign: 'middle' }}>{tag}</span>}</b>
-                <small style={{ display: 'block', fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.line}</small>
+            <div key={it.uid} style={{ borderTop: `0.5px solid ${C.line}`, padding: '12px 0' }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <span style={{ width: 48, height: 48, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${m.hue} 14%, #fff)`, ['--c2' as string]: m.hue, opacity: .85 }}><span style={{ width: 30 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(x) => x} /></span></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ display: 'block', fontSize: 14.5, lineHeight: 1.25 }}>{offName[it.id] ?? m.name}{tag && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 6px', verticalAlign: 'middle' }}>{tag}</span>}</b>
+                  {(offLines[it.id] ?? [m.line]).map((l, i) => <div key={i} style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{l}</div>)}
+                </div>
               </div>
-              <b style={{ fontSize: 13, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</b>
-              <button type="button" aria-label="Add" onClick={() => (m.hasOptions && !free ? setOpen(it.uid) : toggle(it.uid))} style={{ width: 34, height: 34, borderRadius: 99, border: `1.5px solid ${C.ink}`, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink, flex: 'none' }}><Plus size={15} /></button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingLeft: 60 }}>
+                <button type="button" onClick={() => (m.hasOptions && !free ? setOpen(it.uid) : toggle(it.uid))} style={{ height: 32, padding: '0 14px', borderRadius: 99, border: 0, background: C.greenDk, color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} strokeWidth={3} /> Add</button>
+                <b style={{ fontSize: 14, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</b>
+              </div>
             </div>
           ) }
           return (
@@ -438,34 +465,36 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                 {three.map((i, k) => (
                   <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: 40, borderRadius: 99, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', color: pos === k ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
                     <b style={{ fontSize: 13, fontWeight: 700 }}>{titles[i]}</b>
-                    <small style={{ fontSize: 9.5, fontWeight: 700, color: pos === k ? C.mute : C.faint }}>{k === 1 && pos !== 1 ? 'Our pick' : (costOf(stepSets[i].on) ? dollars(costOf(stepSets[i].on)) : 'Free')}</small>
+                    <small style={{ fontSize: 9.5, fontWeight: 700, color: pos === k ? C.mute : C.faint }}>{costOf(stepSets[i].on) ? dollars(costOf(stepSets[i].on)) : 'Free'}{k === 1 ? ' · Our pick' : ''}</small>
                   </button>
                 ))}
               </div>
               {pos < 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Your own mix. <button type="button" onClick={() => applyStep(three[1])} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Back to our pick</button></div>}
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 16 }}>
                 <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>What this plan includes</b>
-                <small style={{ fontSize: 12.5, color: C.mute }}>{items.filter((x) => x.on).length} pieces</small>
+                <small style={{ fontSize: 12.5, color: C.mute }}>{rows.length} pieces</small>
               </div>
-              {onRows.map(({ st, rows }) => (
-                <div key={st.name} style={{ marginTop: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '10px 0 2px' }}><span style={{ width: 8, height: 8, borderRadius: 99, background: st.hue }} />{st.name}</div>
-                  {rows.map(cartRow)}
+              {groups.map(({ st, rows: rs }) => (
+                <div key={st.name} style={{ marginTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '10px 0 4px' }}><span style={{ width: 8, height: 8, borderRadius: 99, background: st.hue }} />{st.name}</div>
+                  {rs.map(cartRow)}
                 </div>
               ))}
-              {offRows.length > 0 && (
-                <div style={{ marginTop: 22 }}>
-                  <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
-                  {offRows.map(({ st, rows }) => (
-                    <div key={st.name} style={{ marginTop: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '8px 0 2px' }}><span style={{ width: 8, height: 8, borderRadius: 99, border: `1.5px solid ${C.faint}` }} />{st.name}</div>
-                      {rows.map(addRow)}
-                    </div>
-                  ))}
+              <div style={{ marginTop: 22 }}>
+                <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
+                <div style={{ marginTop: 6 }}>{offRows.map(addRow)}</div>
+                <div style={{ borderTop: `0.5px solid ${C.line}`, padding: '12px 0' }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <span style={{ width: 48, height: 48, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: '#f6f6f8', ['--c2' as string]: '#8a928e' }}><span style={{ width: 30 }}><Drawing spec={{ scene: 'else' }} name="" rating="" t={(x) => x} /></span></span>
+                    <div style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14.5 }}>Something else</b><div style={{ fontSize: 12.5, color: C.mute }}>Say what you need. The team quotes it</div></div>
+                    <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setOpen(uid) }} style={{ height: 32, padding: '0 14px', borderRadius: 99, border: `1.5px solid ${C.ink}`, background: '#fff', color: C.ink, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} strokeWidth={3} /> Add</button>
+                  </div>
                 </div>
-              )}
+              </div>
               <div style={{ marginTop: 18, borderTop: `0.5px solid ${C.line}`, paddingTop: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700 }}><span>Subtotal</span><span>{total ? dollars(total) : 'Free'}</span></div>
+                {missing.length > 0 && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 2 }}>{missing.map((r) => r.state.word).join(' · ')}</div>}
+                {rows.some((r) => r.id === 'custom') && <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>Custom items are quoted after you order. Nothing is charged until you say yes.</div>}
                 <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>Service fee ({Math.round(SERVICE_FEE_RATE * 100)}%) and taxes on the next screen</div>
               </div>
             </div>
@@ -513,7 +542,12 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
       </>}
       <div style={{ paddingTop: 10, marginTop: 6 }}>
         {mode === 'add' && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: C.mute, padding: '0 2px 2px' }}><span><b style={{ color: C.ink }}>{onCount} thing{onCount === 1 ? '' : 's'}</b>{reach != null ? ` · about ${round2(reach).toLocaleString()} people` : ''}</span></div>}
-        <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : (ctaLabel ?? 'Make it happen')}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
+        {(() => {
+          /* what still needs a choice before the order can go on (the creator, the offer's code) */
+          const missing = simplePlans && mode === 'plan' ? items.filter((x) => x.on && ((x.id === 'creator' && !x.options.slug) || (x.id === 'offer' && x.options.confirmed !== true))) : []
+          if (missing.length) { const first = missing[0]; const word = first.id === 'creator' ? 'Choose a creator' : 'Fill in the code'; return <button type="button" onClick={() => setOpen(first.uid)} style={{ ...cta, background: '#f6f6f8', color: C.mute }}><span>{word} to continue</span><span style={{ fontSize: 13, fontWeight: 600 }}>{missing.length} left</span></button> }
+          return <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : (ctaLabel ?? 'Make it happen')}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
+        })()}
         <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
       </div>
     </div>

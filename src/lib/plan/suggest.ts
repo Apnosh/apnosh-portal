@@ -7,10 +7,10 @@
  * with no budget, the free items plus the one paid item that matters most, and the screen
  * asks for a number.
  */
-export type ItemId = 'post' | 'graphic' | 'video' | 'photos' | 'boost' | 'creator' | 'print' | 'apps' | 'taste' | 'review' | 'sign' | 'offer'
+export type ItemId = 'post' | 'graphic' | 'video' | 'photos' | 'boost' | 'creator' | 'print' | 'apps' | 'taste' | 'review' | 'sign' | 'offer' | 'custom'
 export interface ItemPick { id: ItemId; uid: string; on: boolean; why: string; options: Record<string, unknown>; cents: number }
 /** things you can add more than once, each with its own options */
-export const MULTI: ItemId[] = ['graphic', 'video', 'print', 'creator']
+export const MULTI: ItemId[] = ['graphic', 'video', 'print', 'creator', 'custom']
 export const newUid = (id: ItemId) => `${id}-${Math.random().toString(36).slice(2, 8)}`
 export interface SuggestInput {
   kind: string

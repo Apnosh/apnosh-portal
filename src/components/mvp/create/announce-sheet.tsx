@@ -505,6 +505,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     const money = (v?: string) => (v && /^\d/.test(v.trim()) ? `$${v.trim()}` : (v ?? ''))
     if (kind?.id === 'dish') facts.price = money(a.price)
     if (rush) facts.note = [facts.note, 'RUSH: the pieces are wanted two days sooner'].filter(Boolean).join('\n')
+    const customs = items.filter((x) => x.on && x.id === 'custom' && String(x.options.what ?? '').trim())
+    if (customs.length) facts.note = [facts.note, ...customs.map((x) => `CUSTOM, quote wanted: ${String(x.options.what).trim()}${String(x.options.tell ?? '').trim() ? `. ${String(x.options.tell).trim()}` : ''}${x.options.when ? `. Wanted by ${x.options.when}` : '. No rush'}`)].filter(Boolean).join('\n')
+    const offer = items.find((x) => x.on && x.id === 'offer')
+    if (offer && String(offer.options.codeText ?? '').trim()) facts.note = [facts.note, `OFFER CODE: ${String(offer.options.codeText).trim()}`].filter(Boolean).join('\n')
     const photosOf = (i: number) => media.filter((m) => m.dish === i).map((m) => m.url)
     if (kind?.id === 'dish' && (extra.length || media.some((m) => m.dish != null))) { facts.dishes = JSON.stringify([{ name: a.what ?? '', line: a.line ?? '', price: money(a.price), photos: photosOf(0) }, ...extra.map((d) => ({ ...d, price: money(d.price), photos: photosOf(dishes.indexOf(d) + 1) }))]); facts.what = [a.what, ...extra.map((d) => d.name)].filter(Boolean).join(', '); if (extra.length) facts.note = [a.note, `Also new: ${extra.map((d) => `${d.name}${d.price ? ` (${money(d.price)})` : ''}${d.line ? `: ${d.line}` : ''}${d.tags?.length ? ` (${d.tags.join(', ')})` : ''}${d.note?.trim() ? `. ${d.note.trim()}` : ''}`).join('; ')}`].filter(Boolean).join('\n') }
     for (const f of kind?.fields ?? []) if (f.kind === 'date' && facts[f.key]) facts[f.key] = longDate(facts[f.key])
@@ -735,7 +739,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     try {
       const r = await fetch('/api/dashboard/announce-suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, kind: kind.id, facts: { ...contentFacts, price: a.price ?? null, hasMedia: media.length > 0, hasVideo: media.some((m) => m.video), limited, date: a.when ?? a.from ?? null, what: a.what ?? null, source: media.length ? 'mine' : (a.picsrc as 'licensed' | 'shoot' | 'none' | undefined) ?? 'none', look: a.look ?? null }, ...(budgetCents != null ? { budgetCents } : {}) }) })
       const j = await r.json().catch(() => ({}))
-      if (r.ok && Array.isArray(j.items)) { setItems(j.items); setMe(j.me ?? null); setLadder((j.ladder as Ladder | undefined) ?? null) }
+      if (r.ok && Array.isArray(j.items)) {
+        /* the offer's code starts as a suggestion from the dish's name (BANHMI10), editable on its sheet */
+        const codeFrom = (name: string) => { const words = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/gi, '').trim().split(/\s+/).filter(Boolean); const w = (words.length >= 2 ? words.slice(-2).join('') : words[0] ?? 'NEW').toUpperCase().slice(0, 8); return `${w}10` }
+        const withCode = (j.items as ItemPick[]).map((x) => (x.id === 'offer' && !x.options.codeText ? { ...x, options: { ...x.options, codeText: codeFrom(a.what ?? '') } } : x))
+        setItems(withCode); setMe(j.me ?? null); setLadder((j.ladder as Ladder | undefined) ?? null)
+      }
     } catch { /* the menu still works by hand */ }
   }
   const pickForBudget = () => { const cents = Math.round(Number(budget.replace(/[^0-9.]/g, '')) * 100); if (Number.isFinite(cents) && cents >= 0) void suggest(cents) }
