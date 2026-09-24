@@ -655,6 +655,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),
+        rush,
         items: simple ? items.filter((x) => x.on).map((x) => ({ id: x.id, uid: x.uid, on: true, options: x.options, why: x.why, cents: itemCents(x, prices) })) : undefined,
         words: { social: wS.trim(), google: wG.trim(), cta: ctaEff, languages: spanish ? ['es'] : [], card: also.has('team') ? wC.trim() : '' },
         dates: rawDates(),

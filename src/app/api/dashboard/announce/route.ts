@@ -74,6 +74,8 @@ interface Body {
   whys?: Record<string, unknown>
   /* the menu: every item with its options (announce-menu.tsx) */
   items?: { id?: string; uid?: string; on?: boolean; options?: Record<string, unknown>; why?: string; cents?: number }[]
+  /** the pieces we make come two days sooner, a quarter more on them */
+  rush?: boolean
   words?: { social?: string; google?: string; cta?: Cta; languages?: unknown; card?: string }
   /** the date answers as ISO days, beside the spelled-out ones in `answers` */
   dates?: Record<string, unknown>
@@ -282,7 +284,10 @@ export async function POST(req: NextRequest) {
   }
   if (shoot) requestId = shoot.requestId
   const shootWord = shoot ? `the ${shoot.date ? niceDay(shoot.date) : 'booked'} shoot day (request ${shoot.requestId ?? ''})` : ''
-  const pieceDue = readyBy ?? (shoot?.date ? day(addDays(new Date(shoot.date + 'T12:00:00'), 3).toISOString()) : null)
+  const rush = body.rush === true
+  const pieceDue0 = readyBy ?? (shoot?.date ? day(addDays(new Date(shoot.date + 'T12:00:00'), 3).toISOString()) : null)
+  /* a rush pulls the made pieces two days closer, never before tomorrow */
+  const pieceDue = rush && pieceDue0 ? day(new Date(Math.max(Date.now() + 86400000, addDays(new Date(pieceDue0 + 'T12:00:00'), -2).getTime())).toISOString()) : pieceDue0
 
   /* the pieces, one request each, every one pointing at the same announcement (and shoot) */
   for (const [gi, gl] of linesOf('graphic').slice(1).entries()) {
@@ -293,7 +298,8 @@ export async function POST(req: NextRequest) {
     if (r.ok) { total += r.orderCents ?? 0; plan.push({ key: `graphic-${gi + 2}`, label: `Another graphic${where.includes('poster') ? ', the poster' : where.includes('tent') ? ', the table tent' : ''}`, detail: where.map((w) => (w === 'post' ? 'post + Story' : w === 'tent' ? 'table tent' : w)).join(', '), date: pieceDue, cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: gl.why }) }
     else errors.push(`A graphic did not start: ${r.error}`)
   }
-  if (pieces.includes('graphic')) {
+  const gCount = Math.max(1, Math.min(6, Number(item('graphic')?.options?.count) || 1))
+  for (let gi = 0; gi < (pieces.includes('graphic') ? gCount : 0); gi++) {
     const dests: string[] = []
     const destLabels: string[] = []
     if (accountIds.length) { dests.push('instagram-post', 'facebook-post'); destLabels.push('Instagram post', 'Facebook post') }
@@ -304,14 +310,14 @@ export async function POST(req: NextRequest) {
     const gfrom = item('graphic')?.options?.from
     const photos = onShoot || gfrom === 'shoot' ? 'shoot' : gfrom === 'stock' || a.picsrc === 'licensed' ? 'source' : media.length ? 'own' : 'none'
     const r = await createCreativeRequest({
-      clientId, userId, type: 'graphic', order: true, due_date: pieceDue,
-      answers: { what: `${name} announcement`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
+      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush,
+      answers: { what: `${name} announcement${gCount > 1 ? ` (design ${gi + 1} of ${gCount}, a different angle each)` : ''}`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
       attachments,
       design: { destinations: dests, tier: 2, photos, dueDateISO: pieceDue ?? undefined },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
-      plan.push({ key: 'graphic', label: shoot ? 'The graphic, from the shoot' : 'We start the graphic', detail: shoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', date: shoot ? pieceDue : day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+      plan.push({ key: gi ? `graphic-${gi + 1}` : 'graphic', label: `${shoot ? 'The graphic, from the shoot' : 'We start the graphic'}${gCount > 1 ? ` (${gi + 1} of ${gCount})` : ''}`, detail: shoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', date: shoot ? pieceDue : day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     } else errors.push(`The graphic did not start: ${r.error}`)
   }
   const videoLines = linesOf('video').length ? linesOf('video') : pieces.includes('reel') ? [null] : []
@@ -321,7 +327,7 @@ export async function POST(req: NextRequest) {
     const filming = o.filmed === 'visit' ? 'Come film at my place' : o.filmed === 'clips' ? 'Use clips and photos I have' : onShoot || o.filmed === 'creator' || o.filmed === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place'
     const styleNote = [n === 2 ? 'TWO Reels, different angles or a second dish.' : '', o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : o.filmed === 'shoot' ? 'Film it on the shoot day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ')
     const r = await createCreativeRequest({
-      clientId, userId, type: 'video', order: true, due_date: pieceDue, attachments,
+      clientId, userId, type: 'video', order: true, due_date: pieceDue, rush, attachments,
       answers: { what: `${name}: ${o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : a.line || 'the dish, plated'}`, filming, count: n >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${styleNote}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
@@ -511,18 +517,27 @@ export async function POST(req: NextRequest) {
     const kinds: string[] = Array.from(new Set([...linesOf('print').flatMap((l) => (Array.isArray(l.options?.kinds) ? (l.options!.kinds as string[]) : l.options?.kind ? [String(l.options.kind)] : [])), ...(gw.includes('tent') ? ['tent'] : []), ...(gw.includes('poster') ? ['poster'] : [])]))
     const things = kinds.length ? kinds.map((k) => (k === 'poster' ? 'Window poster' : k === 'insert' ? 'Menu insert' : 'Table tent')) : [PRINT[kind] ?? 'Flyer']
     for (const thing of things) {
-      const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
+      const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: pieceDue ?? postDay, rush, attachments, answers: { what: `${thing} for ${name}${a.price ? `, ${a.price}` : ''}`, printing: 'Not sure', when: whenWord(postDay), notes: facts } })
       if (r.ok) plan.push({ key: `print-${thing.toLowerCase().replace(/\s+/g, '-')}`, label: thing, detail: 'The team quotes it, printed or a file', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
       else errors.push(`${thing} did not send: ${r.error}`)
     }
   }
   /* ── the menu's own items: in the restaurant, and a creator booked for real ── */
   const teamExtra: string[] = []
-  const codeWord = `${clean(a.what, 12).replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6) || 'NEW'}10`
+  const codeWord = clean(item('offer')?.options?.codeText, 12).replace(/[^A-Z0-9]/g, '') || `${clean(a.what, 12).replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6) || 'NEW'}10`
   if (item('taste')) { plan.push({ key: 'taste', label: 'A taste at the counter', detail: 'Free bites all week. On the team card', date: postDay, cost: null, status: 'later', ref: null, why: item('taste')?.why }); teamExtra.push(`Offer a free taste of ${name} at the counter all week.`) }
   if (item('review')) { plan.push({ key: 'reviewask', label: 'Ask for a review', detail: 'With the check, two weeks. The card is in Get reviews', date: postDay, cost: null, status: 'later', ref: { kind: 'page', id: null, href: '/dashboard/reviews/card' }, why: item('review')?.why }); teamExtra.push(`For two weeks: if they liked ${name}, ask for a Google review with the check.`) }
   if (item('sign')) { const r = await createCreativeRequest({ clientId, userId, type: 'print', due_date: postDay, attachments, answers: { what: `Guest photo sign for ${name}: post it, tag us, dessert is on us`, printing: 'A file to print', when: whenWord(postDay), notes: `A small counter sign with a QR to the Instagram. ${facts}` } }); if (r.ok) plan.push({ key: 'sign', label: 'Guest photo sign', detail: 'Post it, tag us, dessert is on us. A file to print', date: postDay, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: item('sign')?.why }) }
   if (item('offer')) { const txt = clean(item('offer')?.options?.text, 120) || `Free drink with ${name} this week`; plan.push({ key: 'offer', label: 'Launch offer', detail: `${txt}${item('offer')?.options?.code !== false ? `. Code ${codeWord}, the team counts it` : ''}`, date: postDay, cost: null, status: 'later', ref: null, why: item('offer')?.why }); teamExtra.push(`Launch offer: ${txt}${item('offer')?.options?.code !== false ? ` (code ${codeWord}, count it)` : ''}.`) }
+  /* CUSTOM (owner 2026-09-24): anything the owner wrote in becomes an open request the team quotes; nothing is charged until they say yes */
+  for (const [xi, cl] of linesOf('custom').entries()) {
+    const what = clean(cl.options?.what, 120); if (!what) continue
+    const tell = clean(cl.options?.tell, 600)
+    const when = typeof cl.options?.when === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cl.options.when) ? cl.options.when : null
+    const r = await createCreativeRequest({ clientId, userId, type: 'other', order: false, due_date: when, attachments, answers: { what: `${what}${tell ? `. ${tell}` : ''}`, when: whenWord(when), notes: `From the ${name} announcement. The owner wants a quote before any work starts.` } })
+    if (r.ok) plan.push({ key: xi ? `custom-${xi + 1}` : 'custom', label: what, detail: `The team quotes it within a day. Nothing is charged until you say yes`, date: when, cost: null, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+    else errors.push(`${what} did not reach the team: ${r.error}`)
+  }
   if (item('apps')) plan.push({ key: 'apps', label: 'Feature it on DoorDash', detail: 'The team sets a two-week promo on the item', date: postDay, cost: null, status: 'with_team', ref: null, why: item('apps')?.why })
   for (const [ci, cr] of linesOf('creator').entries()) {
     if (typeof cr.options?.slug !== 'string') continue
