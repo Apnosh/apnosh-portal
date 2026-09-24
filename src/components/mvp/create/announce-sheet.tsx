@@ -980,12 +980,13 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               ) }
               const setUntil = (v: string) => { setA((x) => ({ ...x, until: v })); setLimited(!!v && !permanent) }
               const togglePermanent = () => { const v = !permanent; setPermanent(v); setLimited(!v && !!a.until) }
-              const dateLabel: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: C.mute, marginBottom: 6 }
+              const dateLabel: React.CSSProperties = { display: 'block', fontSize: 12.5, fontWeight: 600, color: C.mute, padding: '0 2px', marginBottom: 6 }
+              const dateBox: React.CSSProperties = { display: 'block', width: '100%', boxSizing: 'border-box', height: 48, margin: 0, borderRadius: 12, background: C.bg, border: '1.5px solid transparent', fontFamily: 'inherit', fontSize: 16, fontWeight: 500, color: C.ink, padding: '0 12px', outline: 'none', WebkitAppearance: 'none' }
               const dateBody = (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: permanent ? '1fr' : '1fr 1fr', gap: 10 }}>
-                    <label style={{ display: 'block', minWidth: 0 }}><span style={dateLabel}>From</span><input type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={{ ...input, marginTop: 0, width: '100%', boxSizing: 'border-box' }} /></label>
-                    {!permanent && <label style={{ display: 'block', minWidth: 0 }}><span style={dateLabel}>Until</span><input type="date" min={a.from ?? isoPlus(0)} value={a.until ?? ''} onChange={(e) => setUntil(e.target.value)} style={{ ...input, marginTop: 0, width: '100%', boxSizing: 'border-box' }} /></label>}
+                    <label style={{ display: 'block', minWidth: 0 }}><span style={dateLabel}>From</span><input className="dfi" type="date" value={a.from ?? isoPlus(0)} onChange={(e) => setA((x) => ({ ...x, from: e.target.value }))} style={dateBox} /></label>
+                    {!permanent && <label style={{ display: 'block', minWidth: 0 }}><span style={dateLabel}>Until</span><input className="dfi" type="date" min={a.from ?? isoPlus(0)} value={a.until ?? ''} onChange={(e) => setUntil(e.target.value)} style={{ ...dateBox, color: a.until ? C.ink : C.faint }} /></label>}
                   </div>
                   <button type="button" onClick={togglePermanent} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '12px 0 4px', marginTop: 2, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ width: 22, height: 22, borderRadius: 7, border: `1.5px solid ${permanent ? C.greenDk : C.line}`, background: permanent ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{permanent && <Check size={13} color="#fff" strokeWidth={3} />}</span>
@@ -1003,12 +1004,12 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               const count = 1 + dishes.length
                             const removeDish = (i: number) => { if (i === 0) { const [first, ...rest] = dishes; if (first) { setA((x) => ({ ...x, what: first.name, line: first.line, price: first.price, note: first.note ?? '' })); setTags(new Set(first.tags ?? [])); setDishes(rest) } else { setA((x) => ({ ...x, what: '', line: '', price: '', note: '' })); setTags(new Set()) } } else setDishes((x) => x.filter((_, j) => j !== i - 1)) }
 
-              const sec: React.CSSProperties = { fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '18px 2px 8px' }
+              const sec: React.CSSProperties = { fontSize: 16, fontWeight: 700, letterSpacing: '-.01em', color: C.ink, margin: '22px 2px 10px' }
               const focusDish = (i: number, total = count) => setOpenDishes((o) => Array.from(new Set([...o.filter((j) => j < total && !getDish(j).name.trim()), i])).sort((x, y) => x - y))
               /* THE ITEM EDITOR (owner 2026-09-24, round thirteen C): each dish a numbered card. Labels over soft
                  boxes, Name and Price on one row, Description with a count, Good to know as equal tiles with icons. */
               const lab: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12.5, fontWeight: 600, color: C.mute, padding: '0 2px', marginBottom: 6 }
-              const box: React.CSSProperties = { display: 'block', width: '100%', boxSizing: 'border-box', height: 48, margin: 0, borderRadius: 12, background: '#f6f6f8', border: '1.5px solid transparent', fontFamily: 'inherit', fontSize: 16, fontWeight: 500, lineHeight: '22px', color: C.ink, padding: '0 12px', outline: 'none', WebkitAppearance: 'none' }
+              const box: React.CSSProperties = { display: 'block', width: '100%', boxSizing: 'border-box', height: 48, margin: 0, borderRadius: 12, background: C.bg, border: '1.5px solid transparent', fontFamily: 'inherit', fontSize: 16, fontWeight: 500, lineHeight: '22px', color: C.ink, padding: '0 12px', outline: 'none', WebkitAppearance: 'none' }
               const num = (n: number, open: boolean) => <span style={{ width: open ? 24 : 28, height: open ? 24 : 28, borderRadius: 99, background: open ? C.ink : C.greenSoft, color: open ? '#fff' : C.greenDk, fontSize: open ? 13 : 14, fontWeight: 700, display: 'grid', placeItems: 'center', flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{n}</span>
               const dishForm = (i: number) => {
                 const d = getDish(i)
@@ -1028,7 +1029,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       <div style={{ padding: '12px 12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 12px' }}>
                           {num(i + 1, true)}
-                          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Dish {i + 1}</span>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>Dish {i + 1}</span>
                           {count > 1 && <button type="button" onClick={removeIt} style={{ marginLeft: 'auto', background: 'none', border: 0, padding: '6px 2px', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, color: C.mute, cursor: 'pointer' }}>Remove</button>}
                         </div>
                         <div style={{ display: 'flex', gap: 10 }}>
@@ -1040,7 +1041,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                         {/* equal tiles (owner 2026-09-24): four across, the last row centred */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 7 }}>
                           {TAGS.map((t) => { const on = d.tags.includes(t); return (
-                            <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ position: 'relative', width: 'calc((100% - 21px) / 4)', height: 62, borderRadius: 14, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, lineHeight: 1, color: on ? '#1d6f55' : C.ink, padding: '0 2px', cursor: 'pointer', whiteSpace: 'nowrap', ['--cut' as string]: on ? C.greenSoft : '#fff', transition: 'background .15s, border-color .15s' }}>
+                            <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ position: 'relative', width: 'calc((100% - 21px) / 4)', height: 62, borderRadius: 14, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, lineHeight: 1, color: on ? C.greenDk : C.ink, padding: '0 2px', cursor: 'pointer', whiteSpace: 'nowrap', ['--cut' as string]: on ? C.greenSoft : '#fff', transition: 'background .15s, border-color .15s' }}>
                               <span style={{ color: on ? C.greenDk : C.mute }}>{TAG_ICON[t]}</span>{t}
                               {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 14, height: 14, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={9} color="#fff" strokeWidth={3.5} /></span>}
                             </button>
@@ -1055,7 +1056,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 <div>
                   {Array.from({ length: count }, (_, i) => dishForm(i))}
                   <style>{`.dfi:focus{background:#fff!important;border-color:${C.greenDk}!important;box-shadow:0 0 0 4px ${C.greenSoft}}.dfi::placeholder{color:${C.faint}}`}</style>
-                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); focusDish(count, count + 1); setDetail(null) }} style={{ width: '100%', height: 52, marginTop: 2, borderRadius: 16, border: '1.5px dashed #b9dfd1', background: '#fff', color: C.greenDk, fontFamily: 'inherit', fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}><span style={{ width: 24, height: 24, borderRadius: 99, background: C.greenSoft, display: 'grid', placeItems: 'center' }}><Plus size={14} strokeWidth={2.6} /></span> Add another dish</button>}
+                  {count < 6 && <button type="button" onClick={() => { setDishes((x) => [...x, { name: '', line: '', price: '' }]); focusDish(count, count + 1); setDetail(null) }} style={{ width: '100%', height: 48, marginTop: 2, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', color: C.ink, fontFamily: 'inherit', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer' }}><Plus size={16} strokeWidth={2.4} /> Add another dish</button>}
                   <div style={sec}>Dish available</div>
                   {dateBody}
                   <div style={sec}>Content</div>
