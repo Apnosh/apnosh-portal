@@ -988,28 +988,14 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 const d = getDish(i)
                 const dTagsBody = <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TAGS.map((t) => <button key={t} type="button" onClick={() => setDish(i, { tags: d.tags.includes(t) ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={chip(d.tags.includes(t))}>{t}</button>)}</div>
                 const dNoteBody = <textarea rows={3} autoFocus value={d.note} onChange={(e) => setDish(i, { note: e.target.value })} placeholder="The chef is off Tuesdays. Use the blue plates." style={{ ...input, marginTop: 0, resize: 'none', lineHeight: 1.45 }} />
-                const mine = media.filter((m) => m.dish === i)
-                const pick = () => { uploadFor.current = i; fileRef.current?.click() }
                 return (
                   <div key={i}>
                     <div style={{ ...sec, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: i ? 22 : 4 }}>
                       <span>{count > 1 ? `Dish ${i + 1}` : 'The dish'}</span>
                       {count > 1 && <button type="button" onClick={() => { removeDish(i); setMedia((x) => x.filter((m) => m.dish !== i).map((m) => (m.dish != null && m.dish > i ? { ...m, dish: m.dish - 1 } : m))); setDetail(null) }} style={{ fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, letterSpacing: 0, textTransform: 'none', color: C.mute, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Remove</button>}
                     </div>
-                    {/* THE UPLOAD (owner 2026-09-22): the dish's photos and videos, several at once */}
-                    {mine.length === 0 ? (
-                      <button type="button" onClick={pick} style={{ width: '100%', height: 124, borderRadius: 22, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', fontFamily: 'inherit', color: C.ink }}>
-                        {uploading && uploadFor.current === i ? <Loader2 size={24} className="mvp-spin" color={C.greenDk} /> : <span style={{ width: 56 }}><Drawing spec={{ scene: 'photos' }} name="" rating="" t={(s) => s} /></span>}
-                        <b style={{ fontSize: 14 }}>Add photos or videos</b>
-                        <small style={{ fontSize: 12, color: C.mute }}>Optional. As many as you like</small>
-                      </button>
-                    ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                        {mine.map((m) => <span key={m.url} style={{ position: 'relative', aspectRatio: '1', borderRadius: 14, overflow: 'hidden', background: m.video ? C.ink : `center/cover url(${m.preview})` }}>{m.video && <span style={{ position: 'absolute', left: 8, bottom: 8, color: '#fff', fontSize: 11, fontWeight: 800 }}>Video</span>}<button type="button" aria-label="Remove" onClick={() => setMedia((x) => x.filter((y) => y.url !== m.url))} style={{ position: 'absolute', right: 6, top: 6, width: 22, height: 22, borderRadius: 99, border: 0, background: 'rgba(255,255,255,.92)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}><X size={12} /></button></span>)}
-                        {media.length < 10 && <button type="button" onClick={pick} style={{ aspectRatio: '1', borderRadius: 14, border: `1.5px dashed ${hexa(C.greenDk, 0.45)}`, background: 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', fontFamily: 'inherit', color: C.greenDk, fontSize: 12, fontWeight: 700 }}>{uploading && uploadFor.current === i ? <Loader2 size={16} className="mvp-spin" /> : <Plus size={18} />}Add more</button>}
-                      </div>
-                    )}
-                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, marginTop: 10, background: '#fff', overflow: 'hidden' }}>
+                    {/* no upload on the dish (owner 2026-09-24): photos come from the Content choice below */}
+                    <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
                       {dishRow('Name', d.name, (v) => setDish(i, { name: v }), 'Pork belly bánh mì', true)}
                       {dishRow('Price', d.price, (v) => setDish(i, { price: v }), '14', false, true)}
                       {dishRow('Description', d.line, (v) => setDish(i, { line: v }), 'A line about it')}
