@@ -33,6 +33,8 @@ export interface CreateRequestInput {
   design?: unknown
   /** a rush order: a quarter more, two days sooner */
   rush?: boolean
+  /** a fixed price from a package (0 when the piece is included in one) */
+  overrideCents?: number
 }
 
 export type CreateRequestResult =
@@ -110,6 +112,7 @@ export async function createCreativeRequest(input: CreateRequestInput): Promise<
       if (priced?.monthly) cadence = 'monthly'
       if (orderCents != null) brief = { ...brief, _pricing: { origin: 'price_sheet' } }
     }
+    if (typeof input.overrideCents === 'number' && input.overrideCents >= 0) { orderCents = Math.round(input.overrideCents); brief = { ...brief, _pricing: { origin: 'package', cents: orderCents } } }
     if (orderCents == null) return { ok: false, error: 'Could not price this order. Send it as a request instead.', status: 400 }
     /* RUSH (owner 2026-09-24): the piece is wanted two days sooner; a quarter more on it, said in the brief */
     if (input.rush === true && orderCents > 0) { orderCents = Math.round(orderCents * 1.25); brief = { ...brief, _rush: { rate: 0.25, note: 'Rush: wanted two days sooner' } } }

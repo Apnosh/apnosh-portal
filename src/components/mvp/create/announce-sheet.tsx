@@ -414,7 +414,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   /* the shot list of a new day: this plan plus whatever else they typed */
   const alsoItems = alsoShoot.split(/[,\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 5)
   const listN = 1 + alsoItems.length
-  const tier: Tier = tierFor(listN)
+  /* the shoot's size: the package the level chose, never smaller than the list needs */
+  const pkgTier = (() => { const ph = items.find((x) => x.on && x.id === 'photos'); const t = ph?.options.tier; return t === 'standard' || t === 'full' || t === 'works' ? t : null })()
+  const tier: Tier = pkgTier && ['standard', 'full', 'works'].indexOf(pkgTier) >= ['standard', 'full', 'works'].indexOf(tierFor(listN)) ? pkgTier : tierFor(listN)
   const sizeOf = (n: number) => { const t = TIERS.find((x) => x.id === tierFor(n))!; return `${n} thing${n === 1 ? '' : 's'} · about ${t.photos} photos · ${dollars(tierCents(t.id)) || ''}` }
   /* the day the pieces come back: three days after the shoot, or the desk's own lead time */
   const shootLead = src === 'newshoot' ? (shootDate || plusDays(todayIso(), 7)) : openShoot?.date ?? plusDays(todayIso(), 7)
@@ -651,7 +653,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
     try {
       const r = await fetch('/api/dashboard/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         clientId, kind: kind.id, answers: factsOut(),
-        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, queue: src === 'shoot' && !openShoot ? true : undefined, tier, alsoShoot: alsoItems, shootDate: shootDate || undefined },
+        picture: { src, pieces: [...pieces], mediaUrls: media.map((m) => m.url), priceOn, brandKit, readyBy: readyBy || undefined, shootId: ctx?.shoot?.id, nextShootId: ctx?.nextShoot?.id, queue: src === 'shoot' && !openShoot ? true : undefined, tier, packageTier: pkgTier ?? undefined, alsoShoot: alsoItems, shootDate: shootDate || undefined },
         places: { accountIds: [...chosen], google, story: story && hasIgFb, also: [...also] },
         timing: { at: postNow ? null : postAt?.toISOString() ?? null, timezone: tz, again, boost, boostCents, reminders: extras() },
         whys: Object.fromEntries(preview.filter((l) => l.why).map((l) => [l.key, l.why])),

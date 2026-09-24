@@ -89,7 +89,7 @@ async function syncShotList(admin: Admin, requestId: string | null, attached: At
   await admin.from('creative_requests').update({ brief, team_note: note }).eq('id', requestId)
 }
 
-export async function bookShoot(admin: Admin, o: { clientId: string; userId: string; tier?: ShootTier; items?: { label: string; kind?: string; planId?: string | null; pieces?: string[] }[]; date: string | null; note?: string }): Promise<{ ok: true; shoot: Shoot; needsPayment: boolean; orderCents: number | null } | { ok: false; error: string; status: number }> {
+export async function bookShoot(admin: Admin, o: { clientId: string; userId: string; tier?: ShootTier; items?: { label: string; kind?: string; planId?: string | null; pieces?: string[] }[]; date: string | null; note?: string; packageCents?: number }): Promise<{ ok: true; shoot: Shoot; needsPayment: boolean; orderCents: number | null } | { ok: false; error: string; status: number }> {
   const { clientId, userId, date } = o
   const items = (o.items ?? []).map((i) => ({ label: clean(i.label, 80), kind: clean(i.kind, 20) || 'shot', planId: i.planId ?? null, pieces: (i.pieces ?? []).map((p) => clean(p, 30)).filter(Boolean), at: new Date().toISOString() })).filter((i) => i.label)
   /* the size follows the list; a caller may still name one, never smaller than the list needs */
@@ -98,7 +98,7 @@ export async function bookShoot(admin: Admin, o: { clientId: string; userId: str
   /* the day is remembered on announcements; never mint the order when that table is not there yet */
   const probe = await admin.from('announcements').select('id').limit(1)
   if (probe.error) return { ok: false, error: 'Shoot days are not switched on yet. The team has to run one update first.', status: 503 }
-  const r = await createCreativeRequest({ clientId, userId, type: 'photos', order: true, due_date: date, answers: { ...TIER_ANSWERS[tier], dishes: note || 'Shot list to follow from the plans attached to this day', notes: 'A shoot day. Plans attach to it from Create; the shot list on this request is kept in step.' } })
+  const r = await createCreativeRequest({ clientId, userId, type: 'photos', order: true, due_date: date, overrideCents: o.packageCents, answers: { ...TIER_ANSWERS[tier], dishes: note || 'Shot list to follow from the plans attached to this day', notes: 'A shoot day. Plans attach to it from Create; the shot list on this request is kept in step.' } })
   if (!r.ok) return { ok: false, error: r.error, status: r.status }
   const href = `/dashboard/requests/${r.row.id}`
   const plan: Line[] = [

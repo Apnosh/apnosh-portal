@@ -87,15 +87,25 @@ export function suggestItems(i: SuggestInput): ItemPick[] {
     const nG = ct === 'shoot' ? 3 : ct === 'queue' ? 2 : 1
     g.on = ct !== 'none'; g.options = { ...g.options, count: nG, from: shootish ? 'shoot' : ct === 'licensed' ? 'stock' : 'own' }
     g.why = ct === 'shoot' ? `${nG} designs from the day's photos, the price on them` : ct === 'queue' ? `${nG} designs once the shoot lands` : ct === 'licensed' ? 'Designed on a licensed photo in your style' : ct === 'none' ? 'No picture, so no graphic' : 'Designed from your photo'
-    if (ct === 'shoot') { v.on = true; v.options = { ...v.options, count: 2, filmed: 'shoot' }; v.why = 'Two Reels cut from the day, no extra trip' }
-    else if (ct === 'queue') { v.on = true; v.options = { ...v.options, count: 1, filmed: 'shoot' }; v.why = 'A Reel from the shoot when it lands' }
+    if (ct === 'shoot') { const pk = PACKAGES.standard; g.options = { ...g.options, count: pk.graphics, included: pk.graphics }; v.on = true; v.options = { ...v.options, count: pk.reels, included: pk.reels, filmed: 'shoot' }; v.why = 'A Reel cut from the day, inside the package' }
+    else if (ct === 'queue') { g.options = { ...g.options, included: 0 }; v.on = true; v.options = { ...v.options, count: 1, included: 0, filmed: 'shoot' }; v.why = 'A Reel from the shoot when it lands, at the package rate' }
     else if ((ct === 'own' || ct === 'library') && i.facts.hasVideo) { v.on = true; v.options = { ...v.options, count: 1, filmed: 'clips' }; v.why = 'A Reel from the clips you added' }
     else { v.on = false; v.options = { ...v.options, count: 1, filmed: i.creator?.nearby ? 'creator' : 'visit' } }
-    ph.on = shootish; ph.options = { ...ph.options, queue: ct === 'queue', newDay: ct === 'shoot' && !!i.facts.shootBooked, date: ct === 'shoot' ? (i.facts.shootDate ?? '') : '', photos: i.facts.shootPhotos ?? 15 }
+    ph.on = shootish; ph.options = { ...ph.options, queue: ct === 'queue', newDay: ct === 'shoot' && !!i.facts.shootBooked, date: ct === 'shoot' ? (i.facts.shootDate ?? '') : '', photos: ct === 'shoot' ? PACKAGES.standard.photos : (i.facts.shootPhotos ?? 15), tier: ct === 'shoot' ? 'standard' : undefined }
     ph.why = ct === 'shoot' ? 'The content day: photos and video in one visit' : ct === 'queue' ? 'On the next content day, nothing to pay now' : ph.why
   }
   return out
 }
+/* THE CONTENT PACKAGES (owner 2026-09-23): a content day makes its own graphics and Reels, so the day's
+   post-production is inside one price. Extras from the same day cost less than a standalone piece. */
+export type PackageTier = 'standard' | 'full' | 'works'
+export const PACKAGES: Record<PackageTier, { photos: number; graphics: number; reels: number; cents: number; label: string }> = {
+  standard: { photos: 15, graphics: 1, reels: 1, cents: 69900, label: 'a quick visit' },
+  full: { photos: 25, graphics: 3, reels: 2, cents: 119900, label: 'half a day' },
+  works: { photos: 40, graphics: 5, reels: 4, cents: 189900, label: 'a full day' },
+}
+export const PACKAGE_EXTRA = { graphic: 18500, video: 22000 }
+export const packageFor = (photos: number): PackageTier => (photos >= 40 ? 'works' : photos >= 25 ? 'full' : 'standard')
 export const itemsTotal = (items: ItemPick[]) => items.filter((x) => x.on).reduce((s, x) => s + x.cents, 0)
 
 /* THE LADDER (owner 2026-09-22, "the actual build plan logic"): three plans, each the one before plus more,
@@ -117,7 +127,8 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
   /* Just be seen: the post on their channels and the Google update. With a shoot chosen, the day itself rides in
      every level (it is the content); with a licensed photo, the one graphic does, since the post needs a picture. */
   const simple: LadderSet = { post: true }
-  if (shootish) simple.photos = true
+  if (ct === 'shoot') { const pk = PACKAGES.standard; simple.photos = { photos: pk.photos, tier: 'standard' }; simple.graphic = { count: pk.graphics, included: pk.graphics }; simple.video = { count: pk.reels, included: pk.reels, filmed: 'shoot', style: 'dish', captions: true } }
+  if (ct === 'queue') simple.photos = true
   if (ct === 'licensed') simple.graphic = { count: 1 }
   /* Drive actions: a boost sized to how far their posts already go, the graphic unless the photo is their own,
      a table tent, the taste at the counter, a launch offer with a code the team counts */
@@ -126,8 +137,8 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
   const recommended: LadderSet = { ...simple }
   /* what gets made follows the content: a content day feeds designs and Reels; your own photo needs little; a
      licensed photo needs the one design; no picture means words and the room only */
-  if (ct === 'shoot') { recommended.graphic = { count: 3 }; recommended.video = { count: 2, filmed: 'shoot', style: 'dish', captions: true } }
-  else if (ct === 'queue') { recommended.graphic = { count: 2 }; recommended.video = { count: 1, filmed: 'shoot', style: 'dish', captions: true } }
+  if (ct === 'shoot') { const pk = PACKAGES.full; recommended.photos = { photos: pk.photos, tier: 'full' }; recommended.graphic = { count: pk.graphics, included: pk.graphics }; recommended.video = { count: pk.reels, included: pk.reels, filmed: 'shoot', style: 'dish', captions: true } }
+  else if (ct === 'queue') { recommended.graphic = { count: 2, included: 0 }; recommended.video = { count: 1, included: 0, filmed: 'shoot', style: 'dish', captions: true } }
   else if (ct === 'own' || ct === 'library') { if (isDeal || isEvent || isOpen) recommended.graphic = { count: 1 }; if (i.facts.hasVideo) recommended.video = { count: 1, filmed: 'clips', style: 'dish', captions: true } }
   else if (ct === 'licensed') recommended.graphic = { count: 1 }
   if (boostRec) recommended.boost = { cents: boostRec, days: 3 }
@@ -142,16 +153,16 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
   const creatorOk = !!i.creator?.nearby && (isDish || isDeal || isEvent || isOpen)
   const bigger: LadderSet = { ...recommended }
   if (creatorOk) bigger.creator = { slug: i.creator!.slug, code: true, repost: true }
-  if (!isHours && ct !== 'none') bigger.video = ct === 'shoot' ? { count: 2, filmed: 'shoot', style: 'dish', captions: true } : ct === 'queue' ? { count: 1, filmed: 'shoot', style: 'dish', captions: true } : { count: 1, filmed: creatorOk ? 'creator' : i.facts.hasVideo ? 'clips' : 'visit', style: 'dish', captions: true }
+  if (!isHours && ct !== 'none') bigger.video = ct === 'shoot' ? { count: PACKAGES.works.reels, included: PACKAGES.works.reels, filmed: 'shoot', style: 'dish', captions: true } : ct === 'queue' ? { count: 1, included: 0, filmed: 'shoot', style: 'dish', captions: true } : { count: 1, filmed: creatorOk ? 'creator' : i.facts.hasVideo ? 'clips' : 'visit', style: 'dish', captions: true }
   if (!isHours && ct !== 'none') bigger.print = { kinds: ['tent', 'poster'] }
-  if (ct === 'shoot') bigger.graphic = { count: 3 }; else if (ct === 'queue') bigger.graphic = { count: 2 }; else if (ct !== 'none') bigger.graphic = { count: 1 }
+  if (ct === 'shoot') { bigger.photos = { photos: PACKAGES.works.photos, tier: 'works' }; bigger.graphic = { count: PACKAGES.works.graphics, included: PACKAGES.works.graphics } } else if (ct === 'queue') bigger.graphic = { count: 2, included: 0 }; else if (ct !== 'none') bigger.graphic = { count: 1 }
   if (!isHours) bigger.boost = { cents: 10000, days: 5 }
   if (isDish && i.connected.apps) bigger.apps = true
   if (it('review')) bigger.review = true
   if (it('sign')) bigger.sign = true
   if (isDish || isDeal) bigger.offer = { text: isDish ? 'A free drink with it this week' : 'This week only', code: true }
   const notes = {
-    simple: ct === 'shoot' ? 'The content day, then the post and Google' : ct === 'queue' ? 'The post now, more when the shoot lands' : ct === 'licensed' ? 'A designed post and Google' : ct === 'none' ? 'Words on Google and Facebook. Free' : 'Your photo on your channels and Google. Free',
+    simple: ct === 'shoot' ? 'A quick visit: 15 photos, a graphic, a Reel, then the post' : ct === 'queue' ? 'The post now, more when the shoot lands' : ct === 'licensed' ? 'A designed post and Google' : ct === 'none' ? 'Words on Google and Facebook. Free' : 'Your photo on your channels and Google. Free',
     recommended: [recommended.boost ? `a $${Math.round(Number((recommended.boost as Record<string, unknown>).cents) / 100)} boost` : '', recommended.graphic ? 'a graphic' : '', recommended.print ? 'a table tent' : '', recommended.offer ? 'a code' : '', recommended.taste ? 'a taste' : ''].filter(Boolean).join(', '),
     bigger: [bigger.creator ? `${first} visits` : '', 'a Reel', 'print', 'the bigger boost', bigger.apps ? 'the delivery apps' : '', 'reviews'].filter(Boolean).join(', '),
   }

@@ -26,6 +26,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents } from '@/lib/requests/create'
 import { openShoot, bookShoot, attachToShoot, adoptShoot, queueShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
+import { PACKAGES, PACKAGE_EXTRA, type PackageTier } from '@/lib/plan/suggest'
 import { bookInfluencer } from '@/lib/influencers/book'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
@@ -67,7 +68,7 @@ interface Body {
   clientId?: string
   kind?: string
   answers?: Record<string, unknown>
-  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; queue?: boolean; tier?: string; alsoShoot?: unknown; shootDate?: string }
+  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; queue?: boolean; packageTier?: string; tier?: string; alsoShoot?: unknown; shootDate?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
   timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
@@ -261,7 +262,8 @@ export async function POST(req: NextRequest) {
   if (src === 'newshoot') {
     /* the list starts with everything else they named; this plan joins it below, so the size counts it */
     const also = (Array.isArray(body.picture?.alsoShoot) ? body.picture!.alsoShoot : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 5)
-    const r = await bookShoot(admin, { clientId, userId, items: [{ label: name, kind, planId: announcementId, pieces }, ...also.map((label) => ({ label }))], date: shootDate, note: `${name}: ${facts}` })
+    const pkTier = (['standard', 'full', 'works'] as PackageTier[]).find((t) => t === body.picture?.packageTier) ?? null
+    const r = await bookShoot(admin, { clientId, userId, tier: pkTier ?? undefined, items: [{ label: name, kind, planId: announcementId, pieces }, ...also.map((label) => ({ label }))], date: shootDate, note: `${name}: ${facts}${pkTier ? ` Content day package, ${PACKAGES[pkTier].label}: ${PACKAGES[pkTier].photos} photos, ${PACKAGES[pkTier].graphics} graphics and ${PACKAGES[pkTier].reels} Reels inside the price.` : ''}`, packageCents: pkTier ? PACKAGES[pkTier].cents : undefined })
     if (r.ok) {
       shoot = r.shoot; total += r.orderCents ?? 0
       plan.push({ key: 'shootday', label: r.needsPayment ? 'Book the shoot day' : 'The shoot day', detail: `${shoot.tierLabel}: ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list, about ${shoot.photos} photos. ${r.needsPayment ? 'Pay to book it' : 'Booked'}`, date: shoot.date ?? readyBy, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Add to the list until the day. The price follows the list' })
@@ -310,7 +312,7 @@ export async function POST(req: NextRequest) {
     const gfrom = item('graphic')?.options?.from
     const photos = onShoot || gfrom === 'shoot' ? 'shoot' : gfrom === 'stock' || a.picsrc === 'licensed' ? 'source' : media.length ? 'own' : 'none'
     const r = await createCreativeRequest({
-      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush,
+      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush, overrideCents: item('graphic')?.options?.from === 'shoot' ? (gi < (Number(item('graphic')?.options?.included) || 0) ? 0 : PACKAGE_EXTRA.graphic) : undefined,
       answers: { what: `${name} announcement${gCount > 1 ? ` (design ${gi + 1} of ${gCount}, a different angle each)` : ''}`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
       attachments,
       design: { destinations: dests, tier: 2, photos, dueDateISO: pieceDue ?? undefined },
@@ -327,7 +329,7 @@ export async function POST(req: NextRequest) {
     const filming = o.filmed === 'visit' ? 'Come film at my place' : o.filmed === 'clips' ? 'Use clips and photos I have' : onShoot || o.filmed === 'creator' || o.filmed === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place'
     const styleNote = [n === 2 ? 'TWO Reels, different angles or a second dish.' : '', o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : o.filmed === 'shoot' ? 'Film it on the shoot day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ')
     const r = await createCreativeRequest({
-      clientId, userId, type: 'video', order: true, due_date: pieceDue, rush, attachments,
+      clientId, userId, type: 'video', order: true, due_date: pieceDue, rush, attachments, overrideCents: o.filmed === 'shoot' ? Math.max(0, n - (Number(o.included) || 0)) * PACKAGE_EXTRA.video : undefined,
       answers: { what: `${name}: ${o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : a.line || 'the dish, plated'}`, filming, count: n >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${styleNote}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
