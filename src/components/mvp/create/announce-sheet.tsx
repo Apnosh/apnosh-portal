@@ -936,28 +936,30 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
               {(library ?? []).map((ph) => { const on = libSel.has(ph.id); return <button key={ph.id} type="button" onClick={() => pickLibrary(ph)} aria-label={ph.name} style={{ flex: 'none', width: 84, height: 84, borderRadius: 12, border: `2px solid ${on ? C.greenDk : 'transparent'}`, padding: 0, cursor: 'pointer', background: `center/cover url(${ph.url})`, position: 'relative' }}>{on && <span style={{ position: 'absolute', right: 5, top: 5, width: 20, height: 20, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={12} color="#fff" strokeWidth={3} /></span>}</button> })}
             </div>
           )
+          /* THREE CARDS (owner 2026-09-24): need, have, not needed. A picture and a few words each, nothing under them. */
           const have = c === 'own' || c === 'library'
-          const two = (on: boolean, pickIt: () => void, label: string, small: string, scene: Scene, hue: string, first: boolean, body?: React.ReactNode) => (
-            <div key={label}>
-              <button type="button" onClick={pickIt} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', padding: '11px 14px', borderLeft: 0, borderRight: 0, borderBottom: 0, borderTop: first ? 0 : `0.5px solid ${C.line}`, background: 'none', fontFamily: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                <span style={{ ...hv(hue), width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--t1)' }}><span style={{ width: 32 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
-                <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15 }}>{label}</b><small style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{small}</small></span>
-                <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenDk : '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>{on && <span style={{ width: 8, height: 8, borderRadius: 99, background: '#fff' }} />}</span>
-              </button>
-              {on && body && <div style={{ padding: '0 14px 14px 70px' }}>{body}</div>}
-            </div>
+          const card = (on: boolean, pickIt: () => void, label: string, scene: Scene, hue: string) => (
+            <button key={label} type="button" onClick={pickIt} aria-pressed={on} style={{ ...hv(hue), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 0, padding: '14px 8px 12px', borderRadius: 18, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', fontFamily: 'inherit', color: C.ink, cursor: 'pointer', transition: 'border-color .15s, background .15s' }}>
+              <span style={{ width: 52, height: 52, borderRadius: 14, display: 'grid', placeItems: 'center', background: on ? '#fff' : 'var(--t1)' }}><span style={{ width: 38 }}><Drawing spec={{ scene }} name="" rating="" t={(s) => s} /></span></span>
+              <b style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.2, textAlign: 'center', textWrap: 'balance' }}>{label}</b>
+            </button>
           )
           const haveBody = (
-            <div>
+            <div style={{ marginTop: 12 }}>
               {ownBody}
-              {library && library.length > 0 && <><div style={{ fontSize: 12, fontWeight: 600, color: C.mute, margin: '12px 0 6px' }}>Or from your library</div>{libBody}</>}
+              {library && library.length > 0 && <><div style={{ fontSize: 12, fontWeight: 600, color: C.mute, margin: '12px 0 6px' }}>Or from your library</div><div style={{ margin: '0 0 0 70px' }}>{libBody}</div></>}
             </div>
           )
-          const rows: React.ReactNode[] = [
-            two(c === 'newshoot' || c === 'shoot', () => { setContent(needContent); setWantVideo(true) }, 'I need photos or video', openShoot && openShoot.requestId ? `We add it to the ${openShoot.date ? niceDate(openShoot.date).replace(/^\w+, /, '') : 'booked'} shoot` : 'We shoot them. Your plan sets how much', 'creator', '#6a39de', true),
-            two(have, () => setContent('own'), 'I have photos or video', media.length ? `${media.length} added` : libSel.size ? `${libSel.size} from your library` : 'Add them from your phone', 'photos', '#2e9a78', false, haveBody),
-          ]
-          return <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>{rows}</div>
+          return (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {card(c === 'newshoot' || c === 'shoot', () => { setContent(needContent); setWantVideo(true) }, 'I need photos', 'creator', '#6a39de')}
+                {card(have, () => setContent('own'), 'I have photos', 'photos', '#2e9a78')}
+                {card(c === 'none', () => setContent('none'), 'Photos not needed', 'post', '#8a928e')}
+              </div>
+              {have && haveBody}
+            </div>
+          )
               })()
 
 
