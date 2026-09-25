@@ -27,6 +27,7 @@ import { Drawing, DRAW_CSS, type Scene } from './drawings'
 import AnnounceMenu, { itemCents, type MenuMe, type MenuPrices } from './announce-menu'
 import type { Ladder } from '@/lib/plan/suggest'
 import { SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
+import { feeBaseCents } from '@/lib/plan/item-price'
 import type { ItemId, ItemPick } from '@/lib/plan/suggest'
 import { BrandOrMark } from '../mvp-insights'
 
@@ -173,7 +174,7 @@ const PLAT: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebo
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
 interface Shoot { id: string; requestId: string | null; date: string | null; tier: Tier; tierLabel: string; photos: number; spots: number; used: number; left: number; attached: { label: string; kind: string; pieces: string[] }[]; needs: Tier | null; needsLabel: string | null; upgradeCents: number | null; href: string | null }
-interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; usualReach?: { median: number; min: number; max: number; n: number } | null; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; planShoot?: string | null; prices: { graphic: number | null; video: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
+interface Ctx { name: string; pro: boolean; website: string | null; orderUrl: string | null; reserveUrl: string | null; guests: number; usualReach?: { median: number; min: number; max: number; n: number } | null; nextShoot: { id: string; date: string; who: string | null } | null; shoot: Shoot | null; planShoot?: string | null; prices: { graphic: number | null; graphicTiers?: Record<1 | 2 | 3, number | null>; video: number | null; videoWorks?: number | null; shoot: number | null; tiers?: Record<Tier, number | null>; spots?: Record<Tier, number> }; weekdays?: { d: number; avgCents: number }[] | null; avgTicketCents?: number | null }
 /* a shoot day is a visit with a shot list; the size follows the list */
 const TIERS: { id: Tier; label: string; photos: number; upto: number }[] = [{ id: 'standard', label: 'A quick visit', photos: 15, upto: 2 }, { id: 'full', label: 'Half a day', photos: 25, upto: 4 }, { id: 'works', label: 'A full day', photos: 40, upto: 6 }]
 const tierFor = (n: number): Tier => (n <= 2 ? 'standard' : n <= 4 ? 'full' : 'works')
@@ -705,7 +706,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}:${a.picsrc ?? ''}`) void helpers.current?.suggest() }, [step, kind?.id, media.length, a.picsrc]) // eslint-disable-line react-hooks/exhaustive-deps
   /* ── the menu ── */
   const usual = ctx?.usualReach ?? null
-  const prices: MenuPrices = { graphic: ctx?.prices.graphic ?? 23100, video: ctx?.prices.video ?? 27500, print: 2500, shootFor: (n) => tierCents(tierFor(n)) ?? ctx?.prices.shoot ?? 38500, shootLabel: (n) => `${TIERS.find((t) => t.id === tierFor(n))?.label}: ${sizeOf(n)}` }
+  const prices: MenuPrices = { graphic: ctx?.prices.graphic ?? 21000, graphicTiers: ctx?.prices.graphicTiers?.[1] && ctx?.prices.graphicTiers?.[3] ? { 1: ctx.prices.graphicTiers[1], 2: ctx?.prices.graphic ?? 21000, 3: ctx.prices.graphicTiers[3] } : undefined, video: ctx?.prices.video ?? 25000, videoWorks: ctx?.prices.videoWorks ?? undefined, print: 2500, shootFor: (n) => tierCents(tierFor(n)) ?? ctx?.prices.shoot ?? 38500, shootLabel: (n) => `${TIERS.find((t) => t.id === tierFor(n))?.label}: ${sizeOf(n)}` }
   const it = (id: ItemId) => items.find((x) => x.id === id && x.on) ?? items.find((x) => x.id === id)
   const onIt = (id: ItemId) => items.some((x) => x.id === id && x.on)
   const linesOn = (id: ItemId) => items.filter((x) => x.id === id && x.on)
@@ -1379,7 +1380,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             {simple && (() => {
               const madeCents = items.filter((x) => x.on && ['photos', 'graphic', 'video', 'print'].includes(x.id)).reduce((t, x) => t + itemCents(x, prices, null), 0)
               const rushCents = rush ? Math.round(madeCents * RUSH_RATE) : 0
-              const feeCents = Math.round((total + rushCents) * SERVICE_FEE_RATE)
+              /* the fee once, on the work Apnosh makes (owner 2026-09-24): not the boost, a creator, print or a quote */
+              const feeCents = Math.round((feeBaseCents(items, prices, null) + rushCents) * SERVICE_FEE_RATE)
               const grand = total + rushCents + feeCents
               const NAMES: Record<string, string> = { post: 'Post it', graphic: 'Graphics', video: 'Reels', photos: 'The content day', boost: 'Boost it', creator: 'A creator posts it', print: 'Print', apps: 'Delivery apps', taste: 'A taste at the counter', review: 'Ask for a review', sign: 'Guest photo sign', offer: 'Launch offer' }
               const paidItems = items.filter((x) => x.on).map((x) => ({ key: x.uid, label: `${NAMES[x.id] ?? x.id}${(x.id === 'graphic' || x.id === 'video') && Number(x.options.count) > 1 ? ` ×${x.options.count}` : ''}`, cost: itemCents(x, prices, null) })).filter((x) => x.cost > 0)

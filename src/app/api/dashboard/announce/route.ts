@@ -24,9 +24,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createCreativeRequest, graphicOrderCents } from '@/lib/requests/create'
+import { createCreativeRequest, graphicOrderCents, graphicPreFeeCents } from '@/lib/requests/create'
 import { openShoot, bookShoot, attachToShoot, adoptShoot, queueShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
 import { PACKAGES, PACKAGE_EXTRA, type PackageTier } from '@/lib/plan/suggest'
+import { graphicPieceCents, itemCents, graphicLevel, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, VIDEO_LEVEL_LINE, type MenuPrices } from '@/lib/plan/item-price'
 import { bookInfluencer } from '@/lib/influencers/book'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
@@ -129,8 +130,13 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
   const c = (client.data ?? {}) as { name?: string; tier?: string; website?: string }
   const s = (site.data ?? {}) as { order_online_url?: string; reservation_url?: string }
   const sh = shoot.data as { id: string; due_date: string; assigned_to_name?: string | null } | null
-  const graphic = card ? graphicOrderCents({ destinations: ['instagram-post', 'facebook-post'], tier: 2, photos: 'own' }, card.card) : null
-  const video = priceCreativeRequest('video', { what: 'x', filming: 'Use clips and photos I have', count: 'Just 1', when: 'No rush' })?.totalCents ?? null
+  /* PRE-FEE prices (owner 2026-09-24): the plan page adds the 10% once, on the work */
+  const gTier = (tier: 1 | 2 | 3) => (card ? graphicPreFeeCents({ destinations: ['instagram-post', 'facebook-post'], tier, photos: 'own' }, card.card) : null)
+  const graphic = gTier(2)
+  const graphicTiers = { 1: gTier(1), 2: graphic, 3: gTier(3) }
+  const preFee = (x: ReturnType<typeof priceCreativeRequest>) => (x ? x.lines.filter((l) => l.label !== 'Service fee').reduce((n, l) => n + l.amountCents, 0) : null)
+  const video = preFee(priceCreativeRequest('video', { what: 'x', filming: 'Use clips and photos I have', count: 'Just 1', when: 'No rush' }))
+  const videoWorks = preFee(priceCreativeRequest('video', { what: 'x', filming: 'Use clips and photos I have', count: 'Just 1', when: 'No rush', level: 'The works' }))
   const shootPrice = priceCreativeRequest('photos', { what: 'Food and dishes', use: 'Social media', when: 'No rush' })?.totalCents ?? null
   return {
     name: c.name?.trim() || 'the restaurant',
@@ -143,7 +149,7 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     nextShoot: sh && sh.id !== open?.requestId ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
     shoot: open,
     planShoot: planShoot as string | null,
-    prices: { graphic, video, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },
+    prices: { graphic, graphicTiers, video, videoWorks, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },
     weekdays,
     avgTicketCents,
   }
@@ -291,12 +297,16 @@ export async function POST(req: NextRequest) {
   /* a rush pulls the made pieces two days closer, never before tomorrow */
   const pieceDue = rush && pieceDue0 ? day(new Date(Math.max(Date.now() + 86400000, addDays(new Date(pieceDue0 + 'T12:00:00'), -2).getTime())).toISOString()) : pieceDue0
 
+  /* ONE PRICE (owner 2026-09-24): each piece is charged the plan page's pre-fee price, plus the fee once */
+  const cp = (ctx as { prices?: { graphic?: number | null; graphicTiers?: Record<1 | 2 | 3, number | null>; video?: number | null; videoWorks?: number | null } }).prices ?? {}
+  const P: MenuPrices = { graphic: cp.graphic ?? 21000, graphicTiers: { 1: cp.graphicTiers?.[1] ?? Math.round((cp.graphic ?? 21000) * 0.55), 2: cp.graphic ?? 21000, 3: cp.graphicTiers?.[3] ?? Math.round((cp.graphic ?? 21000) * 2.1) }, video: cp.video ?? 25000, videoWorks: cp.videoWorks ?? 70000, print: 2500, shootFor: () => 0, shootLabel: () => '' }
   /* the pieces, one request each, every one pointing at the same announcement (and shoot) */
   for (const [gi, gl] of linesOf('graphic').slice(1).entries()) {
     const o = (gl.options ?? {}) as Record<string, unknown>
     const where = (Array.isArray(o.where) ? o.where : ['post']) as string[]
     const dests = [...(where.includes('post') ? ['instagram-post', 'facebook-post'] : []), ...(where.includes('tent') ? ['table-tent'] : []), ...(where.includes('poster') ? ['poster'] : [])]
-    const r = await createCreativeRequest({ clientId, userId, type: 'graphic', order: true, due_date: pieceDue, attachments, answers: { what: `${name} announcement, another design`, where: where.join(', '), words: [name, o.priceOn !== false && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `A second graphic for ${name}. ${clean(o.note, 200)} ${o.spanish ? 'Spanish version too.' : ''} ${o.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() }, design: { destinations: dests.length ? dests : ['instagram-post'], tier: 2, photos: o.from === 'shoot' ? 'shoot' : o.from === 'stock' ? 'source' : o.from === 'own' && media.length ? 'own' : 'none', dueDateISO: pieceDue ?? undefined } })
+    const gLvl = graphicLevel(o)
+    const r = await createCreativeRequest({ clientId, userId, type: 'graphic', order: true, due_date: pieceDue, attachments, overrideCents: graphicPieceCents(gl as unknown as never, P, 0), answers: { what: `${name} announcement, another design, ${LEVEL_NAME[gLvl]} (${GRAPHIC_LEVEL_LINE(gLvl)})`, where: where.join(', '), words: [name, o.priceOn !== false && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `A second graphic for ${name}. ${clean(o.note, 200)} ${o.spanish ? 'Spanish version too.' : ''} ${o.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() }, design: { destinations: dests.length ? dests : ['instagram-post'], tier: gLvl, photos: o.from === 'shoot' ? 'shoot' : o.from === 'stock' ? 'source' : o.from === 'own' && media.length ? 'own' : 'none', dueDateISO: pieceDue ?? undefined } })
     if (r.ok) { total += r.orderCents ?? 0; plan.push({ key: `graphic-${gi + 2}`, label: `Another graphic${where.includes('poster') ? ', the poster' : where.includes('tent') ? ', the table tent' : ''}`, detail: where.map((w) => (w === 'post' ? 'post + Story' : w === 'tent' ? 'table tent' : w)).join(', '), date: pieceDue, cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: gl.why }) }
     else errors.push(`A graphic did not start: ${r.error}`)
   }
@@ -312,10 +322,10 @@ export async function POST(req: NextRequest) {
     const gfrom = item('graphic')?.options?.from
     const photos = onShoot || gfrom === 'shoot' ? 'shoot' : gfrom === 'stock' || a.picsrc === 'licensed' ? 'source' : media.length ? 'own' : 'none'
     const r = await createCreativeRequest({
-      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush, overrideCents: item('graphic')?.options?.from === 'shoot' ? (gi < (Number(item('graphic')?.options?.included) || 0) ? 0 : PACKAGE_EXTRA.graphic) : undefined,
+      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush, overrideCents: item('graphic') ? graphicPieceCents(item('graphic') as unknown as never, P, gi) : undefined,
       answers: { what: `${name} announcement${gCount > 1 ? ` (design ${gi + 1} of ${gCount}, a different angle each)` : ''}`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
       attachments,
-      design: { destinations: dests, tier: 2, photos, dueDateISO: pieceDue ?? undefined },
+      design: { destinations: dests, tier: graphicLevel((item('graphic')?.options ?? {}) as Record<string, unknown>), photos, dueDateISO: pieceDue ?? undefined },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
@@ -329,8 +339,8 @@ export async function POST(req: NextRequest) {
     const filming = o.filmed === 'visit' ? 'Come film at my place' : o.filmed === 'clips' ? 'Use clips and photos I have' : onShoot || o.filmed === 'creator' || o.filmed === 'shoot' ? 'Use clips and photos I have' : media.length ? 'Use clips and photos I have' : 'Come film at my place'
     const styleNote = [n === 2 ? 'TWO Reels, different angles or a second dish.' : '', o.filmed === 'creator' ? 'Film it during the creator visit, same day.' : o.filmed === 'shoot' ? 'Film it on the shoot day.' : '', o.style === 'chef' ? 'Style: the chef making it, 30 seconds.' : o.style === 'room' ? 'Style: the room and the dish.' : 'Style: the dish up close.', o.captions === false ? 'No captions.' : 'Captions burned in.', o.tiktok ? 'A second cut for TikTok.' : '', o.spanish ? 'Spanish captions.' : ''].filter(Boolean).join(' ')
     const r = await createCreativeRequest({
-      clientId, userId, type: 'video', order: true, due_date: pieceDue, rush, attachments, overrideCents: o.filmed === 'shoot' ? Math.max(0, n - (Number(o.included) || 0)) * PACKAGE_EXTRA.video : undefined,
-      answers: { what: `${name}: ${o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : a.line || 'the dish, plated'}`, filming, count: n >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${styleNote}`.replace(/\s+/g, ' ').trim() },
+      clientId, userId, type: 'video', order: true, due_date: pieceDue, rush, attachments, overrideCents: vl ? itemCents(vl as unknown as never, P) : undefined,
+      answers: { what: `${name}: ${o.style === 'chef' ? 'the chef making it' : o.style === 'room' ? 'the room and the dish' : a.line || 'the dish, plated'}`, filming, count: n >= 3 ? '3 to 5' : 'Just 1', featuring: name, when: whenWord(pieceDue), notes: `Announce: ${name}. Level: ${VIDEO_LEVEL_NAME[videoLevel(o)]} (${VIDEO_LEVEL_LINE[videoLevel(o)]}). ${facts} ${shoot ? `Clips come from ${shootWord}: film ten seconds of it on the day.` : ''} ${styleNote}`.replace(/\s+/g, ' ').trim() },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0

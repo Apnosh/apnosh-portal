@@ -20,6 +20,7 @@ import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
 import type { RateCard } from '@/lib/design/rate-card'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
 import { TIER_SPECS } from '@/lib/design/tier-specs'
+import { feeCentsOn } from '@/lib/campaigns/checkout-bill'
 import { notifyStaffForClient } from '@/lib/notifications'
 
 export interface CreateRequestInput {
@@ -33,7 +34,8 @@ export interface CreateRequestInput {
   design?: unknown
   /** a rush order: a quarter more, two days sooner */
   rush?: boolean
-  /** a fixed price from a package (0 when the piece is included in one) */
+  /** a fixed price BEFORE the service fee: the plan page's price for this piece (0 when a package
+   *  already includes it). The 10% fee is added here, once, like every other creative order. */
   overrideCents?: number
 }
 
@@ -75,6 +77,16 @@ export function graphicOrderCents(design: unknown, card: RateCard): number | nul
   return Math.round((t + Math.round(t * 0.1)) * 100)
 }
 
+/** The same graphic price before the service fee: what the plan page shows per graphic. */
+export function graphicPreFeeCents(design: unknown, card: RateCard): number | null {
+  const withFee = graphicOrderCents(design, card)
+  if (withFee == null) return null
+  /* undo the fee exactly as graphicOrderCents added it (whole dollars) */
+  const dollars = withFee / 100
+  for (let t = Math.floor(dollars / 1.1) - 2; t <= Math.ceil(dollars / 1.1) + 2; t++) if (t + Math.round(t * 0.1) === dollars) return t * 100
+  return Math.round(withFee / 1.1)
+}
+
 function graphicTier(design: unknown): 1 | 2 | 3 {
   if (typeof design !== 'object' || design === null) return 2
   const t = (design as Record<string, unknown>).tier
@@ -112,7 +124,12 @@ export async function createCreativeRequest(input: CreateRequestInput): Promise<
       if (priced?.monthly) cadence = 'monthly'
       if (orderCents != null) brief = { ...brief, _pricing: { origin: 'price_sheet' } }
     }
-    if (typeof input.overrideCents === 'number' && input.overrideCents >= 0) { orderCents = Math.round(input.overrideCents); brief = { ...brief, _pricing: { origin: 'package', cents: orderCents } } }
+    if (typeof input.overrideCents === 'number' && input.overrideCents >= 0) {
+      const pre = Math.round(input.overrideCents)
+      orderCents = pre + feeCentsOn(pre)
+      const prior = (brief as { _pricing?: Record<string, unknown> })._pricing ?? {}
+      brief = { ...brief, _pricing: { ...prior, origin: 'plan', preFeeCents: pre, cents: orderCents } }
+    }
     if (orderCents == null) return { ok: false, error: 'Could not price this order. Send it as a request instead.', status: 400 }
     /* RUSH (owner 2026-09-24): the piece is wanted two days sooner; a quarter more on it, said in the brief */
     if (input.rush === true && orderCents > 0) { orderCents = Math.round(orderCents * 1.25); brief = { ...brief, _rush: { rate: 0.25, note: 'Rush: wanted two days sooner' } } }

@@ -166,5 +166,15 @@ export function ladderFor(i: SuggestInput, items: ItemPick[]): Ladder {
     recommended: [recommended.boost ? `a $${Math.round(Number((recommended.boost as Record<string, unknown>).cents) / 100)} boost` : '', recommended.graphic ? 'a graphic' : '', recommended.print ? 'a table tent' : '', recommended.offer ? 'a code' : '', recommended.taste ? 'a taste' : ''].filter(Boolean).join(', '),
     bigger: [bigger.creator ? `${first} visits` : '', 'a Reel', 'print', 'the bigger boost', bigger.apps ? 'the delivery apps' : '', 'reviews'].filter(Boolean).join(', '),
   }
+  /* EFFORT BY PLAN (owner 2026-09-24): Just be seen starts at Quick, Drive actions at Standard, The full
+     push at The works, on the pieces made on their own. A piece the content day includes stays Standard
+     (the package price covers Standard; going up is the owner's tap and costs the difference). */
+  const effort = (set: LadderSet, g: 1 | 2 | 3, v: 'standard' | 'works') => {
+    const gr = set.graphic
+    if (gr && !(typeof gr === 'object' && (gr as Record<string, unknown>).included)) set.graphic = { ...(typeof gr === 'object' ? gr : {}), level: g }
+    const vd = set.video
+    if (vd && !(typeof vd === 'object' && (vd as Record<string, unknown>).filmed === 'shoot')) set.video = { ...(typeof vd === 'object' ? vd : {}), level: v }
+  }
+  effort(simple, 1, 'standard'); effort(recommended, 2, 'standard'); effort(bigger, 3, 'works')
   return { simple, recommended, bigger, notes }
 }
