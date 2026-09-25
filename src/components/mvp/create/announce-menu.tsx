@@ -326,6 +326,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   const seeded = useRef(false)
   /* THE BANDS (owner 2026-09-24): which group is open on the plan page; one at a time */
   const [band, setBand] = useState<string | null>(null)
+  /* ADD, BROWSED LIKE THE CREATE PAGE (owner 2026-09-24): the stage tab the add shelf shows; null is For you */
+  const [addStage, setAddStage] = useState<string | null>(null)
   useEffect(() => { if (simplePlans && ladder && items.length && !seeded.current) { seeded.current = true; if (currentStep < 0) applyStep(1) } }, [ladder, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const stepLabels = stepSets.map((st, i) => (i === 0 ? 'Free' : dollars(costOf(st.on))))
   /* a step that adds nothing (the shoot was already on) is not a step */
@@ -536,17 +538,6 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               </div>
             )
           }
-          /* ADD TO YOUR PLAN (owner 2026-09-24): a sideways row of tiles like the Create page */
-          const addTile = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; return (
-            <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ flex: 'none', width: 80, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-              <span style={{ position: 'relative', display: 'block', width: 80 }}>
-                {thumbFor(it.id, 80)}
-                <span style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.greenDk} /></span>
-              </span>
-              <b style={{ display: 'block', fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, marginTop: 6 }}>{chipName[it.id] ?? m.name}</b>
-              <small style={{ display: 'block', fontSize: 12, color: free ? C.greenDk : C.mute, fontWeight: 600, marginTop: 1 }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</small>
-            </button>
-          ) }
           return (
             <div style={{ marginTop: 2 }}>
               {/* THE LEVELS (owner 2026-09-24): our pick is the one that invites; the other two stay quiet */}
@@ -562,20 +553,62 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               </div>
               {pos < 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Your own mix. <button type="button" onClick={() => applyStep(three[1])} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Back to our pick</button></div>}
               <div style={{ marginTop: 6 }}>{groups.map(bandView)}</div>
-              <div style={{ marginTop: 22 }}>
-                <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
-                <div className="mvp-hscroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollPaddingInline: 16, margin: '12px -16px 0', padding: '0 16px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                  {offRows.map(addTile)}
-                  <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ flex: 'none', width: 80, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-                    <span style={{ position: 'relative', display: 'block', width: 80 }}>
-                      {thumbFor('custom', 80)}
-                      <span style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.ink} /></span>
-                    </span>
-                    <b style={{ display: 'block', fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, marginTop: 6 }}>Something else</b>
-                    <small style={{ display: 'block', fontSize: 12, color: C.mute, fontWeight: 600, marginTop: 1 }}>Quoted</small>
-                  </button>
-                </div>
-              </div>
+              {(() => {
+                /* ADD TO YOUR PLAN, BROWSED LIKE THE CREATE PAGE (owner 2026-09-24): the same stage tabs (For you, then
+                   the five stages in their colors), and under each, that stage's pieces as picture cards: a tinted
+                   picture with the stage tag and the piece drawn as itself, the name, the price. Pieces already in
+                   the plan say so and open their options; the rest add. Something else closes every shelf. */
+                const SHELF: { key: string; hue: string; ids: ItemId[] }[] = [
+                  { key: 'Awareness', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] },
+                  { key: 'Interest', hue: '#3b6fd4', ids: ['photos', 'graphic', 'video', 'print'] },
+                  { key: 'Actions', hue: '#6a39de', ids: ['taste', 'offer'] },
+                  { key: 'Orders', hue: '#d99a1e', ids: ['apps'] },
+                  { key: 'Retention', hue: '#0f97a8', ids: ['review', 'sign'] },
+                ]
+                const stageOf = (id: ItemId) => SHELF.find((x) => x.ids.includes(id)) ?? SHELF[0]
+                const base = (id: ItemId) => items.find((x) => x.id === id && x.uid === x.id) ?? items.find((x) => x.id === id)
+                const forYou = offRows.filter((it) => recTag(it.id))
+                const list: ItemPick[] = addStage == null
+                  ? (forYou.length ? forYou : offRows)
+                  : (SHELF.find((x) => x.key === addStage)?.ids ?? []).map(base).filter((x): x is ItemPick => !!x)
+                const chipS = (on: boolean, hue: string): React.CSSProperties => ({ flex: 'none', height: 34, padding: '0 13px', borderRadius: 99, border: `1.5px solid ${hue}`, background: on ? hue : '#fff', color: on ? '#fff' : hue, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' })
+                const card = (it: ItemPick) => {
+                  const st = stageOf(it.id); const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; const inPlan = it.on
+                  /* in the plan: say it the way the plan does, with the plan's own price */
+                  const row = inPlan ? rows.find((x) => x.uid === it.uid) : undefined
+                  const tap = () => { const k = groupOf(it.id); if (k) setBand(k); if (inPlan || (m.hasOptions && !free)) setOpen(it.uid); else toggle(it.uid) }
+                  return (
+                    <button key={it.uid} type="button" onClick={tap} style={{ flex: 'none', width: 148, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', color: C.ink, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span style={{ position: 'relative', height: 116, borderRadius: 16, background: `color-mix(in srgb, ${st.hue} 14%, #fff)`, display: 'grid', placeItems: 'center', marginBottom: 6, overflow: 'hidden' }}>
+                        <em style={{ position: 'absolute', left: 8, top: 8, zIndex: 2, fontStyle: 'normal', fontWeight: 700, fontSize: 10, padding: '3px 8px', borderRadius: 99, background: 'rgba(255,255,255,.95)', color: st.hue, display: 'inline-flex', alignItems: 'center', gap: 4 }}><i style={{ width: 5, height: 5, borderRadius: 99, background: st.hue }} />{st.key}</em>
+                        <span style={{ marginTop: 14 }}>{thumbFor(it.id, 62)}</span>
+                        {inPlan
+                          ? <em style={{ position: 'absolute', left: 8, bottom: 8, fontStyle: 'normal', fontWeight: 700, fontSize: 10.5, padding: '4px 9px', borderRadius: 99, background: C.ink, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Check size={11} strokeWidth={3} /> In your plan</em>
+                          : <span style={{ position: 'absolute', right: 8, bottom: 8, width: 26, height: 26, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.14)' }}><Plus size={15} strokeWidth={2.8} color={C.greenDk} /></span>}
+                      </span>
+                      <b style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{row?.name ?? offName[it.id] ?? m.name}</b>
+                      <small style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row ? row.price : free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}{!inPlan && recTag(it.id) ? ' · Recommended' : ''}</small>
+                    </button>
+                  )
+                }
+                return (
+                  <div style={{ marginTop: 22 }}>
+                    <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
+                    <div className="mvp-hscroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '12px -16px 0', padding: '0 16px', scrollbarWidth: 'none' }}>
+                      <button type="button" onClick={() => setAddStage(null)} style={chipS(addStage == null, C.greenDk)}>For you</button>
+                      {SHELF.map((x) => <button key={x.key} type="button" onClick={() => setAddStage(x.key)} style={chipS(addStage === x.key, x.hue)}>{x.key}</button>)}
+                    </div>
+                    <div className="mvp-hscroll" style={{ display: 'flex', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollPaddingInline: 16, margin: '14px -16px 0', padding: '2px 16px 4px', scrollbarWidth: 'none', alignItems: 'flex-start' }}>
+                      {list.map(card)}
+                      <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ flex: 'none', width: 148, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', color: C.ink, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ position: 'relative', height: 116, borderRadius: 16, background: C.bg, display: 'grid', placeItems: 'center', marginBottom: 6 }}>{thumbFor('custom', 62)}</span>
+                        <b style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.25 }}>Something else</b>
+                        <small style={{ fontSize: 12.5, color: C.mute }}>The team quotes it</small>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
               {(() => {
                 /* THE SUMMARY (owner 2026-09-24): the offer's code when the plan has one, then the money. The fee is
                    exact; tax is worked out by Stripe at payment (it depends on where the business is), so it is named
