@@ -903,15 +903,19 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
             {!openItem && (dishRows ? (() => {
               /* THE TITLE, WITH THE DISH BESIDE IT (owner 2026-09-25, design C): the dish being typed comes to life */
               const hi = Math.max(0, ...openDishes)
-              const hd = hi === 0 ? { name: a.what ?? '', price: a.price ?? '', tags: [...tags] } : { name: dishes[hi - 1]?.name ?? '', price: dishes[hi - 1]?.price ?? '', tags: dishes[hi - 1]?.tags ?? [] }
+              const hd = hi === 0 ? { name: a.what ?? '', line: a.line ?? '', price: a.price ?? '', tags: [...tags] } : { name: dishes[hi - 1]?.name ?? '', line: dishes[hi - 1]?.line ?? '', price: dishes[hi - 1]?.price ?? '', tags: dishes[hi - 1]?.tags ?? [] }
               const pw = hd.price.trim() ? (/^\d/.test(hd.price.trim()) ? `$${hd.price.trim()}` : hd.price.trim()) : ''
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '4px 2px 18px' }}>
                   <style>{DISH_ART_CSS}</style>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ ...h2, margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: '-.03em' }}>What is new?</div>
-                    {ctx?.name && <div style={{ marginTop: 8, fontSize: 15, fontWeight: 500, color: C.mute }}>{ctx.name}</div>}
-                  </div>
+                  {/* the title and the line under it follow the dish being typed (owner 2026-09-25): its name, then its
+                     description; the question and the restaurant's name hold the place until then */}
+                  {(() => { const nm = hd.name.trim(); const ln = hd.line.trim(); const fs = nm.length > 34 ? 22 : nm.length > 20 ? 26 : 30; return (
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ ...h2, margin: 0, fontSize: nm ? fs : 30, lineHeight: 1.12, fontWeight: 700, letterSpacing: '-.03em', textWrap: 'balance', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nm || 'What is new?'}</div>
+                      {(ln || ctx?.name) && <div style={{ marginTop: 8, fontSize: 15, fontWeight: 500, lineHeight: 1.35, color: C.mute, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ln || ctx?.name}</div>}
+                    </div>
+                  ) })()}
                   <DishHero on={!!hd.name.trim()} price={pw} tags={hd.tags} />
                 </div>
               )
