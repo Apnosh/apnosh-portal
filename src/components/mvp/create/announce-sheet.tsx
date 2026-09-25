@@ -1013,7 +1013,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                  boxes, Name and Price on one row, Description with a count, Good to know as equal tiles with icons. */
               const lab: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12.5, fontWeight: 600, color: C.mute, padding: '0 2px', marginBottom: 6 }
               const box: React.CSSProperties = { display: 'block', width: '100%', boxSizing: 'border-box', height: 48, margin: 0, borderRadius: 12, background: C.bg, border: '1.5px solid transparent', fontFamily: 'inherit', fontSize: 16, fontWeight: 500, lineHeight: '22px', color: C.ink, padding: '0 12px', outline: 'none', WebkitAppearance: 'none' }
-              const num = (n: number, open: boolean) => <span style={{ width: open ? 24 : 28, height: open ? 24 : 28, borderRadius: 99, background: open ? C.ink : C.greenSoft, color: open ? '#fff' : C.greenDk, fontSize: open ? 13 : 14, fontWeight: 700, display: 'grid', placeItems: 'center', flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{n}</span>
               const dishForm = (i: number) => {
                 const d = getDish(i)
                 const priceWord = d.price.trim() ? (/^\d/.test(d.price.trim()) ? `$${d.price.trim()}` : d.price.trim()) : ''
@@ -1021,8 +1020,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                 return (
                   <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 20, background: '#fff', marginBottom: 10, boxShadow: '0 1px 2px rgba(29,29,31,.04)' }}>
                     {!openDishes.includes(i) ? (
-                      <button type="button" onClick={() => { focusDish(i); setDetail(null) }} aria-expanded={false} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 64, padding: '0 12px 0 14px', border: 0, borderRadius: 20, background: 'none', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: C.ink }}>
-                        {num(i + 1, false)}
+                      <button type="button" onClick={() => { focusDish(i); setDetail(null) }} aria-expanded={false} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 60, padding: '0 12px 0 16px', border: 0, borderRadius: 20, background: 'none', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left', color: C.ink }}>
                         <b style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name.trim()}</b>
                         {d.tags.length > 0 && <span style={{ display: 'flex', gap: 4, flex: 'none', color: C.greenDk }}>{d.tags.map((t) => <i key={t} title={t} style={{ width: 26, height: 26, borderRadius: 99, background: C.greenSoft, display: 'grid', placeItems: 'center', ['--cut' as string]: C.greenSoft, transform: 'scale(.85)' }}>{TAG_ICON[t]}</i>)}</span>}
                         {priceWord && <span style={{ fontSize: 16, fontWeight: 700, flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{priceWord}</span>}
@@ -1030,11 +1028,6 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                       </button>
                     ) : (
                       <div style={{ padding: '12px 12px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 12px' }}>
-                          {num(i + 1, true)}
-                          <span style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>Dish {i + 1}</span>
-                          {count > 1 && <button type="button" onClick={removeIt} style={{ marginLeft: 'auto', background: 'none', border: 0, padding: '6px 2px', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, color: C.mute, cursor: 'pointer' }}>Remove</button>}
-                        </div>
                         <div style={{ display: 'flex', gap: 10 }}>
                           <label style={{ flex: 1, minWidth: 0 }}><span style={lab}>Name</span><input className="dfi" type="text" value={d.name} onChange={(e) => setDish(i, { name: e.target.value })} placeholder={i ? 'Dish name' : 'Pork belly bánh mì'} style={box} /></label>
                           <label style={{ width: 92, flex: 'none' }}><span style={lab}>Price</span><span style={{ position: 'relative', display: 'block' }}><span style={{ position: 'absolute', left: 12, top: 13, fontSize: 16, fontWeight: 600, color: d.price ? C.ink : C.faint, pointerEvents: 'none' }}>$</span><input className="dfi" type="text" inputMode="decimal" value={d.price} onChange={(e) => setDish(i, { price: e.target.value.replace(/^\$/, '') })} placeholder={i ? '0' : '14'} style={{ ...box, paddingLeft: 27, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }} /></span></label>
@@ -1050,6 +1043,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                             </button>
                           ) })}
                         </div>
+                        {count > 1 && <div style={{ textAlign: 'center', marginTop: 10 }}><button type="button" onClick={removeIt} style={{ background: 'none', border: 0, padding: '6px 10px', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: C.mute, cursor: 'pointer' }}>Remove</button></div>}
                       </div>
                     )}
                   </div>
