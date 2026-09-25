@@ -470,6 +470,25 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
               </div>
             )
           }
+          /* the short name under each picture (owner 2026-09-24): what it is, no sentence */
+          const tileLabel = (r: Row): string => {
+            const n = r.count ?? 1
+            switch (r.id) {
+              case 'photos': return /Next/.test(r.name) ? 'Next shoot' : 'Photoshoot'
+              case 'graphic': return `${n} graphic${n === 1 ? '' : 's'}`
+              case 'video': return `${n} Reel${n === 1 ? '' : 's'}`
+              case 'post': return 'Post'
+              case 'boost': return 'Boost'
+              case 'creator': return 'Creator'
+              case 'apps': return 'DoorDash'
+              case 'print': return r.name.replace(/ print$/, '').replace(/^Window poster$/, 'Poster')
+              case 'taste': return 'Taste'
+              case 'offer': return 'Offer'
+              case 'review': return 'Review ask'
+              case 'sign': return 'Photo sign'
+              default: return r.name
+            }
+          }
           const bandView = ({ g, rows: rs }: { g: typeof GROUPS[number]; rows: Row[] }) => {
             const open = band === g.key
             const cents = rs.reduce((n, r) => n + r.cents, 0)
@@ -477,56 +496,104 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
             const totalWord = g.key === 'custom' ? 'Quote' : cents ? dollars(cents) : 'Free'
             return (
               <div key={g.key} style={{ marginTop: 10, borderRadius: 20, background: `color-mix(in srgb, ${g.hue} 9%, #fff)`, border: `1.5px solid ${open ? `color-mix(in srgb, ${g.hue} 30%, #fff)` : 'transparent'}`, overflow: 'hidden' }}>
-                <button type="button" aria-expanded={open} onClick={() => setBand(open ? null : g.key)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '14px 16px', border: 0, background: 'none', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 99, background: g.hue, flex: 'none' }} />
-                      <b style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 700, letterSpacing: '-.02em' }}>{g.name}</b>
-                      {needy && <span aria-label="Needs you" style={{ width: 8, height: 8, borderRadius: 99, background: '#d99a1e', flex: 'none' }} />}
-                    </span>
-                    <small style={{ display: 'block', fontSize: 13, color: C.mute, marginTop: 3, paddingLeft: 15 }}>{summary(g.key)}</small>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 9, paddingLeft: 15 }}>
-                      {rs.slice(0, 5).map((r) => <span key={r.key} style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(29,29,31,.06)', ['--c2' as string]: META[r.id].hue }}><span style={{ width: 22 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span></span>)}
-                      {needy && !open && <span style={{ marginLeft: 4, height: 24, padding: '0 9px', borderRadius: 99, background: '#fff4e0', color: '#8a5a0c', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>{needy.state.word}</span>}
-                    </span>
+                <button type="button" aria-expanded={open} onClick={() => setBand(open ? null : g.key)} style={{ display: 'block', width: '100%', padding: '14px 16px 16px', border: 0, background: 'none', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 99, background: g.hue, flex: 'none' }} />
+                    <b style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 700, letterSpacing: '-.02em' }}>{g.name}</b>
+                    {needy && <span aria-label={needy.state.word} style={{ width: 8, height: 8, borderRadius: 99, background: '#d99a1e', flex: 'none' }} />}
+                    <b style={{ marginLeft: 'auto', fontFamily: DISPLAY, fontSize: 19, fontWeight: 700, letterSpacing: '-.02em', whiteSpace: 'nowrap', color: totalWord === 'Free' ? C.greenDk : C.ink }}>{totalWord}</b>
+                    <ChevronRight size={18} color={C.faint} style={{ flex: 'none', marginRight: -4, transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .15s' }} />
                   </span>
-                  <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em', whiteSpace: 'nowrap', color: totalWord === 'Free' ? C.greenDk : C.ink }}>{totalWord}</b>
+                  {!open && (
+                    <span style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+                      {rs.map((r) => (
+                        <span key={r.key} style={{ width: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 60, height: 60, borderRadius: 18, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(29,29,31,.06)', position: 'relative', ['--c2' as string]: META[r.id].hue }}>
+                            <span style={{ width: 42 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span>
+                            {r.blocks && <span style={{ position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: 99, background: '#d99a1e', border: '2px solid #fff' }} />}
+                          </span>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.2, textAlign: 'center', color: C.ink }}>{tileLabel(r)}</span>
+                          {r.blocks && <span style={{ marginTop: -3, fontSize: 11, fontWeight: 700, lineHeight: 1.2, textAlign: 'center', color: '#8a5a0c' }}>{r.state.word}</span>}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </button>
                 {open && <div style={{ padding: '0 10px 10px' }}>{rs.map(bandRow)}</div>}
               </div>
             )
           }
-          const addChip = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; return (
-            <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ height: 36, padding: '0 12px', borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={14} strokeWidth={2.6} color={C.greenDk} />{chipName[it.id] ?? m.name}{!free && <span style={{ fontWeight: 500, color: C.mute }}>{m.hasOptions ? 'from ' : ''}{dollars(cents)}</span>}
+          /* ADD TO YOUR PLAN (owner 2026-09-24): a sideways row of tiles like the Create page */
+          const addTile = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; return (
+            <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ flex: 'none', width: 100, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+              <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 100, height: 100, borderRadius: 22, background: `color-mix(in srgb, ${m.hue} 14%, #fff)`, ['--c2' as string]: m.hue }}>
+                <span style={{ width: 62 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(x) => x} /></span>
+                <span style={{ position: 'absolute', top: 7, right: 7, width: 24, height: 24, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.greenDk} /></span>
+              </span>
+              <b style={{ display: 'block', fontSize: 13, fontWeight: 600, lineHeight: 1.25, marginTop: 7 }}>{chipName[it.id] ?? m.name}</b>
+              <small style={{ display: 'block', fontSize: 12, color: free ? C.greenDk : C.mute, fontWeight: 600, marginTop: 1 }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</small>
             </button>
           ) }
           return (
             <div style={{ marginTop: 2 }}>
-              <div style={{ position: 'relative', display: 'flex', background: '#f6f6f8', borderRadius: 99, padding: 3 }}>
-                {pos >= 0 && <span aria-hidden style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(3px + ${pos} * (100% - 6px) / 3)`, width: 'calc((100% - 6px) / 3)', borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.08)' }} />}
-                {three.map((i, k) => (
-                  <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: 40, borderRadius: 99, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', color: pos === k ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
-                    <b style={{ fontSize: 13, fontWeight: 700 }}>{titles[i]}</b>
-                    <small style={{ fontSize: 9.5, fontWeight: 700, color: pos === k ? C.mute : C.faint }}>{costOf(stepSets[i].on) ? dollars(costOf(stepSets[i].on)) : 'Free'}{k === 1 ? ' · Our pick' : ''}</small>
+              {/* THE LEVELS (owner 2026-09-24): our pick is the one that invites; the other two stay quiet */}
+              <div style={{ position: 'relative', display: 'flex', background: C.bg, borderRadius: 99, padding: 3, marginTop: 14 }}>
+                {pos >= 0 && <span aria-hidden style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(3px + ${pos} * (100% - 6px) / 3)`, width: 'calc((100% - 6px) / 3)', borderRadius: 99, background: pos === 1 ? C.greenSoft : '#fff', border: pos === 1 ? `1.5px solid ${C.greenDk}` : `1px solid ${C.line}`, boxSizing: 'border-box', boxShadow: pos === 1 ? '0 4px 14px rgba(46,154,120,.22)' : '0 1px 3px rgba(0,0,0,.08)', transition: 'left .2s, background .2s' }} />}
+                {three.map((i, k) => { const pick = k === 1; const sel = pos === k; return (
+                  <button key={i} type="button" onClick={() => applyStep(i)} style={{ position: 'relative', flex: 1, height: pick ? 50 : 44, alignSelf: 'center', borderRadius: 99, border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', color: pick ? C.ink : sel ? C.ink : C.mute, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.15 }}>
+                    {pick && <span style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', height: 20, padding: '0 8px', borderRadius: 99, background: C.greenDk, color: '#fff', fontSize: 10.5, fontWeight: 800, letterSpacing: '.01em', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(46,154,120,.3)' }}>★ Our pick</span>}
+                    <b style={{ fontSize: pick ? 14 : 12.5, fontWeight: pick || sel ? 800 : 600 }}>{titles[i]}</b>
+                    <small style={{ fontSize: pick ? 12 : 10.5, fontWeight: 700, color: pick ? C.greenDk : sel ? C.mute : C.faint }}>{costOf(stepSets[i].on) ? dollars(costOf(stepSets[i].on)) : 'Free'}</small>
                   </button>
-                ))}
+                ) })}
               </div>
               {pos < 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Your own mix. <button type="button" onClick={() => applyStep(three[1])} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Back to our pick</button></div>}
               <div style={{ marginTop: 6 }}>{groups.map(bandView)}</div>
-              <div style={{ marginTop: 10, borderRadius: 20, background: C.bg, padding: '14px 14px 16px' }}>
-                <b style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>Add to your plan</b>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                  {offRows.map(addChip)}
-                  <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ height: 36, padding: '0 12px', borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={14} strokeWidth={2.6} color={C.ink} />Something else</button>
+              <div style={{ marginTop: 22 }}>
+                <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
+                <div className="mvp-hscroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollPaddingInline: 16, margin: '12px -16px 0', padding: '0 16px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                  {offRows.map(addTile)}
+                  <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ flex: 'none', width: 100, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+                    <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 100, height: 100, borderRadius: 22, background: C.bg, ['--c2' as string]: '#8a928e' }}>
+                      <span style={{ width: 62 }}><Drawing spec={{ scene: 'else' }} name="" rating="" t={(x) => x} /></span>
+                      <span style={{ position: 'absolute', top: 7, right: 7, width: 24, height: 24, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.ink} /></span>
+                    </span>
+                    <b style={{ display: 'block', fontSize: 13, fontWeight: 600, lineHeight: 1.25, marginTop: 7 }}>Something else</b>
+                    <small style={{ display: 'block', fontSize: 12, color: C.mute, fontWeight: 600, marginTop: 1 }}>Quoted</small>
+                  </button>
                 </div>
               </div>
-              <div style={{ marginTop: 18, borderTop: `0.5px solid ${C.line}`, paddingTop: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700 }}><span>Subtotal</span><span>{total ? dollars(total) : 'Free'}</span></div>
-                {missing.length > 0 && <div style={{ fontSize: 12, color: '#8a5a0c', marginTop: 2 }}>{missing.map((r) => r.state.word).join(' · ')}</div>}
-                {rows.some((r) => r.id === 'custom') && <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>Custom items are quoted after you order. Nothing is charged until you say yes.</div>}
-                <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>Service fee ({Math.round(SERVICE_FEE_RATE * 100)}%) and taxes on the next screen</div>
-              </div>
+              {(() => {
+                /* THE SUMMARY (owner 2026-09-24): the offer's code when the plan has one, then the money. The fee is
+                   exact; tax is worked out by Stripe at payment (it depends on where the business is), so it is named
+                   there rather than guessed here. */
+                const offer = items.find((x) => x.on && x.id === 'offer')
+                const code = String(offer?.options.codeText ?? '')
+                const confirmed = offer?.options.confirmed === true
+                const fee = Math.round((total || 0) * SERVICE_FEE_RATE)
+                const line = (l: React.ReactNode, v: React.ReactNode, strong = false) => <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, padding: strong ? '12px 0 0' : '6px 0', fontSize: strong ? 17 : 15, fontWeight: strong ? 800 : 500, color: C.ink }}><span>{l}</span><span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: strong ? 800 : 600 }}>{v}</span></div>
+                return (
+                  <div style={{ marginTop: 22 }}>
+                    <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, letterSpacing: '-.02em', marginBottom: 10 }}>Summary</b>
+                    <div style={{ border: `1px solid ${C.line}`, borderRadius: 20, padding: '10px 16px 14px', background: '#fff' }}>
+                      {offer && (
+                        <div style={{ padding: '6px 0 12px', marginBottom: 6, borderBottom: `0.5px solid ${C.line}` }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 6 }}>Launch offer code</div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input value={code} onChange={(e) => { const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); patchU(offer.uid, (x) => ({ options: { ...x.options, codeText: v, confirmed: false } })) }} placeholder="BANHMI10" aria-label="Launch offer code" style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 12, border: `1.5px solid ${confirmed ? 'transparent' : '#e9c98a'}`, background: confirmed ? C.bg : '#fffaf0', padding: '0 12px', fontFamily: 'inherit', fontSize: 16, fontWeight: 700, letterSpacing: '.04em', color: C.ink, outline: 'none' }} />
+                            <button type="button" disabled={!code} onClick={() => patchU(offer.uid, (x) => ({ options: { ...x.options, confirmed: true } }))} style={{ flex: 'none', height: 44, padding: '0 14px', borderRadius: 12, border: 0, background: confirmed ? C.greenSoft : C.ink, color: confirmed ? C.greenDk : '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, cursor: code ? 'pointer' : 'default', opacity: code ? 1 : .5, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{confirmed ? <><Check size={15} strokeWidth={3} /> Set</> : 'Use it'}</button>
+                          </div>
+                          {!confirmed && <div style={{ fontSize: 12.5, color: '#8a5a0c', fontWeight: 600, marginTop: 6 }}>Check the code, then tap Use it</div>}
+                        </div>
+                      )}
+                      {line('Subtotal', total ? dollars(total) : 'Free')}
+                      {line(<span>Fees &amp; estimated tax<small style={{ display: 'block', fontSize: 12, color: C.mute, fontWeight: 500, marginTop: 1 }}>{Math.round(SERVICE_FEE_RATE * 100)}% service fee. Tax is added at payment if it applies</small></span>, fee ? dollars(fee) : '$0')}
+                      <div style={{ borderTop: `0.5px solid ${C.line}`, marginTop: 6 }}>{line('Total', total ? dollars(total + fee) : 'Free', true)}</div>
+                      {rows.some((r) => r.id === 'custom') && <div style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>Custom items are quoted after you order. Nothing is charged until you say yes.</div>}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           )
         })()}
@@ -576,7 +643,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           /* what still needs a choice before the order can go on (the creator, the offer's code) */
           const missing = simplePlans && mode === 'plan' ? items.filter((x) => x.on && ((x.id === 'creator' && !x.options.slug) || (x.id === 'offer' && x.options.confirmed !== true))) : []
           if (missing.length) { const first = missing[0]; const word = first.id === 'creator' ? 'Choose a creator' : String(first.options.codeText ?? '') ? 'Check the code' : 'Fill in the code'; return <button type="button" onClick={() => setOpen(first.uid)} style={{ ...cta, background: '#f6f6f8', color: C.mute }}><span>{word} to continue</span><span style={{ fontSize: 13, fontWeight: 600 }}>{missing.length} left</span></button> }
-          return <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : (ctaLabel ?? 'Make it happen')}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(total) : 'Free'}</span></button>
+          return <button type="button" onClick={onGo} disabled={!ready || posting || writing} style={{ ...cta, opacity: ready && !posting ? 1 : .5 }}><span>{posting ? 'Making it happen' : writing ? 'Writing the words' : (ctaLabel ?? 'Make it happen')}</span><span>{posting || writing ? <Loader2 size={16} className="mvp-spin" /> : total ? dollars(simplePlans ? total + Math.round(total * SERVICE_FEE_RATE) : total) : 'Free'}</span></button>
         })()}
         <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.45 }}>Nothing posts without your okay. It all lands in Coming up.</div>
       </div>
