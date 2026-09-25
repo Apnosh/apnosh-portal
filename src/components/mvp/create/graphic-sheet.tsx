@@ -11,7 +11,7 @@
  * carousel post with a slide for each dish, or a post for each dish. The level changes its quality.
  */
 import type { CSSProperties, ReactNode } from 'react'
-import { ArrowLeft, Bookmark, CalendarDays, Camera, Check, FilePen, Heart, Languages, Layers, Lock, MessageCircle, MoreHorizontal, Palette, Printer, RotateCcw, Send, Tag, Ticket, Type, X } from 'lucide-react'
+import { Bookmark, CalendarDays, Camera, Check, FilePen, Heart, Languages, Layers, Lock, MessageCircle, MoreHorizontal, Palette, Printer, RotateCcw, Send, Tag, Ticket, Type, X } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing } from './drawings'
 import { itemCents, graphicLayout, graphicDishes, graphicOrders, graphicLevel, includedLevel, LEVEL_NAME, TIER_SPECS, type GraphicLevel, type MenuPrices } from '@/lib/plan/item-price'
@@ -41,13 +41,12 @@ export interface GraphicSheetProps {
   offer: { text: string; code: string } | null
   printInPlan: boolean
   readyWord: string
-  onBack: () => void
   onDone: () => void
   onRemove: (() => void) | null
   doneLabel: string
 }
 
-export default function GraphicSheet({ item, prices, setOpt, bizName, dishes, photo, photoSource, brandKit, offer, printInPlan, readyWord, onBack, onDone, onRemove, doneLabel }: GraphicSheetProps) {
+export default function GraphicSheet({ item, prices, setOpt, bizName, dishes, photo, photoSource, brandKit, offer, printInPlan, readyWord, onDone, onRemove, doneLabel }: GraphicSheetProps) {
   const o = item.options
   const list = dishes.length ? dishes : [{ name: 'The dish', price: '' }]
   const d = graphicDishes(o, prices)
@@ -66,8 +65,6 @@ export default function GraphicSheet({ item, prices, setOpt, bizName, dishes, ph
   const tierPre = (l: GraphicLevel) => prices.graphicTiers?.[l] ?? (l === 2 ? prices.graphic : 0)
   const at = (patch: Record<string, unknown>) => itemCents({ ...item, options: { ...o, ...patch } }, prices)
 
-  const title = layout === 'carousel' ? 'The carousel post' : layout === 'each' ? `${d} graphics` : 'The graphic'
-  const headPrice = inc ? (cents ? `+${dollars(cents)}` : 'Included') : dollars(cents)
 
   const h: CSSProperties = { display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 16, fontWeight: 700, color: C.ink, margin: '24px 2px 10px' }
   const small: CSSProperties = { fontSize: 12.5, fontWeight: 500, color: C.mute }
@@ -115,16 +112,6 @@ export default function GraphicSheet({ item, prices, setOpt, bizName, dishes, ph
 
   return (
     <div>
-      {/* the title: what it is and what it costs, said plainly */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 12px' }}>
-        <button type="button" onClick={onBack} aria-label="Back" style={{ width: 36, height: 36, borderRadius: 99, border: 0, background: C.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', flex: 'none' }}><ArrowLeft size={17} /></button>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 22, fontWeight: 700, letterSpacing: '-.02em', lineHeight: 1.1 }}>{title}</b>
-          <small style={{ display: 'block', marginTop: 2, fontSize: 13, fontWeight: 600, color: inc ? C.greenDk : C.mute }}>{inc ? (cents ? 'With your content day' : 'Included with your content day') : layout === 'carousel' ? `A slide for each dish, ${d} in all` : layout === 'each' ? 'One post for each dish' : 'The post for your announcement'}</small>
-        </span>
-        {!(inc && !cents) && <b style={{ fontSize: 17, fontWeight: 800, color: C.ink }}>{headPrice}</b>}
-      </div>
-
       {/* A: the post as it will look */}
       <div style={{ border: `1px solid ${C.line}`, borderRadius: 20, background: '#fff', overflow: 'hidden', boxShadow: '0 1px 3px rgba(29,29,31,.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>

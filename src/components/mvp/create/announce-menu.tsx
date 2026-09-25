@@ -166,7 +166,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
             photoSource={ph?.options.queue ? 'queue' : o.from === 'shoot' ? 'content' : o.from === 'stock' ? 'stock' : 'own'} brandKit={brandKit ?? null}
             offer={offerIt ? { text: String(offerIt.options.text ?? '') || 'A free drink with it this week', code: String(offerIt.options.codeText ?? '') } : null}
             printInPlan={items.some((x) => x.on && x.id === 'print')} readyWord={dates?.ready ? nice(dates.ready).replace(/^(\w+), /, '$1 ') : ''}
-            onBack={back} onDone={done} onRemove={it.on ? () => { if (it.uid === it.id) toggle(it.uid); else remove(it.uid); setOpen(null) } : null} doneLabel={it.on ? 'Done' : 'Add to the plan'} />
+            onDone={done} onRemove={it.on ? () => { if (it.uid === it.id) toggle(it.uid); else remove(it.uid); setOpen(null) } : null} doneLabel={it.on ? 'Done' : 'Add to the plan'} />
         })()}
         {it.id === 'video' && <>
           <Hero scene="reel" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>One Reel, about 15 seconds, cut for Instagram, Facebook and TikTok.</div>
