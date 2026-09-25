@@ -12,6 +12,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2, Plus, Minus, Trash2, X } from 
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import GraphicSheet from './graphic-sheet'
+import PieceThumb from './piece-thumb'
 import { MULTI, newUid, PACKAGES, PACKAGE_EXTRA, packageFor, type ItemId, type ItemPick, type Ladder, type PackageTier } from '@/lib/plan/suggest'
 import { SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 
@@ -428,13 +429,18 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           const offName: Record<string, string> = { creator: 'Creator visit and post', boost: 'Boost the post', video: 'Reel', photos: 'Content shoot, a quick visit', print: 'Table tent print', graphic: 'Instagram graphic, price on it', taste: 'Taste at the counter', offer: 'Launch offer with a code', apps: 'DoorDash feature', review: 'Review ask with the check', sign: 'Guest photo sign' }
           const offLines: Record<string, string[]> = { creator: ['A local creator visits and posts', `${Math.max(1, fits.length)} near you, ranked`], boost: ['Shown to people nearby', '3 days'], video: ['From your clips, or filmed here', '15 to 30 seconds'], photos: ['15 photos, one visit', 'Team offers two dates'], print: ['25 cards, from the graphic'], graphic: ['Designed for the post', 'Ready in 2 days'], taste: ['All week', 'On the team card'], offer: ['A code the team counts'], apps: ['Two weeks on the item'], review: ['Two weeks', 'The printed card'], sign: ['1 sign', 'Post it, tag us'] }
           const recTag = (id: ItemId) => (ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : null)
+          /* WHAT IT LOOKS LIKE (owner 2026-09-24): each piece as a tiny example of itself, not an icon */
+          const offerCode = String(items.find((x) => x.id === 'offer')?.options.codeText ?? '')
+          const creatorName = profile?.name ?? cn?.name ?? undefined
+          const photosN = (() => { const ph = items.find((x) => x.on && x.id === 'photos'); return ph ? (ph.options.tier ? PACKAGES[ph.options.tier as PackageTier].photos : Number(ph.options.photos) || 15) : undefined })()
+          const thumbFor = (id: string, w: number, key?: string) => <PieceThumb id={id} w={w} dish={dishList?.[0]} biz={bizName} variant={key?.endsWith('-poster') ? 'poster' : undefined} code={offerCode} creator={creatorName} photos={photosN} />
           const chipName: Record<string, string> = { creator: 'Creator visit', boost: 'Boost the post', video: 'Reel', photos: 'Content day', print: 'Table tent', graphic: 'Graphic', taste: 'Taste', offer: 'Launch offer', apps: 'DoorDash feature', review: 'Review ask', sign: 'Photo sign' }
           /* THE ORIGINAL ITEM CARDS (owner 2026-09-24): an opened group shows its items the way the cart did */
           const chip = (st: { ok: boolean; word: string }) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, background: st.ok ? C.greenSoft : '#fff4e0', color: st.ok ? C.greenDk : '#8a5a0c' }}>{st.ok ? <Check size={11} strokeWidth={3} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: '#d99a1e' }} />}{st.word}</span>
           const cartRow = (r: Row, first: boolean) => (
             <div key={r.key} style={{ borderTop: first ? 0 : `0.5px solid ${C.line}`, padding: '14px 0' }}>
               <div role="button" tabIndex={0} onClick={() => setOpen(r.uid)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(r.uid) }} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
-                <span style={{ width: 56, height: 56, borderRadius: 16, flex: 'none', display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${META[r.id].hue} 14%, #fff)`, ['--c2' as string]: META[r.id].hue }}><span style={{ width: 36 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span></span>
+                {thumbFor(r.id, 48, r.key)}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}><b style={{ flex: 1, fontSize: 15, lineHeight: 1.25 }}>{r.name}</b><ChevronRight size={18} color={C.faint} style={{ flex: 'none', marginTop: 1 }} /></div>
                   <div style={{ marginTop: 4 }}>{r.lines.slice(0, 4).map((l, i) => <div key={i} style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l}</div>)}</div>
@@ -515,9 +521,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                     <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
                       {rs.map((r) => (
                         <span key={r.key} style={{ width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                          <span style={{ width: 46, height: 46, borderRadius: 14, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(29,29,31,.06)', position: 'relative', ['--c2' as string]: META[r.id].hue }}>
-                            <span style={{ width: 32 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span>
-                            {r.blocks && <span style={{ position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: 99, background: '#d99a1e', border: '2px solid #fff' }} />}
+                          <span style={{ position: 'relative', display: 'block' }}>
+                            {thumbFor(r.id, 52, r.key)}
+                            {r.blocks && <span style={{ position: 'absolute', top: -3, right: -3, width: 11, height: 11, borderRadius: 99, background: '#d99a1e', border: '2px solid #fff' }} />}
                           </span>
                           <span style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.2, textAlign: 'center', color: C.ink }}>{tileLabel(r)}</span>
                           {r.blocks && <span style={{ marginTop: -3, fontSize: 10.5, fontWeight: 700, lineHeight: 1.2, textAlign: 'center', color: '#8a5a0c' }}>{r.state.word}</span>}
@@ -533,8 +539,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           /* ADD TO YOUR PLAN (owner 2026-09-24): a sideways row of tiles like the Create page */
           const addTile = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; return (
             <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ flex: 'none', width: 80, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-              <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 80, height: 80, borderRadius: 18, background: `color-mix(in srgb, ${m.hue} 14%, #fff)`, ['--c2' as string]: m.hue }}>
-                <span style={{ width: 48 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(x) => x} /></span>
+              <span style={{ position: 'relative', display: 'block', width: 80 }}>
+                {thumbFor(it.id, 80)}
                 <span style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.greenDk} /></span>
               </span>
               <b style={{ display: 'block', fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, marginTop: 6 }}>{chipName[it.id] ?? m.name}</b>
@@ -561,8 +567,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                 <div className="mvp-hscroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollPaddingInline: 16, margin: '12px -16px 0', padding: '0 16px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
                   {offRows.map(addTile)}
                   <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ flex: 'none', width: 80, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-                    <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 80, height: 80, borderRadius: 18, background: C.bg, ['--c2' as string]: '#8a928e' }}>
-                      <span style={{ width: 48 }}><Drawing spec={{ scene: 'else' }} name="" rating="" t={(x) => x} /></span>
+                    <span style={{ position: 'relative', display: 'block', width: 80 }}>
+                      {thumbFor('custom', 80)}
                       <span style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.ink} /></span>
                     </span>
                     <b style={{ display: 'block', fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, marginTop: 6 }}>Something else</b>

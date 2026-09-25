@@ -137,7 +137,8 @@ const KINDS: KindDef[] = [
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const PARTS: { id: string; label: string; hour: number; runs: string }[] = [{ id: 'lunch', label: 'Lunch', hour: 10, runs: '11 to 2' }, { id: 'afternoon', label: 'Afternoon', hour: 13, runs: '2 to 5' }, { id: 'dinner', label: 'Dinner', hour: 16, runs: '5 to 8' }, { id: 'late', label: 'Late', hour: 19, runs: '8 to close' }]
 
-const TAGS = ['Spicy', 'Vegan', 'Vegetarian', 'Gluten free', 'Nuts', 'Dairy free', 'Halal']
+/* six, an even set (owner 2026-09-24): Nuts left the list */
+const TAGS = ['Spicy', 'Vegan', 'Vegetarian', 'Gluten free', 'Dairy free', 'Halal']
 const EVENT_TAGS = ['21+', 'Kids welcome', 'Outdoors', 'Free parking', 'Free entry']
 /** the kind of night: it sets every default below it */
 interface EventKind { id: string; label: string; small: string; scene: Scene; hue: string; weekly: boolean; getin: GetIn }
@@ -1034,10 +1035,10 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
                         </div>
                         <label style={{ display: 'block', marginTop: 12 }}><span style={lab}><span>Description</span><span style={{ fontWeight: 500, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.line.length} / 80</span></span><textarea className="dfi" rows={2} maxLength={80} value={d.line} onChange={(e) => setDish(i, { line: e.target.value.replace(/\n/g, ' ') })} placeholder="A line about it" style={{ ...box, height: 72, padding: 12, resize: 'none' }} /></label>
                         <div style={{ ...lab, marginTop: 12 }}>Good to know</div>
-                        {/* equal tiles (owner 2026-09-24): four across, the last row centred */}
+                        {/* equal tiles (owner 2026-09-24): six, three across in two even rows */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 7 }}>
                           {TAGS.map((t) => { const on = d.tags.includes(t); return (
-                            <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ position: 'relative', width: 'calc((100% - 21px) / 4)', height: 62, borderRadius: 14, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, lineHeight: 1, color: on ? C.greenDk : C.ink, padding: '0 2px', cursor: 'pointer', whiteSpace: 'nowrap', ['--cut' as string]: on ? C.greenSoft : '#fff', transition: 'background .15s, border-color .15s' }}>
+                            <button key={t} type="button" aria-pressed={on} onClick={() => setDish(i, { tags: on ? d.tags.filter((x) => x !== t) : [...d.tags, t] })} style={{ position: 'relative', width: 'calc((100% - 14px) / 3)', height: 62, borderRadius: 14, border: `1.5px solid ${on ? C.greenDk : C.line}`, background: on ? C.greenSoft : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'inherit', fontSize: 12, fontWeight: 600, lineHeight: 1, color: on ? C.greenDk : C.ink, padding: '0 2px', cursor: 'pointer', whiteSpace: 'nowrap', ['--cut' as string]: on ? C.greenSoft : '#fff', transition: 'background .15s, border-color .15s' }}>
                               <span style={{ color: on ? C.greenDk : C.mute }}>{TAG_ICON[t]}</span>{t}
                               {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 14, height: 14, borderRadius: 99, background: C.greenDk, display: 'grid', placeItems: 'center' }}><Check size={9} color="#fff" strokeWidth={3.5} /></span>}
                             </button>
