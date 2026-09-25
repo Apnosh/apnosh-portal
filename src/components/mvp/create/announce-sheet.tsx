@@ -1325,20 +1325,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
 
         {step === 'plans' && kind && (
           <div style={hv(hue)}>
-            {/* MORE DISHES (owner 2026-09-22, "add another dish on the next page"): the dishes so far, and a
-               dashed row that opens the small sheet for one more. The words are written again after. */}
-            {dishRows && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ border: `0.5px solid ${C.line}`, borderRadius: 18, background: '#fff', overflow: 'hidden' }}>
-                  {[{ name: a.what ?? '', line: a.line ?? '', price: a.price ?? '' }, ...dishes].map((d, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i ? `0.5px solid ${C.line}` : 0 }}>
-                      <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name || 'A dish'}</b>{d.line.trim() && <small style={{ display: 'block', fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.line}</small>}</span>
-                      {d.price.trim() && <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{/^\d/.test(d.price.trim()) ? `$${d.price.trim()}` : d.price.trim()}</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* no dish preview at the top (owner 2026-09-24): the plan starts with the level picker */}
                 {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={() => { setLaneInit(null); setStep('plan') }} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} simplePlans keep={keepLines} ladder={ladder} reachParts={reachParts} orderButton={ctaEff === 'order'} startDay={a.from || todayIso()} ctaLabel="Continue" laneInit={laneInit} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
