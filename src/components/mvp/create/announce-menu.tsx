@@ -80,7 +80,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   preview?: { name: string; price: string | null; caption: string; image: string | null; video?: boolean; onWords: () => void; onPhoto: () => void }
   dates?: { posts: string | null; ready: string | null; results: string | null }
   /* THE GRAPHIC (owner 2026-09-24): the dishes, the restaurant, the first photo, whether a brand kit is on file */
-  dishList?: { name: string; price: string }[]; bizName?: string; photoPreview?: string | null; brandKit?: boolean | null
+  dishList?: { name: string; price: string; line?: string }[]; bizName?: string; photoPreview?: string | null; brandKit?: boolean | null
   usualReach?: number | null
   /* THREE PLANS (owner 2026-09-22): Keep it simple, Recommended, Go bigger, and a text link to build your own.
      No preview, no ladder, no line rows until they build their own. `keep` holds the lines the content screen
@@ -166,7 +166,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
             photoSource={ph?.options.queue ? 'queue' : o.from === 'shoot' ? 'content' : o.from === 'stock' ? 'stock' : 'own'} brandKit={brandKit ?? null}
             offer={offerIt ? { text: String(offerIt.options.text ?? '') || 'A free drink with it this week', code: String(offerIt.options.codeText ?? '') } : null}
             printInPlan={items.some((x) => x.on && x.id === 'print')} readyWord={dates?.ready ? nice(dates.ready).replace(/^(\w+), /, '$1 ') : ''}
-            onDone={done} onRemove={it.on ? () => { if (it.uid === it.id) toggle(it.uid); else remove(it.uid); setOpen(null) } : null} doneLabel={it.on ? 'Done' : 'Add to the plan'} />
+            onDone={done} onRemove={it.on ? () => { if (it.uid === it.id) toggle(it.uid); else remove(it.uid); setOpen(null) } : null} doneLabel={it.on ? 'Save' : 'Add to the plan'} />
         })()}
         {it.id === 'video' && <>
           <Hero scene="reel" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>One Reel, about 15 seconds, cut for Instagram, Facebook and TikTok.</div>

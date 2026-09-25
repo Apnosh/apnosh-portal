@@ -27,7 +27,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents, graphicPreFeeCents } from '@/lib/requests/create'
 import { openShoot, bookShoot, attachToShoot, adoptShoot, queueShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
 import { PACKAGES, PACKAGE_EXTRA, type PackageTier } from '@/lib/plan/suggest'
-import { graphicPieceCents, graphicLayout, graphicOrders, itemCents, graphicLevel, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, VIDEO_LEVEL_LINE, type MenuPrices } from '@/lib/plan/item-price'
+import { graphicPieceCents, graphicLayout, graphicOrders, itemCents, graphicLevel, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, GRAPHIC_LEVEL_SPEC, VIDEO_LEVEL_LINE, type MenuPrices } from '@/lib/plan/item-price'
 import { bookInfluencer } from '@/lib/influencers/book'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
@@ -327,6 +327,9 @@ export async function POST(req: NextRequest) {
   const gLayout = graphicLayout(gOptsN)
   const gOrders = pieces.includes('graphic') ? graphicOrders(gOptsN) : 0
   const gLevel = graphicLevel(gOptsN)
+  const gHeadline = clean(gOpts.headline, 60)
+  const gSubline = clean(gOpts.subline, 90)
+  const gMaker = typeof gOpts.makerVendorId === 'string' && /^[0-9a-f-]{36}$/i.test(gOpts.makerVendorId) ? { makerVendorId: gOpts.makerVendorId, makerName: clean(gOpts.makerName, 80) || undefined } : {}
   const offerLine = gOpts.offerOn !== false && item('offer') ? `${clean(item('offer')?.options?.text, 120) || `A free drink with ${name} this week`}, code ${clean(item('offer')?.options?.codeText, 12).replace(/[^A-Z0-9]/g, '') || 'the launch code'}` : ''
   for (let gi = 0; gi < gOrders; gi++) {
     const dests: string[] = []
@@ -342,9 +345,9 @@ export async function POST(req: NextRequest) {
     const what = gLayout === 'carousel' ? `${gNames.join(', ')}: one carousel post, a slide for each dish` : `${forDish ?? name} announcement`
     const r = await createCreativeRequest({
       clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush, overrideCents: gItem ? graphicPieceCents({ ...(gItem as unknown as Record<string, unknown>), options: gOptsN } as never, P, gi) : undefined,
-      answers: { what, where: destLabels.join(', '), words: [forDish ?? (gLayout === 'carousel' ? gNames.join(' · ') : name), priceOn && a.price && !forDish ? a.price : '', offerLine].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${forDish ?? name}. Level: ${LEVEL_NAME[gLevel]} (${GRAPHIC_LEVEL_LINE(gLevel)}). ${gLayout === 'carousel' ? `A carousel: ${gNames.length} slides, one per dish, in this order: ${gNames.join(', ')}.` : ''} ${offerLine ? `Put the launch offer on it: ${offerLine}.` : ''} ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
+      answers: { what, where: destLabels.join(', '), words: [forDish ?? (gLayout === 'carousel' ? gNames.join(' · ') : gHeadline || name), gLayout === 'single' && gSubline ? gSubline : '', priceOn && a.price && !forDish ? a.price : '', offerLine].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${forDish ?? name}. Level: ${LEVEL_NAME[gLevel]}: ${GRAPHIC_LEVEL_LINE(gLevel)} (${GRAPHIC_LEVEL_SPEC(gLevel)}). ${gHeadline && gLayout === 'single' ? `Big words: "${gHeadline}".` : ''} ${gSubline && gLayout === 'single' ? `Small words: "${gSubline}".` : ''} ${clean(gOpts.note, 400) ? `Owner says: ${clean(gOpts.note, 400)}` : ''} ${gLayout === 'carousel' ? `A carousel: ${gNames.length} slides, one per dish, in this order: ${gNames.join(', ')}.` : ''} ${offerLine ? `Put the launch offer on it: ${offerLine}.` : ''} ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
       attachments,
-      design: { destinations: dests, tier: gLevel, photos, dueDateISO: pieceDue ?? undefined, ...(gLayout === 'carousel' ? { slides: gNames.length } : {}) },
+      design: { destinations: dests, tier: gLevel, photos, dueDateISO: pieceDue ?? undefined, ...(gLayout === 'carousel' ? { slides: gNames.length } : {}), ...gMaker },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0

@@ -706,7 +706,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   useEffect(() => { if (step === 'facts' && simpleKind && kind && suggested !== `${kind.id}:${media.length}:${a.picsrc ?? ''}`) void helpers.current?.suggest() }, [step, kind?.id, media.length, a.picsrc]) // eslint-disable-line react-hooks/exhaustive-deps
   /* ── the menu ── */
   const usual = ctx?.usualReach ?? null
-  const dishList = [{ name: a.what ?? '', price: a.price ?? '' }, ...dishes.map((d) => ({ name: d.name, price: d.price }))].map((d) => ({ name: d.name.trim(), price: d.price.trim() })).filter((d) => d.name)
+  const dishList = [{ name: a.what ?? '', price: a.price ?? '', line: a.line ?? '' }, ...dishes.map((d) => ({ name: d.name, price: d.price, line: d.line }))].map((d) => ({ name: d.name.trim(), price: d.price.trim(), line: (d.line ?? '').trim() })).filter((d) => d.name)
   const dishNames = dishList.map((d) => d.name)
   const prices: MenuPrices = { dishes: Math.max(1, dishList.length), slide: ctx?.prices.slide ?? 3000, graphic: ctx?.prices.graphic ?? 21000, graphicTiers: ctx?.prices.graphicTiers?.[1] && ctx?.prices.graphicTiers?.[3] ? { 1: ctx.prices.graphicTiers[1], 2: ctx?.prices.graphic ?? 21000, 3: ctx.prices.graphicTiers[3] } : undefined, video: ctx?.prices.video ?? 25000, videoWorks: ctx?.prices.videoWorks ?? undefined, print: 2500, shootFor: (n) => tierCents(tierFor(n)) ?? ctx?.prices.shoot ?? 38500, shootLabel: (n) => `${TIERS.find((t) => t.id === tierFor(n))?.label}: ${sizeOf(n)}` }
   const it = (id: ItemId) => items.find((x) => x.id === id && x.on) ?? items.find((x) => x.id === id)

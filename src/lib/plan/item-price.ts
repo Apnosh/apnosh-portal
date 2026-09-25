@@ -43,7 +43,11 @@ export type VideoLevel = 'standard' | 'works'
 export const LEVEL_NAME = { 1: 'Quick', 2: 'Standard', 3: 'The works' } as const
 export const VIDEO_LEVEL_NAME: Record<VideoLevel, string> = { standard: 'Standard', works: 'The works' }
 /** what each level promises, in the words the order carries */
-export const GRAPHIC_LEVEL_LINE = (l: GraphicLevel) => { const t = TIER_SPECS[l]; return [`${t.concepts} design${t.concepts === 1 ? '' : 's'} to pick from`, `${t.revisionRounds} round${t.revisionRounds === 1 ? '' : 's'} of changes`, ...(t.sourceFiles ? ['the file you can edit'] : [])].join(' · ') }
+/* what each level gives, in the design flow's words (design-copy.ts tier.*.sub): not a count of designs */
+export const GRAPHIC_LEVEL_WHAT: Record<GraphicLevel, string> = { 1: 'Adapted from a design we already made for you', 2: 'Designed fresh on your brand', 3: 'A senior designer, and it becomes a template you keep' }
+/** the designer's spec for a level: concepts and rounds, for the brief */
+export const GRAPHIC_LEVEL_SPEC = (l: GraphicLevel) => { const t = TIER_SPECS[l]; return `${t.concepts} concept${t.concepts === 1 ? '' : 's'}, ${t.revisionRounds} round${t.revisionRounds === 1 ? '' : 's'} of changes${t.sourceFiles ? ', source files' : ''}` }
+export const GRAPHIC_LEVEL_LINE = (l: GraphicLevel) => GRAPHIC_LEVEL_WHAT[l]
 export const VIDEO_LEVEL_LINE: Record<VideoLevel, string> = {
   standard: 'Cut as picked · captions · 1 to 2 revisions · 3 to 5 days',
   works: 'A shot list · pro edit with titles and motion · senior editor · 2 revisions · 7 days',
