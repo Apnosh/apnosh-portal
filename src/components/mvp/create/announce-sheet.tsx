@@ -957,9 +957,9 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
           return (
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                {card(c === 'newshoot' || c === 'shoot', () => { setContent(needContent); setWantVideo(true) }, 'I need photos', 'creator', '#6a39de')}
-                {card(have, () => setContent('own'), 'I have photos', 'photos', '#2e9a78')}
-                {card(c === 'none', () => setContent('none'), 'Photos not needed', 'post', '#8a928e')}
+                {card(c === 'newshoot' || c === 'shoot', () => { setContent(needContent); setWantVideo(true) }, 'I need photos/​videos', 'creator', '#6a39de')}
+                {card(have, () => setContent('own'), 'I\'ll upload photos/​videos', 'photos', '#2e9a78')}
+                {card(c === 'none', () => setContent('none'), 'Photos/​videos not needed', 'post', '#8a928e')}
               </div>
               {have && haveBody}
             </div>

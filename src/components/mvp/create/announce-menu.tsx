@@ -8,7 +8,7 @@
  * bar is the cart: how many things, how many people, the total.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronRight, Loader2, Plus, Minus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Loader2, Plus, Minus, Trash2, X } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
 import { MULTI, newUid, PACKAGES, PACKAGE_EXTRA, packageFor, type ItemId, type ItemPick, type Ladder, type PackageTier } from '@/lib/plan/suggest'
@@ -341,6 +341,8 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
   /* the page opens on Recommended (owner 2026-09-22): the first suggestion is close to it but not the same set,
      so the middle plan is applied once when the ladder arrives, never again after the owner starts editing */
   const seeded = useRef(false)
+  /* THE BANDS (owner 2026-09-24): which group is open on the plan page; one at a time */
+  const [band, setBand] = useState<string | null>(null)
   useEffect(() => { if (simplePlans && ladder && items.length && !seeded.current) { seeded.current = true; if (currentStep < 0) applyStep(1) } }, [ladder, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const stepLabels = stepSets.map((st, i) => (i === 0 ? 'Free' : dollars(costOf(st.on))))
   /* a step that adds nothing (the shoot was already on) is not a step */
@@ -407,11 +409,37 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           for (const it of on('review')) rows.push({ key: it.uid, uid: it.uid, id: 'review', name: 'Review ask with the check', lines: ['Two weeks', 'The printed card'], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
           for (const it of on('sign')) rows.push({ key: it.uid, uid: it.uid, id: 'sign', name: 'Guest photo sign', lines: ['1 sign', 'Post it, tag us'], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
           for (const it of on('custom')) rows.push({ key: it.uid, uid: it.uid, id: 'custom', name: String(it.options.what ?? '') || 'Something else', lines: [String(it.options.tell ?? '') || 'The team quotes it', it.options.when ? day(String(it.options.when)) : 'No rush'], price: 'Quote to come', cents: 0, state: needs('Quote pending'), onBin: () => remove(it.uid), blocks: false })
-          const STAGE: { name: string; hue: string; ids: ItemId[] }[] = [
-            { name: 'Get seen', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] }, { name: 'Create interest', hue: '#3b6fd4', ids: ['photos', 'graphic', 'video', 'print'] },
-            { name: 'Drive actions', hue: '#6a39de', ids: ['taste', 'offer'] }, { name: 'Get orders', hue: '#d99a1e', ids: ['apps'] }, { name: 'Build reputation', hue: '#0f97a8', ids: ['review', 'sign'] }, { name: 'Custom', hue: '#8a928e', ids: ['custom'] },
+          /* THREE GROUPS (owner 2026-09-24), the way an owner thinks, not the funnel: we make it, people see it, they
+             come in. A group shows only when the plan has it. */
+          const GROUPS: { key: string; name: string; hue: string; ids: ItemId[] }[] = [
+            { key: 'make', name: 'What we make', hue: '#3b6fd4', ids: ['photos', 'graphic', 'video'] },
+            { key: 'seen', name: 'Where people see it', hue: '#2e9a78', ids: ['post', 'boost', 'creator', 'apps'] },
+            { key: 'room', name: 'At your restaurant', hue: '#6a39de', ids: ['print', 'taste', 'offer', 'review', 'sign'] },
+            { key: 'custom', name: 'Just for you', hue: '#8a928e', ids: ['custom'] },
           ]
-          const groups = STAGE.map((st) => ({ st, rows: rows.filter((r) => st.ids.includes(r.id)).sort((a, b) => st.ids.indexOf(a.id) - st.ids.indexOf(b.id)) })).filter((g) => g.rows.length)
+          const groups = GROUPS.map((g) => ({ g, rows: rows.filter((r) => g.ids.includes(r.id)).sort((x, y) => g.ids.indexOf(x.id) - g.ids.indexOf(y.id)) })).filter((x) => x.rows.length)
+          const groupOf = (id: ItemId) => GROUPS.find((g) => g.ids.includes(id))?.key ?? null
+          const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+          const listWords = (ws: string[]) => (ws.length <= 1 ? ws[0] ?? '' : ws.length <= 3 ? `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}` : `${ws.slice(0, 2).join(', ')} and ${ws.length - 2} more`)
+          /* one plain line under each group's name, so it reads without opening */
+          const summary = (key: string): string => {
+            if (key === 'make') {
+              const ph = on('photos')[0]
+              if (ph && ph.options.queue) return 'From your next content shoot'
+              if (ph) { const t = (ph.options.tier as PackageTier) || packageFor(Number(ph.options.photos) || 15); return t === 'standard' ? 'A quick visit for photos and video' : `${cap(PACKAGES[t].label)} of photos and video` }
+              const g = on('graphic').reduce((n, x) => n + (Number(x.options.count) || 1), 0), v = on('video').reduce((n, x) => n + (Number(x.options.count) || 1), 0)
+              return cap(listWords([g ? `${g} graphic${g === 1 ? '' : 's'}` : '', v ? `${v} Reel${v === 1 ? '' : 's'}` : ''].filter(Boolean)))
+            }
+            if (key === 'seen') {
+              const b = on('boost')[0]
+              return cap(listWords([on('post').length ? 'a post' : '', b ? `a $${Math.round((Number(b.options.cents) || 2000) / 100)} boost` : '', on('creator').length ? 'a creator' : '', on('apps').length ? 'DoorDash' : ''].filter(Boolean)))
+            }
+            if (key === 'room') {
+              const pr = on('print')[0]; const kinds = (pr?.options.kinds as string[] | undefined) ?? ['tent']
+              return cap(listWords([pr ? (kinds.includes('tent') ? 'a table card' : 'a poster') : '', on('taste').length ? 'a taste' : '', on('offer').length ? 'an offer' : '', on('review').length ? 'review asks' : '', on('sign').length ? 'a photo sign' : ''].filter(Boolean)))
+            }
+            return 'Quoted by the team'
+          }
           const missing = rows.filter((r) => r.blocks)
           const offIds: ItemId[] = ['creator', 'boost', 'video', 'photos', 'print', 'graphic', 'taste', 'offer', 'apps', 'review', 'sign']
           const offRows = offIds.map((id) => { const lines = items.filter((x) => x.id === id); return lines.find((x) => x.uid === id) ?? lines[0] }).filter((x): x is ItemPick => !!x && !x.on)
@@ -419,44 +447,59 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           const offLines: Record<string, string[]> = { creator: ['A local creator visits and posts', `${Math.max(1, fits.length)} near you, ranked`], boost: ['Shown to people nearby', '3 days'], video: ['From your clips, or filmed here', '15 to 30 seconds'], photos: ['15 photos, one visit', 'Team offers two dates'], print: ['25 cards, from the graphic'], graphic: ['Designed for the post', 'Ready in 2 days'], taste: ['All week', 'On the team card'], offer: ['A code the team counts'], apps: ['Two weeks on the item'], review: ['Two weeks', 'The printed card'], sign: ['1 sign', 'Post it, tag us'] }
           const recTag = (id: ItemId) => (ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : null)
           const chip = (st: { ok: boolean; word: string }) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, background: st.ok ? C.greenSoft : '#fff4e0', color: st.ok ? C.greenDk : '#8a5a0c' }}>{st.ok ? <Check size={11} strokeWidth={3} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: '#d99a1e' }} />}{st.word}</span>
-          const cartRow = (r: Row) => (
-            <div key={r.key} style={{ borderTop: `0.5px solid ${C.line}`, padding: '14px 0' }}>
-              <div role="button" tabIndex={0} onClick={() => setOpen(r.uid)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(r.uid) }} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
-                <span style={{ width: 56, height: 56, borderRadius: 16, flex: 'none', display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${META[r.id].hue} 14%, #fff)`, ['--c2' as string]: META[r.id].hue }}><span style={{ width: 36 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}><b style={{ flex: 1, fontSize: 15, lineHeight: 1.25 }}>{r.name}</b><ChevronRight size={18} color={C.faint} style={{ flex: 'none', marginTop: 1 }} /></div>
-                  <div style={{ marginTop: 4 }}>{r.lines.slice(0, 4).map((l, i) => <div key={i} style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l}</div>)}</div>
-                </div>
+          const chipName: Record<string, string> = { creator: 'Creator visit', boost: 'Boost the post', video: 'Reel', photos: 'Content day', print: 'Table tent', graphic: 'Graphic', taste: 'Taste', offer: 'Launch offer', apps: 'DoorDash feature', review: 'Review ask', sign: 'Photo sign' }
+          const bandRow = (r: Row) => {
+            const extra = r.lines.map((l) => l.match(/(\d+) extra at (\$[\d,]+)/)).find(Boolean)
+            const note = !r.state.ok ? r.state.word : extra ? `${extra[1]} extra, ${extra[2]}` : ''
+            const priceIsFree = !r.cents && !r.price.startsWith('from') && !/Quote|Paid/.test(r.price)
+            return (
+              <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, padding: '8px 8px 8px 14px', minHeight: 52, boxSizing: 'border-box', borderRadius: 14, background: '#fff' }}>
+                <button type="button" onClick={() => setOpen(r.uid)} style={{ flex: 1, minWidth: 0, border: 0, background: 'none', padding: '4px 0', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', color: C.ink }}>
+                  <b style={{ display: 'block', fontSize: 15, fontWeight: 600, lineHeight: 1.25 }}>{r.name}</b>
+                  {note && <small style={{ display: 'block', fontSize: 12.5, fontWeight: 600, marginTop: 2, color: r.state.ok ? '#3b6fd4' : '#8a5a0c' }}>{note}</small>}
+                </button>
+                {r.count != null && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', background: C.bg, borderRadius: 99, height: 32, flex: 'none' }}>
+                    <button type="button" aria-label="One fewer" onClick={r.onMinus} style={{ width: 30, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Minus size={14} /></button>
+                    <b style={{ minWidth: 14, textAlign: 'center', fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>{r.count}</b>
+                    <button type="button" aria-label="One more" onClick={r.onPlus} disabled={r.count >= 6} style={{ width: 30, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: r.count >= 6 ? C.faint : C.ink }}><Plus size={14} /></button>
+                  </span>
+                )}
+                <b style={{ fontSize: 14.5, whiteSpace: 'nowrap', flex: 'none', fontVariantNumeric: 'tabular-nums', color: priceIsFree ? (r.price === 'Included' ? C.mute : C.greenDk) : C.ink, fontWeight: priceIsFree && r.price === 'Included' ? 600 : 700 }}>{r.price}</b>
+                <button type="button" aria-label={`Remove ${r.name}`} onClick={r.onBin} style={{ width: 28, height: 28, borderRadius: 99, border: 0, background: C.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.mute, flex: 'none' }}><X size={14} strokeWidth={2.4} /></button>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingLeft: 68 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {r.count != null ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 99, height: 32, overflow: 'hidden' }}>
-                      <button type="button" aria-label={r.count === 1 ? 'Remove' : 'One fewer'} onClick={r.onMinus} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}>{r.count === 1 ? <Trash2 size={13} /> : <Minus size={13} />}</button>
-                      <b style={{ minWidth: 16, textAlign: 'center', fontSize: 13.5 }}>{r.count}</b>
-                      <button type="button" aria-label="One more" onClick={r.onPlus} disabled={r.count >= 6} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: r.count >= 6 ? C.faint : C.ink }}><Plus size={13} /></button>
+            )
+          }
+          const bandView = ({ g, rows: rs }: { g: typeof GROUPS[number]; rows: Row[] }) => {
+            const open = band === g.key
+            const cents = rs.reduce((n, r) => n + r.cents, 0)
+            const needy = rs.find((r) => r.blocks)
+            const totalWord = g.key === 'custom' ? 'Quote' : cents ? dollars(cents) : 'Free'
+            return (
+              <div key={g.key} style={{ marginTop: 10, borderRadius: 20, background: `color-mix(in srgb, ${g.hue} 9%, #fff)`, border: `1.5px solid ${open ? `color-mix(in srgb, ${g.hue} 30%, #fff)` : 'transparent'}`, overflow: 'hidden' }}>
+                <button type="button" aria-expanded={open} onClick={() => setBand(open ? null : g.key)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '14px 16px', border: 0, background: 'none', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 99, background: g.hue, flex: 'none' }} />
+                      <b style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 700, letterSpacing: '-.02em' }}>{g.name}</b>
+                      {needy && <span aria-label="Needs you" style={{ width: 8, height: 8, borderRadius: 99, background: '#d99a1e', flex: 'none' }} />}
                     </span>
-                  ) : <button type="button" aria-label="Remove" onClick={r.onBin} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Trash2 size={13} /></button>}
-                  {chip(r.state)}
-                </div>
-                <b style={{ fontSize: 15, whiteSpace: 'nowrap', color: r.cents || r.price.startsWith('from') ? C.ink : C.greenDk }}>{r.price}</b>
+                    <small style={{ display: 'block', fontSize: 13, color: C.mute, marginTop: 3, paddingLeft: 15 }}>{summary(g.key)}</small>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 9, paddingLeft: 15 }}>
+                      {rs.slice(0, 5).map((r) => <span key={r.key} style={{ width: 32, height: 32, borderRadius: 10, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(29,29,31,.06)', ['--c2' as string]: META[r.id].hue }}><span style={{ width: 22 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span></span>)}
+                      {needy && !open && <span style={{ marginLeft: 4, height: 24, padding: '0 9px', borderRadius: 99, background: '#fff4e0', color: '#8a5a0c', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>{needy.state.word}</span>}
+                    </span>
+                  </span>
+                  <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em', whiteSpace: 'nowrap', color: totalWord === 'Free' ? C.greenDk : C.ink }}>{totalWord}</b>
+                </button>
+                {open && <div style={{ padding: '0 10px 10px' }}>{rs.map(bandRow)}</div>}
               </div>
-            </div>
-          )
-          const addRow = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; const tag = recTag(it.id); return (
-            <div key={it.uid} style={{ borderTop: `0.5px solid ${C.line}`, padding: '12px 0' }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <span style={{ width: 48, height: 48, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${m.hue} 14%, #fff)`, ['--c2' as string]: m.hue, opacity: .85 }}><span style={{ width: 30 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(x) => x} /></span></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <b style={{ display: 'block', fontSize: 14.5, lineHeight: 1.25 }}>{offName[it.id] ?? m.name}{tag && <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 6px', verticalAlign: 'middle' }}>{tag}</span>}</b>
-                  {(offLines[it.id] ?? [m.line]).map((l, i) => <div key={i} style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{l}</div>)}
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingLeft: 60 }}>
-                <button type="button" onClick={() => (m.hasOptions && !free ? setOpen(it.uid) : toggle(it.uid))} style={{ height: 32, padding: '0 14px', borderRadius: 99, border: 0, background: C.greenDk, color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} strokeWidth={3} /> Add</button>
-                <b style={{ fontSize: 14, whiteSpace: 'nowrap', color: free ? C.greenDk : C.ink }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</b>
-              </div>
-            </div>
+            )
+          }
+          const addChip = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; return (
+            <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ height: 36, padding: '0 12px', borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={14} strokeWidth={2.6} color={C.greenDk} />{chipName[it.id] ?? m.name}{!free && <span style={{ fontWeight: 500, color: C.mute }}>{m.hasOptions ? 'from ' : ''}{dollars(cents)}</span>}
+            </button>
           ) }
           return (
             <div style={{ marginTop: 2 }}>
@@ -470,25 +513,12 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                 ))}
               </div>
               {pos < 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Your own mix. <button type="button" onClick={() => applyStep(three[1])} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Back to our pick</button></div>}
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 16 }}>
-                <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>What this plan includes</b>
-                <small style={{ fontSize: 12.5, color: C.mute }}>{rows.length} pieces</small>
-              </div>
-              {groups.map(({ st, rows: rs }) => (
-                <div key={st.name} style={{ marginTop: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, margin: '10px 0 4px' }}><span style={{ width: 8, height: 8, borderRadius: 99, background: st.hue }} />{st.name}</div>
-                  {rs.map(cartRow)}
-                </div>
-              ))}
-              <div style={{ marginTop: 22 }}>
-                <b style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
-                <div style={{ marginTop: 6 }}>{offRows.map(addRow)}</div>
-                <div style={{ borderTop: `0.5px solid ${C.line}`, padding: '12px 0' }}>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <span style={{ width: 48, height: 48, borderRadius: 14, flex: 'none', display: 'grid', placeItems: 'center', background: '#f6f6f8', ['--c2' as string]: '#8a928e' }}><span style={{ width: 30 }}><Drawing spec={{ scene: 'else' }} name="" rating="" t={(x) => x} /></span></span>
-                    <div style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14.5 }}>Something else</b><div style={{ fontSize: 12.5, color: C.mute }}>Say what you need. The team quotes it</div></div>
-                    <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setOpen(uid) }} style={{ height: 32, padding: '0 14px', borderRadius: 99, border: `1.5px solid ${C.ink}`, background: '#fff', color: C.ink, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} strokeWidth={3} /> Add</button>
-                  </div>
+              <div style={{ marginTop: 6 }}>{groups.map(bandView)}</div>
+              <div style={{ marginTop: 10, borderRadius: 20, background: C.bg, padding: '14px 14px 16px' }}>
+                <b style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>Add to your plan</b>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  {offRows.map(addChip)}
+                  <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ height: 36, padding: '0 12px', borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: C.ink, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={14} strokeWidth={2.6} color={C.ink} />Something else</button>
                 </div>
               </div>
               <div style={{ marginTop: 18, borderTop: `0.5px solid ${C.line}`, paddingTop: 10 }}>
