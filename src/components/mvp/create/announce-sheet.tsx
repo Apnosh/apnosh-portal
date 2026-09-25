@@ -438,7 +438,8 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
   const postAt = useMemo((): Date | null => {
     const at = (iso: string) => { const d = new Date(iso + 'T00:00:00'); d.setHours(bestHour.h, bestHour.m, 0, 0); if (d.getTime() < Date.now()) return new Date(Date.now() + 5 * 60e3); return d }
     if (timing === 'at') { const d = new Date(atLocal); return Number.isNaN(d.getTime()) ? null : d }
-    if (timing === 'by') return at(postBy)
+    /* a post can never go up before its picture exists: when we make it, the day after it is ready at the soonest (2026-09-25) */
+    if (timing === 'by') return at(madeLater && readyBy && postBy <= readyBy ? plusDays(readyBy, 1) : postBy)
     if (madeLater && readyBy) return at(plusDays(readyBy, 1))
     return null
   }, [timing, atLocal, postBy, madeLater, readyBy, bestHour])
@@ -1356,7 +1357,7 @@ export default function AnnounceSheet({ clientId, onClose, hasGoogle = true, ini
         {step === 'plans' && kind && (
           <div style={hv(hue)}>
             {/* no dish preview at the top (owner 2026-09-24): the plan starts with the level picker */}
-                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={() => { setLaneInit(null); setStep('plan') }} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} dishList={dishList} bizName={ctx?.name ?? ''} photoPreview={media[0]?.preview ?? null} brandKit={ctx?.brandKit ?? null} simplePlans keep={keepLines} ladder={ladder} reachParts={reachParts} orderButton={ctaEff === 'order'} startDay={a.from || todayIso()} ctaLabel="Continue" laneInit={laneInit} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
+                {items.length ? <AnnounceMenu clientId={clientId} items={items} setItems={(f) => setItems((x) => f(x))} me={me} prices={prices} media={media.length} hasVideo={media.some((m) => m.video)} platformsWord={[...(google ? ['Google'] : []), ...platforms.map((p) => PLAT[p] ?? p)].join(', ') || 'Your channels'} bestHourWord={`${bestHour.h > 12 ? bestHour.h - 12 : bestHour.h} ${bestHour.h >= 12 ? 'pm' : 'am'}`} readyBy={readyBy || null} open={openItem} setOpen={setOpenItem} onGo={() => { setLaneInit(null); setStep('plan') }} total={total} reach={reachEst} posting={posting} writing={writing} ready={ready} usualReach={usual?.median ?? null} dishList={dishList} bizName={ctx?.name ?? ''} photoPreview={media[0]?.preview ?? null} brandKit={ctx?.brandKit ?? null} simplePlans keep={keepLines} ladder={ladder} reachParts={reachParts} orderButton={ctaEff === 'order'} startDay={postDay} ctaLabel="Continue" laneInit={laneInit} dates={{ posts: postDay, ready: onIt('graphic') ? (readyBy || null) : null, results: plusDays(postDay, 7) }} /> : <div style={{ padding: 30, textAlign: 'center', color: C.mute }}><Loader2 size={18} className="mvp-spin" /><div style={{ fontSize: 12.5, marginTop: 8 }}>Picking the usual for a {kind.label.toLowerCase()}</div></div>}
           </div>
         )}
 

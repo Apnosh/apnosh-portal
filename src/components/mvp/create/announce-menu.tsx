@@ -272,6 +272,22 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           <div style={{ fontSize: 12.5, color: C.greenDk, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} /> The team counts the code</div>
           {foot}
         </>}
+        {/* THE PIECES WITH NOTHING TO PICK (post, taste, review, sign, DoorDash) opened to a blank page (found 2026-09-25).
+           Each now says in plain words what happens, when and who does it, then Remove or Done. */}
+        {!m.hasOptions && (() => {
+          const when = (iso?: string | null) => (iso ? nice(iso).replace(/^(\w+), /, '$1 ') : '')
+          const says: string[] = it.id === 'post'
+            ? [dates?.posts ? `Goes up ${when(dates.posts)}, ${bestHourWord}` : `Goes up at ${bestHourWord}`, `On ${platformsWord || 'your channels'}`, ...(o.story !== false && /Instagram|Facebook/.test(platformsWord) ? ['A Story too'] : []), ...(orderButton ? ['With an Order button'] : []), 'Nothing posts without your okay']
+            : it.id === 'taste' ? ['Your staff hands out free bites at the counter', `All week from ${when(startDay) || 'the start'}`, 'It is on the card your team gets']
+            : it.id === 'review' ? ['A printed card with the check asks for a review', 'For two weeks']
+            : it.id === 'sign' ? ['A sign by the counter with a QR code', 'Post it, tag us, dessert is on us']
+            : ['A promo on the dish in DoorDash', 'For two weeks', ...(me?.connected?.apps ? [] : ['Connect DoorDash first'])]
+          return <>
+            <div style={h3}>What happens</div>
+            {says.map((l) => <div key={l} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', fontSize: 14.5, lineHeight: 1.4 }}><i style={{ width: 6, height: 6, borderRadius: 99, background: m.hue, flex: 'none', transform: 'translateY(-2px)' }} />{l}</div>)}
+            {foot}
+          </>
+        })()}
       </div>
     )
   }
@@ -381,7 +397,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           const on = (id: ItemId) => items.filter((x) => x.on && x.id === id)
           const ready = (word = 'Ready') => ({ ok: true, word })
           const needs = (word: string) => ({ ok: false, word })
-          for (const it of on('post')) rows.push({ key: it.uid, uid: it.uid, id: 'post', name: postName, lines: [day(dates?.posts) ? `${day(dates?.posts)}, ${bestHourWord}` : bestHourWord, ...(it.options.story !== false ? ['Story included'] : []), ...(orderButton ? ['Order button on'] : [])], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
+          for (const it of on('post')) rows.push({ key: it.uid, uid: it.uid, id: 'post', name: postName, lines: [day(dates?.posts) ? `${day(dates?.posts)}, ${bestHourWord}` : bestHourWord, ...(it.options.story !== false && /Instagram|Facebook/.test(platformsWord) ? ['Story included'] : []), ...(orderButton ? ['Order button on'] : [])], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
           for (const it of on('boost')) { const c = Math.round((Number(it.options.cents) || 2000) / 100); rows.push({ key: it.uid, uid: it.uid, id: 'boost', name: 'Boost the post', lines: [`${c <= 20 ? 'Small' : c >= 100 ? 'Big' : 'Standard'}, $${c}`, `${Number(it.options.days) || 3} days`, `About ${(c * 150).toLocaleString()} nearby, est.`], price: dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), onBin: () => toggle(it.uid), blocks: false }) }
           for (const it of on('creator')) { const picked = !!it.options.slug && (profile || cn); const nm = profile?.name ?? cn?.name ?? null; const code = nm ? `${nm.split(' ')[0].replace(/[^a-z]/gi, '').toUpperCase().slice(0, 8)}10` : ''; rows.push({ key: it.uid, uid: it.uid, id: 'creator', name: 'Creator visit and post', lines: picked && nm ? [nm, ...(it.options.date ? [day(String(it.options.date))] : []), ...(it.options.code !== false ? [`Code ${code}`] : [])] : [`${Math.max(1, fits.length)} near you, ranked`, 'Visits, eats, posts it'], price: picked ? dollars(itemCents(it, prices, profile)) : `from ${dollars(itemCents(it, prices, profile))}`, cents: itemCents(it, prices, profile), state: picked ? ready() : needs('Choose a creator'), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: !picked }) }
           for (const it of on('graphic')) { const lay = graphicLayout(it.options, prices); const dn = graphicDishes(it.options, prices); const inc = it.options.from === 'shoot' && Number(it.options.included) > 0; const c = itemCents(it, prices, profile); const lvl = graphicLevel(it.options); rows.push({ key: it.uid, uid: it.uid, id: 'graphic', name: lay === 'carousel' ? `Carousel post, ${dn} slides` : lay === 'each' ? `${dn} graphics, one per dish` : `Instagram graphic${it.options.priceOn !== false ? ', price on it' : ''}`, lines: [inc ? 'With the content day' : it.options.from === 'shoot' ? 'From the next shoot' : it.options.from === 'stock' ? 'On a licensed photo' : 'From your photo', `${LEVEL_NAME[lvl]}: ${GRAPHIC_LEVEL_LINE(lvl)}`, `Ready ${day(dates?.ready) || 'in 2 days'}`], price: c ? (inc ? `+${dollars(c)}` : dollars(c)) : inc ? 'Included' : 'Free', cents: c, state: ready(), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: false }) }
