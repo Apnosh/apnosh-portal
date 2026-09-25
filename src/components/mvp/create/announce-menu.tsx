@@ -11,11 +11,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, ChevronRight, Loader2, Plus, Minus, Trash2, X } from 'lucide-react'
 import { C, DISPLAY } from '../tokens'
 import { Drawing, type Scene } from './drawings'
+import GraphicSheet from './graphic-sheet'
 import { MULTI, newUid, PACKAGES, PACKAGE_EXTRA, packageFor, type ItemId, type ItemPick, type Ladder, type PackageTier } from '@/lib/plan/suggest'
 import { SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 
 export interface MenuMe { usualReach: number | null; budgetCents: number | null; creator: { slug: string; name: string; fromCents: number | null; nearby: number | null; date?: string | null } | null; connected?: { instagram: boolean; facebook: boolean; google: boolean; website: boolean; ordering: boolean; apps: boolean } }
-import { itemCents, feeBaseCents, graphicLevel, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, VIDEO_LEVEL_LINE, type MenuPrices, type GraphicLevel, type VideoLevel } from '@/lib/plan/item-price'
+import { itemCents, feeBaseCents, graphicLevel, graphicLayout, graphicDishes, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, VIDEO_LEVEL_LINE, type MenuPrices, type GraphicLevel, type VideoLevel } from '@/lib/plan/item-price'
 export { itemCents, type MenuPrices }
 interface CreatorProfile { name: string; slug: string; avatarUrl: string | null; audience: { nearby?: number | null; followers: number | null; avgViews: number | null; localPct: number | null; city: string | null; mealCapCents: number; partySize: number; repostOk: boolean; whitelistCents: number | null; responseHours: number | null } | null; offers: { slug: string; title: string; tiers: { id: string; name: string; priceCents: number; deliverables: string[] }[]; startingCents: number | null }[]; schedule: { slots: { date: string; start: string }[]; confirmMode: string }; avgRating: number | null; collabs: number }
 interface Fit { slug: string; tag: string; reasons: string[]; card?: { name: string; avatarUrl: string | null; fromCents: number | null; audience: { avgViews: number | null; localPct: number | null; followers: number | null } | null } }
@@ -67,17 +68,19 @@ export function itemSummary(it: ItemPick, p: MenuPrices, profile?: CreatorProfil
 
 const FRESH: Partial<Record<ItemId, Record<string, unknown>>> = {
   custom: { what: '', tell: '', when: '' },
-  graphic: { where: ['post'], priceOn: true, brandKit: true, from: 'ours' },
+  graphic: { where: ['post'], priceOn: true, from: 'stock' },
   video: { count: 1, filmed: 'clips', style: 'dish', captions: true },
   print: { kinds: ['tent'] },
   creator: { code: true, repost: true },
 }
-export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, usualReach, simplePlans, keep, ladder, reachParts, orderButton, startDay, ctaLabel, laneInit }: {
+export default function AnnounceMenu({ clientId, items, setItems, me, prices, media, hasVideo, platformsWord, bestHourWord, readyBy, open, setOpen, onGo, total, reach, posting, writing, ready, preview, dates, dishList, bizName, photoPreview, brandKit, usualReach, simplePlans, keep, ladder, reachParts, orderButton, startDay, ctaLabel, laneInit }: {
   clientId: string; items: ItemPick[]; setItems: (f: (x: ItemPick[]) => ItemPick[]) => void; me: MenuMe | null; prices: MenuPrices; media: number; hasVideo: boolean; platformsWord: string; bestHourWord: string; readyBy: string | null
   open: string | null; setOpen: (uid: string | null) => void; onGo: () => void; total: number; reach: number | null; posting: boolean; writing: boolean; ready: boolean
   /* the calm plan screen (owner 2026-09-18): a small preview, a five-step how-far, date tiles */
   preview?: { name: string; price: string | null; caption: string; image: string | null; video?: boolean; onWords: () => void; onPhoto: () => void }
   dates?: { posts: string | null; ready: string | null; results: string | null }
+  /* THE GRAPHIC (owner 2026-09-24): the dishes, the restaurant, the first photo, whether a brand kit is on file */
+  dishList?: { name: string; price: string }[]; bizName?: string; photoPreview?: string | null; brandKit?: boolean | null
   usualReach?: number | null
   /* THREE PLANS (owner 2026-09-22): Keep it simple, Recommended, Go bigger, and a text link to build your own.
      No preview, no ladder, no line rows until they build their own. `keep` holds the lines the content screen
@@ -155,30 +158,16 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
     const tw = (k: string) => setOpt('graphic', { where: where.includes(k) ? where.filter((x) => x !== k) : [...where, k] })
     return (
       <div>
-        {head}
-        {it.id === 'graphic' && <>
-          <Hero scene="graphic" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>Designed by the desk. You approve it before it posts.</div>
-          {/* EFFORT (owner 2026-09-24): the design tiers already in the app, same names on every piece */}
-          <div style={h3}>How much design</div>
-          {(() => { const inc = o.from === 'shoot' && (Number(o.included) || 0) > 0; const t = prices.graphicTiers; const base = (l: GraphicLevel) => t?.[l] ?? (l === 2 ? prices.graphic : 0); const lv = graphicLevel(o); return ([1, 2, 3] as GraphicLevel[]).filter((l) => !(inc && l === 1)).map((l) => <Opt key={l} kind="rb" on={lv === l} label={LEVEL_NAME[l]} small={GRAPHIC_LEVEL_LINE(l)} price={inc ? (l === 2 ? 'included' : `+${dollars(base(l) - base(2))} each`) : `${dollars(base(l))} each`} onClick={() => setOpt('graphic', { level: l })} />) })()}
-          <div style={h3}>Where it goes</div>
-          <Opt kind="cb" on={where.includes('post')} label="Post + Story" small="Instagram, Facebook, Google" price="included" onClick={() => tw('post')} />
-          <Opt kind="cb" on={where.includes('tent')} label="Table tent" small="Printed, or a file" price="+$25" onClick={() => tw('tent')} />
-          <Opt kind="cb" on={where.includes('poster')} label="Window poster" price="+$25" onClick={() => tw('poster')} />
-          <div style={h3}>On it</div>
-          <Opt kind="cb" on={o.priceOn !== false} label="The price" onClick={() => setOpt('graphic', { priceOn: o.priceOn === false })} />
-          <Opt kind="cb" on={o.brandKit !== false} label="Match my brand kit" onClick={() => setOpt('graphic', { brandKit: o.brandKit === false })} />
-          <Opt kind="cb" on={!!o.spanish} label="Spanish too" small="A second version" price="+$40" onClick={() => setOpt('graphic', { spanish: !o.spanish })} />
-          <div style={h3}>From</div>
-          <Opt kind="rb" on={o.from === 'own'} label="Your photo" small={media ? `${media} added` : 'Add one on the first screen'} onClick={() => setOpt('graphic', { from: 'own' })} />
-          <Opt kind="rb" on={o.from === 'stock'} label="Licensed photos" small="Stock the desk picks, in your style" onClick={() => setOpt('graphic', { from: 'stock' })} />
-          <Opt kind="rb" on={!o.from || o.from === 'ours'} label="Our photos" small="What the desk has on file" onClick={() => setOpt('graphic', { from: 'ours' })} />
-          <Opt kind="rb" on={o.from === 'shoot'} label="The shoot" small={items.find((x) => x.id === 'photos')?.on ? 'From the shoot day' : 'Add Photos first'} onClick={() => setOpt('graphic', { from: 'shoot' })} />
-          <div style={h3}>The look</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{['Bright', 'Warm', 'Moody', 'Minimal', 'Bold', 'Playful'].map((t) => { const cur = String(o.look ?? '').split(', ').filter(Boolean); const on = cur.includes(t); return <button key={t} type="button" onClick={() => setOpt(it.id, { look: (on ? cur.filter((x) => x !== t) : [...cur, t].slice(-3)).join(', ') })} style={chip(on)}>{t}</button> })}</div>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginTop: 14 }}>A note for the designer<span style={{ fontWeight: 500, color: C.faint, marginLeft: 4 }}>optional</span><input value={String(o.note ?? '')} onChange={(e) => setOpt('graphic', { note: e.target.value })} placeholder="Use the blue plates" style={input} /></label>
-          {foot}
-        </>}
+        {it.id !== 'graphic' && head}
+        {it.id === 'graphic' && (() => {
+          const offerIt = items.find((x) => x.on && x.id === 'offer')
+          const ph = items.find((x) => x.on && x.id === 'photos')
+          return <GraphicSheet item={it} prices={prices} setOpt={(v) => setOpt('graphic', v)} bizName={bizName ?? ''} dishes={dishList ?? []} photo={photoPreview ?? null}
+            photoSource={ph?.options.queue ? 'queue' : o.from === 'shoot' ? 'content' : o.from === 'stock' ? 'stock' : 'own'} brandKit={brandKit ?? null}
+            offer={offerIt ? { text: String(offerIt.options.text ?? '') || 'A free drink with it this week', code: String(offerIt.options.codeText ?? '') } : null}
+            printInPlan={items.some((x) => x.on && x.id === 'print')} readyWord={dates?.ready ? nice(dates.ready).replace(/^(\w+), /, '$1 ') : ''}
+            onBack={back} onDone={done} onRemove={it.on ? () => { if (it.uid === it.id) toggle(it.uid); else remove(it.uid); setOpen(null) } : null} doneLabel={it.on ? 'Done' : 'Add to the plan'} />
+        })()}
         {it.id === 'video' && <>
           <Hero scene="reel" hue={m.hue} /><div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.45 }}>One Reel, about 15 seconds, cut for Instagram, Facebook and TikTok.</div>
           <div style={h3}>How much editing</div>
@@ -392,9 +381,9 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           for (const it of on('post')) rows.push({ key: it.uid, uid: it.uid, id: 'post', name: postName, lines: [day(dates?.posts) ? `${day(dates?.posts)}, ${bestHourWord}` : bestHourWord, ...(it.options.story !== false ? ['Story included'] : []), ...(orderButton ? ['Order button on'] : [])], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
           for (const it of on('boost')) { const c = Math.round((Number(it.options.cents) || 2000) / 100); rows.push({ key: it.uid, uid: it.uid, id: 'boost', name: 'Boost the post', lines: [`${c <= 20 ? 'Small' : c >= 100 ? 'Big' : 'Standard'}, $${c}`, `${Number(it.options.days) || 3} days`, `About ${(c * 150).toLocaleString()} nearby, est.`], price: dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), onBin: () => toggle(it.uid), blocks: false }) }
           for (const it of on('creator')) { const picked = !!it.options.slug && (profile || cn); const nm = profile?.name ?? cn?.name ?? null; const code = nm ? `${nm.split(' ')[0].replace(/[^a-z]/gi, '').toUpperCase().slice(0, 8)}10` : ''; rows.push({ key: it.uid, uid: it.uid, id: 'creator', name: 'Creator visit and post', lines: picked && nm ? [nm, ...(it.options.date ? [day(String(it.options.date))] : []), ...(it.options.code !== false ? [`Code ${code}`] : [])] : [`${Math.max(1, fits.length)} near you, ranked`, 'Visits, eats, posts it'], price: picked ? dollars(itemCents(it, prices, profile)) : `from ${dollars(itemCents(it, prices, profile))}`, cents: itemCents(it, prices, profile), state: picked ? ready() : needs('Choose a creator'), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: !picked }) }
-          for (const it of on('graphic')) { const n = Math.max(1, Number(it.options.count) || 1); const inc = it.options.from === 'shoot' ? (Number(it.options.included) || 0) : 0; const c = itemCents(it, prices, profile); rows.push({ key: it.uid, uid: it.uid, id: 'graphic', name: `Instagram graphic${it.options.priceOn !== false ? ', price on it' : ''}`, lines: [it.options.from === 'shoot' ? (inc ? `${inc} in the content day${n > inc ? `, ${n - inc} extra at $${PACKAGE_EXTRA.graphic / 100}` : ''}` : `From the shoot, $${PACKAGE_EXTRA.graphic / 100} each`) : it.options.from === 'stock' ? 'Licensed photo' : 'Your photo', `${LEVEL_NAME[graphicLevel(it.options)]}: ${GRAPHIC_LEVEL_LINE(graphicLevel(it.options))}`, `Ready ${day(dates?.ready) || 'in 2 days'}`], price: c ? dollars(c) : inc ? 'Included' : 'Free', cents: c, state: ready(), count: n, onMinus: () => (n <= 1 ? (it.uid === it.id ? toggle(it.uid) : remove(it.uid)) : patchU(it.uid, (x) => ({ options: { ...x.options, count: n - 1 } }))), onPlus: () => patchU(it.uid, (x) => ({ options: { ...x.options, count: Math.min(6, n + 1) } })), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: false }) }
+          for (const it of on('graphic')) { const lay = graphicLayout(it.options, prices); const dn = graphicDishes(it.options, prices); const inc = it.options.from === 'shoot' && Number(it.options.included) > 0; const c = itemCents(it, prices, profile); const lvl = graphicLevel(it.options); rows.push({ key: it.uid, uid: it.uid, id: 'graphic', name: lay === 'carousel' ? `Carousel post, ${dn} slides` : lay === 'each' ? `${dn} graphics, one per dish` : `Instagram graphic${it.options.priceOn !== false ? ', price on it' : ''}`, lines: [inc ? 'With the content day' : it.options.from === 'shoot' ? 'From the next shoot' : it.options.from === 'stock' ? 'On a licensed photo' : 'From your photo', `${LEVEL_NAME[lvl]}: ${GRAPHIC_LEVEL_LINE(lvl)}`, `Ready ${day(dates?.ready) || 'in 2 days'}`], price: c ? (inc ? `+${dollars(c)}` : dollars(c)) : inc ? 'Included' : 'Free', cents: c, state: ready(), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: false }) }
           for (const it of on('video')) { const n = Math.max(1, Number(it.options.count) || 1); const f = it.options.filmed; const src = f === 'shoot' ? 'From the shoot' : f === 'clips' ? (hasVideo ? 'From your clips' : 'Send clips from your phone') : f === 'creator' ? `${(profile?.name ?? cn?.name ?? 'The creator').split(' ')[0]} films it` : 'We come film it'; const incV = f === 'shoot' ? (Number(it.options.included) || 0) : 0; const cV = itemCents(it, prices, profile); rows.push({ key: it.uid, uid: it.uid, id: 'video', name: 'Reel', lines: [f === 'shoot' ? (incV ? `${incV} in the content day${n > incV ? `, ${n - incV} extra at $${PACKAGE_EXTRA.video / 100}` : ''}` : `From the shoot, $${PACKAGE_EXTRA.video / 100} each`) : src, `${VIDEO_LEVEL_NAME[videoLevel(it.options)]}: ${VIDEO_LEVEL_LINE[videoLevel(it.options)].split(' · ').slice(0, 2).join(', ')}`], price: cV ? dollars(cV) : incV ? 'Included' : 'Free', cents: cV, state: ready(), count: n, onMinus: () => (n <= 1 ? (it.uid === it.id ? toggle(it.uid) : remove(it.uid)) : patchU(it.uid, (x) => ({ options: { ...x.options, count: n - 1 } }))), onPlus: () => patchU(it.uid, (x) => ({ options: { ...x.options, count: Math.min(6, n + 1) } })), onBin: () => (it.uid === it.id ? toggle(it.uid) : remove(it.uid)), blocks: false }) }
-          for (const it of on('photos')) { const n = Number(it.options.photos) || 15; const pk = it.options.tier ? PACKAGES[it.options.tier as PackageTier] : null; rows.push({ key: it.uid, uid: it.uid, id: 'photos', name: it.options.queue ? 'Next content shoot' : pk ? `Content day, ${pk.label}` : `Content shoot, ${PACKAGES[packageFor(n)].label}`, lines: it.options.queue ? [`${n} photos`, 'Waits for the next visit'] : [pk ? `${pk.photos} photos, ${pk.graphics} graphic${pk.graphics === 1 ? '' : 's'}, ${pk.reels} Reel${pk.reels === 1 ? '' : 's'}` : `${n} photos`, it.options.date ? day(String(it.options.date)) : 'Team offers two dates'], price: it.options.queue ? 'Paid when booked' : dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), onBin: () => toggle(it.uid), blocks: false }) }
+          for (const it of on('photos')) { const n = Number(it.options.photos) || 15; const pk = it.options.tier ? PACKAGES[it.options.tier as PackageTier] : null; rows.push({ key: it.uid, uid: it.uid, id: 'photos', name: it.options.queue ? 'Next content shoot' : pk ? `Content day, ${pk.label}` : `Content shoot, ${PACKAGES[packageFor(n)].label}`, lines: it.options.queue ? [`${n} photos`, 'Waits for the next visit'] : [pk ? `${pk.photos} photos, ${pk.reels} Reel${pk.reels === 1 ? '' : 's'} and the post graphic${pk.graphicLevel === 3 ? ' (The works)' : ''}` : `${n} photos`, it.options.date ? day(String(it.options.date)) : 'Team offers two dates'], price: it.options.queue ? 'Paid when booked' : dollars(itemCents(it, prices, profile)), cents: itemCents(it, prices, profile), state: ready(), onBin: () => toggle(it.uid), blocks: false }) }
           for (const it of on('print')) { const kinds = (it.options.kinds as string[] | undefined) ?? ['tent']; for (const k of kinds) rows.push({ key: `${it.uid}-${k}`, uid: it.uid, id: 'print', name: k === 'poster' ? 'Window poster print' : 'Table tent print', lines: [k === 'poster' ? '1 poster, from the graphic' : '25 cards, from the graphic', `Delivered ${day(dates?.ready) || 'in 3 days'}`], price: dollars(prices.print), cents: prices.print, state: ready(), onBin: () => { const rest = kinds.filter((x) => x !== k); if (rest.length) patchU(it.uid, (x) => ({ options: { ...x.options, kinds: rest } })); else toggle(it.uid) }, blocks: false }) }
           for (const it of on('taste')) rows.push({ key: it.uid, uid: it.uid, id: 'taste', name: 'Taste at the counter', lines: [`All week from ${day(startDay) || 'the start'}`, 'On the team card'], price: 'Free', cents: 0, state: ready(), onBin: () => toggle(it.uid), blocks: false })
           for (const it of on('offer')) { const okd = it.options.confirmed === true; const txt = String(it.options.text ?? '') || 'A free drink with it this week'; const code = String(it.options.codeText ?? ''); rows.push({ key: it.uid, uid: it.uid, id: 'offer', name: 'Launch offer with a code', lines: [txt, code ? `Code ${code}` : 'Code to fill in'], price: 'Free', cents: 0, state: okd ? ready() : needs((code ? 'Check the code' : 'Fill in the code')), onBin: () => toggle(it.uid), blocks: !okd }) }
@@ -493,7 +482,7 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
             const n = r.count ?? 1
             switch (r.id) {
               case 'photos': return /Next/.test(r.name) ? 'Next shoot' : 'Photoshoot'
-              case 'graphic': return `${n} graphic${n === 1 ? '' : 's'}`
+              case 'graphic': { const lay = graphicLayout(items.find((x) => x.uid === r.uid)?.options ?? {}, prices); return lay === 'carousel' ? 'Carousel' : lay === 'each' ? `${graphicDishes(items.find((x) => x.uid === r.uid)?.options ?? {}, prices)} graphics` : 'Graphic' }
               case 'video': return `${n} Reel${n === 1 ? '' : 's'}`
               case 'post': return 'Post'
               case 'boost': return 'Boost'

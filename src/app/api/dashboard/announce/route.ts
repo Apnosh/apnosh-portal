@@ -27,7 +27,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createCreativeRequest, graphicOrderCents, graphicPreFeeCents } from '@/lib/requests/create'
 import { openShoot, bookShoot, attachToShoot, adoptShoot, queueShoot, tierCents, TIER_LABEL, SPOTS, PHOTOS, type Shoot } from '@/lib/shoot/day'
 import { PACKAGES, PACKAGE_EXTRA, type PackageTier } from '@/lib/plan/suggest'
-import { graphicPieceCents, itemCents, graphicLevel, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, VIDEO_LEVEL_LINE, type MenuPrices } from '@/lib/plan/item-price'
+import { graphicPieceCents, graphicLayout, graphicOrders, itemCents, graphicLevel, videoLevel, LEVEL_NAME, VIDEO_LEVEL_NAME, GRAPHIC_LEVEL_LINE, VIDEO_LEVEL_LINE, type MenuPrices } from '@/lib/plan/item-price'
 import { bookInfluencer } from '@/lib/influencers/book'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { getActiveRateCard } from '@/lib/design/price-sheet'
@@ -69,7 +69,7 @@ interface Body {
   clientId?: string
   kind?: string
   answers?: Record<string, unknown>
-  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; readyBy?: string; nextShootId?: string; shootId?: string; queue?: boolean; packageTier?: string; tier?: string; alsoShoot?: unknown; shootDate?: string }
+  picture?: { mode?: Mode; src?: Src; pieces?: unknown; mediaUrls?: unknown; priceOn?: boolean; brandKit?: boolean; dishNames?: unknown[]; readyBy?: string; nextShootId?: string; shootId?: string; queue?: boolean; packageTier?: string; tier?: string; alsoShoot?: unknown; shootDate?: string }
   places?: { accountIds?: unknown; google?: boolean; story?: boolean; also?: unknown }
   timing?: { at?: string | null; timezone?: string; again?: boolean; boost?: boolean; boostCents?: number; reminders?: unknown }
   /** the reasons the sheet showed, by plan key, carried onto the lines it made */
@@ -134,6 +134,11 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
   const gTier = (tier: 1 | 2 | 3) => (card ? graphicPreFeeCents({ destinations: ['instagram-post', 'facebook-post'], tier, photos: 'own' }, card.card) : null)
   const graphic = gTier(2)
   const graphicTiers = { 1: gTier(1), 2: graphic, 3: gTier(3) }
+  const slide = card ? Math.round((card.card.carouselPerSlide ?? 30) * 100) : 3000
+  /* a brand kit on file (logo, colors): brand files live under the business, not the client */
+  const bizRow = await admin.from('businesses').select('id').eq('client_id', clientId).maybeSingle()
+  let brandKit = false
+  if (bizRow.data?.id) { const { count } = await admin.from('brand_assets').select('id', { count: 'exact', head: true }).eq('business_id', bizRow.data.id); brandKit = (count ?? 0) > 0 }
   const preFee = (x: ReturnType<typeof priceCreativeRequest>) => (x ? x.lines.filter((l) => l.label !== 'Service fee').reduce((n, l) => n + l.amountCents, 0) : null)
   const video = preFee(priceCreativeRequest('video', { what: 'x', filming: 'Use clips and photos I have', count: 'Just 1', when: 'No rush' }))
   const videoWorks = preFee(priceCreativeRequest('video', { what: 'x', filming: 'Use clips and photos I have', count: 'Just 1', when: 'No rush', level: 'The works' }))
@@ -149,7 +154,8 @@ async function context(admin: ReturnType<typeof createAdminClient>, clientId: st
     nextShoot: sh && sh.id !== open?.requestId ? { id: sh.id, date: sh.due_date, who: sh.assigned_to_name ?? null } : null,
     shoot: open,
     planShoot: planShoot as string | null,
-    prices: { graphic, graphicTiers, video, videoWorks, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },
+    brandKit,
+    prices: { graphic, graphicTiers, slide, video, videoWorks, shoot: shootPrice, tiers: { standard: tierCents('standard'), full: tierCents('full'), works: tierCents('works') }, spots: SPOTS },
     weekdays,
     avgTicketCents,
   }
@@ -269,7 +275,7 @@ export async function POST(req: NextRequest) {
     /* the list starts with everything else they named; this plan joins it below, so the size counts it */
     const also = (Array.isArray(body.picture?.alsoShoot) ? body.picture!.alsoShoot : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 5)
     const pkTier = (['standard', 'full', 'works'] as PackageTier[]).find((t) => t === body.picture?.packageTier) ?? null
-    const r = await bookShoot(admin, { clientId, userId, tier: pkTier ?? undefined, items: [{ label: name, kind, planId: announcementId, pieces }, ...also.map((label) => ({ label }))], date: shootDate, note: `${name}: ${facts}${pkTier ? ` Content day package, ${PACKAGES[pkTier].label}: ${PACKAGES[pkTier].photos} photos, ${PACKAGES[pkTier].graphics} graphics and ${PACKAGES[pkTier].reels} Reels inside the price.` : ''}`, packageCents: pkTier ? PACKAGES[pkTier].cents : undefined })
+    const r = await bookShoot(admin, { clientId, userId, tier: pkTier ?? undefined, items: [{ label: name, kind, planId: announcementId, pieces }, ...also.map((label) => ({ label }))], date: shootDate, note: `${name}: ${facts}${pkTier ? ` Content day package, ${PACKAGES[pkTier].label}: ${PACKAGES[pkTier].photos} photos, ${PACKAGES[pkTier].reels} Reels and the post graphic (${PACKAGES[pkTier].graphicLevel === 3 ? 'The works' : 'Standard'}) inside the price.` : ''}`, packageCents: pkTier ? PACKAGES[pkTier].cents : undefined })
     if (r.ok) {
       shoot = r.shoot; total += r.orderCents ?? 0
       plan.push({ key: 'shootday', label: r.needsPayment ? 'Book the shoot day' : 'The shoot day', detail: `${shoot.tierLabel}: ${shoot.used} thing${shoot.used === 1 ? '' : 's'} on the list, about ${shoot.photos} photos. ${r.needsPayment ? 'Pay to book it' : 'Booked'}`, date: shoot.date ?? readyBy, cost: r.orderCents, status: r.needsPayment ? 'needs_payment' : 'with_team', ref: { kind: 'request', id: shoot.requestId, href: shoot.href ?? undefined }, why: 'Add to the list until the day. The price follows the list' })
@@ -299,7 +305,8 @@ export async function POST(req: NextRequest) {
 
   /* ONE PRICE (owner 2026-09-24): each piece is charged the plan page's pre-fee price, plus the fee once */
   const cp = (ctx as { prices?: { graphic?: number | null; graphicTiers?: Record<1 | 2 | 3, number | null>; video?: number | null; videoWorks?: number | null } }).prices ?? {}
-  const P: MenuPrices = { graphic: cp.graphic ?? 21000, graphicTiers: { 1: cp.graphicTiers?.[1] ?? Math.round((cp.graphic ?? 21000) * 0.55), 2: cp.graphic ?? 21000, 3: cp.graphicTiers?.[3] ?? Math.round((cp.graphic ?? 21000) * 2.1) }, video: cp.video ?? 25000, videoWorks: cp.videoWorks ?? 70000, print: 2500, shootFor: () => 0, shootLabel: () => '' }
+  const dishCount = Math.max(1, Math.min(6, (Array.isArray(body.picture?.dishNames) ? body.picture!.dishNames : []).filter((x) => typeof x === 'string' && x.trim()).length || 1))
+  const P: MenuPrices = { dishes: dishCount, slide: (ctx as { prices?: { slide?: number | null } }).prices?.slide ?? 3000, graphic: cp.graphic ?? 21000, graphicTiers: { 1: cp.graphicTiers?.[1] ?? Math.round((cp.graphic ?? 21000) * 0.55), 2: cp.graphic ?? 21000, 3: cp.graphicTiers?.[3] ?? Math.round((cp.graphic ?? 21000) * 2.1) }, video: cp.video ?? 25000, videoWorks: cp.videoWorks ?? 70000, print: 2500, shootFor: () => 0, shootLabel: () => '' }
   /* the pieces, one request each, every one pointing at the same announcement (and shoot) */
   for (const [gi, gl] of linesOf('graphic').slice(1).entries()) {
     const o = (gl.options ?? {}) as Record<string, unknown>
@@ -310,8 +317,18 @@ export async function POST(req: NextRequest) {
     if (r.ok) { total += r.orderCents ?? 0; plan.push({ key: `graphic-${gi + 2}`, label: `Another graphic${where.includes('poster') ? ', the poster' : where.includes('tent') ? ', the table tent' : ''}`, detail: where.map((w) => (w === 'post' ? 'post + Story' : w === 'tent' ? 'table tent' : w)).join(', '), date: pieceDue, cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` }, why: gl.why }) }
     else errors.push(`A graphic did not start: ${r.error}`)
   }
-  const gCount = Math.max(1, Math.min(6, Number(item('graphic')?.options?.count) || 1))
-  for (let gi = 0; gi < (pieces.includes('graphic') ? gCount : 0); gi++) {
+  /* ONE GRAPHIC (owner 2026-09-24): one dish, one post graphic; two or more dishes, one carousel post with a
+     slide per dish, or a post for each dish. The level is its quality. The launch offer goes on it when on. */
+  const gItem = item('graphic')
+  const gOpts = ((gItem?.options ?? {}) as Record<string, unknown>)
+  const dishNames = (Array.isArray(body.picture?.dishNames) ? body.picture!.dishNames : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 6)
+  const gNames = dishNames.length ? dishNames : [name]
+  const gOptsN = { ...gOpts, dishes: gNames.length }
+  const gLayout = graphicLayout(gOptsN)
+  const gOrders = pieces.includes('graphic') ? graphicOrders(gOptsN) : 0
+  const gLevel = graphicLevel(gOptsN)
+  const offerLine = gOpts.offerOn !== false && item('offer') ? `${clean(item('offer')?.options?.text, 120) || `A free drink with ${name} this week`}, code ${clean(item('offer')?.options?.codeText, 12).replace(/[^A-Z0-9]/g, '') || 'the launch code'}` : ''
+  for (let gi = 0; gi < gOrders; gi++) {
     const dests: string[] = []
     const destLabels: string[] = []
     if (accountIds.length) { dests.push('instagram-post', 'facebook-post'); destLabels.push('Instagram post', 'Facebook post') }
@@ -319,17 +336,19 @@ export async function POST(req: NextRequest) {
     if (wantsGoogle) { dests.push('google-listing'); destLabels.push('Google listing') }
     if (also.includes('print')) { dests.push('table-tent'); destLabels.push('Table tent') }
     if (!dests.length) { dests.push('instagram-post'); destLabels.push('Instagram post') }
-    const gfrom = item('graphic')?.options?.from
+    const gfrom = gOpts.from
     const photos = onShoot || gfrom === 'shoot' ? 'shoot' : gfrom === 'stock' || a.picsrc === 'licensed' ? 'source' : media.length ? 'own' : 'none'
+    const forDish = gLayout === 'each' ? gNames[gi] : null
+    const what = gLayout === 'carousel' ? `${gNames.join(', ')}: one carousel post, a slide for each dish` : `${forDish ?? name} announcement`
     const r = await createCreativeRequest({
-      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush, overrideCents: item('graphic') ? graphicPieceCents(item('graphic') as unknown as never, P, gi) : undefined,
-      answers: { what: `${name} announcement${gCount > 1 ? ` (design ${gi + 1} of ${gCount}, a different angle each)` : ''}`, where: destLabels.join(', '), words: [name, priceOn && a.price ? a.price : ''].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${name}. ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
+      clientId, userId, type: 'graphic', order: true, due_date: pieceDue, rush, overrideCents: gItem ? graphicPieceCents({ ...(gItem as unknown as Record<string, unknown>), options: gOptsN } as never, P, gi) : undefined,
+      answers: { what, where: destLabels.join(', '), words: [forDish ?? (gLayout === 'carousel' ? gNames.join(' · ') : name), priceOn && a.price && !forDish ? a.price : '', offerLine].filter(Boolean).join(' · '), when: whenWord(pieceDue), notes: `Announce: ${forDish ?? name}. Level: ${LEVEL_NAME[gLevel]} (${GRAPHIC_LEVEL_LINE(gLevel)}). ${gLayout === 'carousel' ? `A carousel: ${gNames.length} slides, one per dish, in this order: ${gNames.join(', ')}.` : ''} ${offerLine ? `Put the launch offer on it: ${offerLine}.` : ''} ${facts} ${body.picture?.brandKit === false ? 'No brand kit.' : 'Match the brand kit.'} ${shoot ? `Photos come from ${shootWord}.` : ''} Announcement ${announcementId ?? ''}`.replace(/\s+/g, ' ').trim() },
       attachments,
-      design: { destinations: dests, tier: graphicLevel((item('graphic')?.options ?? {}) as Record<string, unknown>), photos, dueDateISO: pieceDue ?? undefined },
+      design: { destinations: dests, tier: gLevel, photos, dueDateISO: pieceDue ?? undefined, ...(gLayout === 'carousel' ? { slides: gNames.length } : {}) },
     })
     if (r.ok) {
       requestId = requestId ?? r.row.id; total += r.orderCents ?? 0
-      plan.push({ key: gi ? `graphic-${gi + 1}` : 'graphic', label: `${shoot ? 'The graphic, from the shoot' : 'We start the graphic'}${gCount > 1 ? ` (${gi + 1} of ${gCount})` : ''}`, detail: shoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From our own photos', date: shoot ? pieceDue : day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
+      plan.push({ key: gi ? `graphic-${gi + 1}` : 'graphic', label: `${gLayout === 'carousel' ? 'The carousel post' : forDish ? `The graphic for ${forDish}` : 'The graphic'}${shoot ? ', from the shoot' : ''}`, detail: shoot ? `Once the photos land${priceOn && a.price ? ', price on it' : ''}` : media.length ? `From your ${media.length === 1 ? 'photo' : `${media.length} photos`}${priceOn && a.price ? ', price on it' : ''}` : 'From licensed photos in your style', date: shoot ? pieceDue : day(new Date().toISOString()), cost: r.orderCents, status: 'with_team', ref: { kind: 'request', id: r.row.id, href: `/dashboard/requests/${r.row.id}` } })
     } else errors.push(`The graphic did not start: ${r.error}`)
   }
   const videoLines = linesOf('video').length ? linesOf('video') : pieces.includes('reel') ? [null] : []

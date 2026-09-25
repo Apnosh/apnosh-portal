@@ -15,13 +15,17 @@
  * CLIENT-SAFE: pure, no server imports, so the page and the route share it.
  */
 import { PACKAGES, PACKAGE_EXTRA, type ItemPick, type PackageTier } from './suggest'
-import { TIER_SPECS, specLine } from '@/lib/design/tier-specs'
+import { TIER_SPECS } from '@/lib/design/tier-specs'
 
 export interface MenuPrices {
   /** one graphic at the Standard level, pre-fee */
   graphic: number
   /** one graphic at each level, pre-fee (1 Quick, 2 Standard, 3 The works) */
   graphicTiers?: { 1: number; 2: number; 3: number }
+  /** each carousel slide past the first, pre-fee (the design price sheet's carouselPerSlide) */
+  slide?: number
+  /** how many dishes the announcement has: one post graphic each, or one carousel with a slide each */
+  dishes?: number
   /** one Reel at the Standard level, pre-fee */
   video: number
   /** one Reel at The works, pre-fee */
@@ -39,7 +43,7 @@ export type VideoLevel = 'standard' | 'works'
 export const LEVEL_NAME = { 1: 'Quick', 2: 'Standard', 3: 'The works' } as const
 export const VIDEO_LEVEL_NAME: Record<VideoLevel, string> = { standard: 'Standard', works: 'The works' }
 /** what each level promises, in the words the order carries */
-export const GRAPHIC_LEVEL_LINE = (l: GraphicLevel) => specLine(l)
+export const GRAPHIC_LEVEL_LINE = (l: GraphicLevel) => { const t = TIER_SPECS[l]; return [`${t.concepts} design${t.concepts === 1 ? '' : 's'} to pick from`, `${t.revisionRounds} round${t.revisionRounds === 1 ? '' : 's'} of changes`, ...(t.sourceFiles ? ['the file you can edit'] : [])].join(' · ') }
 export const VIDEO_LEVEL_LINE: Record<VideoLevel, string> = {
   standard: 'Cut as picked · captions · 1 to 2 revisions · 3 to 5 days',
   works: 'A shot list · pro edit with titles and motion · senior editor · 2 revisions · 7 days',
@@ -57,23 +61,39 @@ export function oneGraphicCents(o: Record<string, unknown>, p: MenuPrices): numb
   return tierCost(p, graphicLevel(o)) + graphicExtras(o)
 }
 
+/* ONE GRAPHIC (owner 2026-09-24): one dish, one post graphic. Two or more dishes: one carousel post with
+   a slide per dish (the default), or a post for each dish. The level is its quality. */
+export type GraphicLayout = 'single' | 'carousel' | 'each'
+export const graphicDishes = (o: Record<string, unknown>, p?: Pick<MenuPrices, 'dishes'>) => Math.max(1, Math.min(6, Number(o.dishes) || p?.dishes || 1))
+export const graphicLayout = (o: Record<string, unknown>, p?: Pick<MenuPrices, 'dishes'>): GraphicLayout => (graphicDishes(o, p) === 1 ? 'single' : o.layout === 'each' ? 'each' : 'carousel')
+/** how many graphic orders the line makes: one post, or one per dish */
+export const graphicOrders = (o: Record<string, unknown>, p?: Pick<MenuPrices, 'dishes'>) => (graphicLayout(o, p) === 'each' ? graphicDishes(o, p) : 1)
+/** the level a content day includes (Standard, or The works on the full day) */
+export const includedLevel = (o: Record<string, unknown>): GraphicLevel => (o.incLevel === 3 ? 3 : 2)
+
 /** The upgrade on a piece that comes with the content day: the difference to the chosen level, never a refund. */
-export const graphicUpgrade = (o: Record<string, unknown>, p: MenuPrices) => Math.max(0, tierCost(p, graphicLevel(o)) - tierCost(p, 2))
+export const graphicUpgrade = (o: Record<string, unknown>, p: MenuPrices) => Math.max(0, tierCost(p, graphicLevel(o)) - tierCost(p, includedLevel(o)))
 export const reelUpgrade = (o: Record<string, unknown>, p: MenuPrices) => Math.max(0, reelCost(p, videoLevel(o)) - reelCost(p, 'standard'))
 
-/** Price of the i-th graphic of a line (0-based), pre-fee: what that one order is charged before the fee. */
+/** Price of the i-th graphic order of a line (0-based), pre-fee: what that one order is charged before the fee. */
 export function graphicPieceCents(it: ItemPick, p: MenuPrices, i: number): number {
   const o = it.options
-  const n = Math.max(1, Math.min(6, Number(o.count) || 1))
-  if (o.from === 'shoot') return (i < (Number(o.included) || 0) ? 0 : PACKAGE_EXTRA.graphic) + graphicUpgrade(o, p) + graphicExtras(o)
-  return Math.round(oneGraphicCents(o, p) * (n >= 2 ? 0.9 : 1))
+  const layout = graphicLayout(o, p)
+  const slides = layout === 'carousel' ? (graphicDishes(o, p) - 1) * (p.slide ?? 3000) : 0
+  if (o.from === 'shoot' && Number(o.included) > 0) {
+    /* the content day includes the post: a carousel's slides ride along; a separate post per dish past the first is an extra */
+    return (layout === 'each' && i > 0 ? PACKAGE_EXTRA.graphic : 0) + graphicUpgrade(o, p) + graphicExtras(o)
+  }
+  if (o.from === 'shoot') return PACKAGE_EXTRA.graphic + graphicUpgrade(o, p) + graphicExtras(o) + slides
+  const n = graphicOrders(o, p)
+  return Math.round((oneGraphicCents(o, p) + slides) * (n >= 2 ? 0.9 : 1))
 }
 
 export function itemCents(it: ItemPick, p: MenuPrices, profile?: CreatorPrices | null): number {
   const o = it.options
   switch (it.id) {
     case 'custom': return 0
-    case 'graphic': { const n = Math.max(1, Math.min(6, Number(o.count) || 1)); let sum = 0; for (let i = 0; i < n; i++) sum += graphicPieceCents(it, p, i); return sum }
+    case 'graphic': { const n = graphicOrders(o, p); let sum = 0; for (let i = 0; i < n; i++) sum += graphicPieceCents(it, p, i); return sum }
     case 'video': {
       const n = Math.max(1, Math.min(6, Number(o.count) || 1))
       if (o.filmed === 'shoot') return Math.max(0, n - (Number(o.included) || 0)) * PACKAGE_EXTRA.video + n * reelUpgrade(o, p)
