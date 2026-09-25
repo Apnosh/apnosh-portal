@@ -404,6 +404,14 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           ]
           const groups = GROUPS.map((g) => ({ g, rows: rows.filter((r) => g.ids.includes(r.id)).sort((x, y) => g.ids.indexOf(x.id) - g.ids.indexOf(y.id)) })).filter((x) => x.rows.length)
           const groupOf = (id: ItemId) => GROUPS.find((g) => g.ids.includes(id))?.key ?? null
+          /* THE STAGES (owner 2026-09-24): the Create page's five, in its colors, for the plan and the add shelf alike */
+          const SHELF: { key: string; hue: string; ids: ItemId[] }[] = [
+            { key: 'Awareness', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] },
+            { key: 'Interest', hue: '#3b6fd4', ids: ['photos', 'graphic', 'video', 'print'] },
+            { key: 'Actions', hue: '#6a39de', ids: ['taste', 'offer'] },
+            { key: 'Orders', hue: '#d99a1e', ids: ['apps'] },
+            { key: 'Retention', hue: '#0f97a8', ids: ['review', 'sign'] },
+          ]
           const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
           const listWords = (ws: string[]) => (ws.length <= 1 ? ws[0] ?? '' : ws.length <= 3 ? `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}` : `${ws.slice(0, 2).join(', ')} and ${ws.length - 2} more`)
           /* one plain line under each group's name, so it reads without opening */
@@ -552,19 +560,46 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                 ) })}
               </div>
               {pos < 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 8, textAlign: 'center' }}>Your own mix. <button type="button" onClick={() => applyStep(three[1])} style={{ fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: C.greenDk, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>Back to our pick</button></div>}
-              <div style={{ marginTop: 6 }}>{groups.map(bandView)}</div>
+              {(() => {
+                /* IN YOUR PLAN, BY STAGE (owner 2026-09-24, "that way for the stages as well"): each stage the plan
+                   reaches is a Create-page row, its name with its color dot and its total, then its pieces as picture
+                   cards (the piece drawn as itself, the plan's name, the price). Tap a card to change or remove it. */
+                const rails = [...SHELF.map((st) => ({ key: st.key, hue: st.hue, rs: rows.filter((r) => st.ids.includes(r.id)).sort((x, y) => st.ids.indexOf(x.id) - st.ids.indexOf(y.id)) })), { key: 'Just for you', hue: '#8a928e', rs: rows.filter((r) => r.id === 'custom') }].filter((x) => x.rs.length)
+                const planCard = (r: Row, hue: string) => (
+                  <button key={r.key} type="button" onClick={() => setOpen(r.uid)} style={{ flex: 'none', width: 148, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', color: C.ink, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ position: 'relative', height: 116, borderRadius: 16, background: `color-mix(in srgb, ${hue} 14%, #fff)`, display: 'grid', placeItems: 'center', marginBottom: 6, overflow: 'hidden' }}>
+                      {thumbFor(r.id, 62, r.key)}
+                      {r.count != null && r.count > 1 && <em style={{ position: 'absolute', right: 8, top: 8, fontStyle: 'normal', fontWeight: 800, fontSize: 11, padding: '3px 8px', borderRadius: 99, background: 'rgba(255,255,255,.95)', color: C.ink }}>×{r.count}</em>}
+                      {r.blocks && <em style={{ position: 'absolute', left: 8, bottom: 8, fontStyle: 'normal', fontWeight: 700, fontSize: 10.5, padding: '4px 9px', borderRadius: 99, background: '#fff4e0', color: '#8a5a0c', display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 6, height: 6, borderRadius: 99, background: '#d99a1e' }} />{r.state.word}</em>}
+                    </span>
+                    <b style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.name}</b>
+                    <small style={{ fontSize: 12.5, fontWeight: 600, color: r.cents ? C.mute : C.greenDk, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.price}</small>
+                  </button>
+                )
+                return (
+                  <div style={{ marginTop: 6 }}>
+                    {rails.map(({ key, hue, rs }) => {
+                      const cents = rs.reduce((n, r) => n + r.cents, 0)
+                      return (
+                        <div key={key} style={{ marginTop: 18 }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                            <b style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, letterSpacing: '-.02em', display: 'inline-flex', alignItems: 'center', gap: 8 }}><i style={{ width: 8, height: 8, borderRadius: 99, background: hue }} />{key}{rs.some((r) => r.blocks) && <i aria-label="Needs you" style={{ width: 8, height: 8, borderRadius: 99, background: '#d99a1e' }} />}</b>
+                            <b style={{ fontSize: 15, fontWeight: 700, color: cents ? C.ink : C.greenDk, fontVariantNumeric: 'tabular-nums' }}>{key === 'Just for you' ? 'Quote' : cents ? dollars(cents) : 'Free'}</b>
+                          </div>
+                          <div className="mvp-hscroll" style={{ display: 'flex', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollPaddingInline: 16, margin: '10px -16px 0', padding: '2px 16px 4px', scrollbarWidth: 'none', alignItems: 'flex-start' }}>
+                            {rs.map((r) => planCard(r, hue))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
               {(() => {
                 /* ADD TO YOUR PLAN, BROWSED LIKE THE CREATE PAGE (owner 2026-09-24): the same stage tabs (For you, then
                    the five stages in their colors), and under each, that stage's pieces as picture cards: a tinted
                    picture with the stage tag and the piece drawn as itself, the name, the price. Pieces already in
                    the plan say so and open their options; the rest add. Something else closes every shelf. */
-                const SHELF: { key: string; hue: string; ids: ItemId[] }[] = [
-                  { key: 'Awareness', hue: '#2e9a78', ids: ['post', 'boost', 'creator'] },
-                  { key: 'Interest', hue: '#3b6fd4', ids: ['photos', 'graphic', 'video', 'print'] },
-                  { key: 'Actions', hue: '#6a39de', ids: ['taste', 'offer'] },
-                  { key: 'Orders', hue: '#d99a1e', ids: ['apps'] },
-                  { key: 'Retention', hue: '#0f97a8', ids: ['review', 'sign'] },
-                ]
                 const stageOf = (id: ItemId) => SHELF.find((x) => x.ids.includes(id)) ?? SHELF[0]
                 const base = (id: ItemId) => items.find((x) => x.id === id && x.uid === x.id) ?? items.find((x) => x.id === id)
                 const forYou = offRows.filter((it) => recTag(it.id))
