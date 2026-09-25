@@ -446,8 +446,33 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
           const offName: Record<string, string> = { creator: 'Creator visit and post', boost: 'Boost the post', video: 'Reel', photos: 'Content shoot, a quick visit', print: 'Table tent print', graphic: 'Instagram graphic, price on it', taste: 'Taste at the counter', offer: 'Launch offer with a code', apps: 'DoorDash feature', review: 'Review ask with the check', sign: 'Guest photo sign' }
           const offLines: Record<string, string[]> = { creator: ['A local creator visits and posts', `${Math.max(1, fits.length)} near you, ranked`], boost: ['Shown to people nearby', '3 days'], video: ['From your clips, or filmed here', '15 to 30 seconds'], photos: ['15 photos, one visit', 'Team offers two dates'], print: ['25 cards, from the graphic'], graphic: ['Designed for the post', 'Ready in 2 days'], taste: ['All week', 'On the team card'], offer: ['A code the team counts'], apps: ['Two weeks on the item'], review: ['Two weeks', 'The printed card'], sign: ['1 sign', 'Post it, tag us'] }
           const recTag = (id: ItemId) => (ladder && (ladder.bigger[id] || ladder.recommended[id]) ? 'Recommended' : null)
-          const chip = (st: { ok: boolean; word: string }) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, background: st.ok ? C.greenSoft : '#fff4e0', color: st.ok ? C.greenDk : '#8a5a0c' }}>{st.ok ? <Check size={11} strokeWidth={3} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: '#d99a1e' }} />}{st.word}</span>
           const chipName: Record<string, string> = { creator: 'Creator visit', boost: 'Boost the post', video: 'Reel', photos: 'Content day', print: 'Table tent', graphic: 'Graphic', taste: 'Taste', offer: 'Launch offer', apps: 'DoorDash feature', review: 'Review ask', sign: 'Photo sign' }
+          /* THE ORIGINAL ITEM CARDS (owner 2026-09-24): an opened group shows its items the way the cart did */
+          const chip = (st: { ok: boolean; word: string }) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 99, fontSize: 11.5, fontWeight: 700, background: st.ok ? C.greenSoft : '#fff4e0', color: st.ok ? C.greenDk : '#8a5a0c' }}>{st.ok ? <Check size={11} strokeWidth={3} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: '#d99a1e' }} />}{st.word}</span>
+          const cartRow = (r: Row, first: boolean) => (
+            <div key={r.key} style={{ borderTop: first ? 0 : `0.5px solid ${C.line}`, padding: '14px 0' }}>
+              <div role="button" tabIndex={0} onClick={() => setOpen(r.uid)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(r.uid) }} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <span style={{ width: 56, height: 56, borderRadius: 16, flex: 'none', display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${META[r.id].hue} 14%, #fff)`, ['--c2' as string]: META[r.id].hue }}><span style={{ width: 36 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}><b style={{ flex: 1, fontSize: 15, lineHeight: 1.25 }}>{r.name}</b><ChevronRight size={18} color={C.faint} style={{ flex: 'none', marginTop: 1 }} /></div>
+                  <div style={{ marginTop: 4 }}>{r.lines.slice(0, 4).map((l, i) => <div key={i} style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l}</div>)}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10, paddingLeft: 68 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {r.count != null ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 99, height: 32, overflow: 'hidden' }}>
+                      <button type="button" aria-label={r.count === 1 ? 'Remove' : 'One fewer'} onClick={r.onMinus} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}>{r.count === 1 ? <Trash2 size={13} /> : <Minus size={13} />}</button>
+                      <b style={{ minWidth: 16, textAlign: 'center', fontSize: 13.5 }}>{r.count}</b>
+                      <button type="button" aria-label="One more" onClick={r.onPlus} disabled={r.count >= 6} style={{ width: 32, height: 32, border: 0, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: r.count >= 6 ? C.faint : C.ink }}><Plus size={13} /></button>
+                    </span>
+                  ) : <button type="button" aria-label="Remove" onClick={r.onBin} style={{ width: 32, height: 32, borderRadius: 99, border: `1px solid ${C.line}`, background: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer', color: C.ink }}><Trash2 size={13} /></button>}
+                  {chip(r.state)}
+                </div>
+                <b style={{ fontSize: 15, whiteSpace: 'nowrap', color: r.cents || r.price.startsWith('from') ? C.ink : C.greenDk }}>{r.price}</b>
+              </div>
+            </div>
+          )
           const bandRow = (r: Row) => {
             const extra = r.lines.map((l) => l.match(/(\d+) extra at (\$[\d,]+)/)).find(Boolean)
             const note = !r.state.ok ? r.state.word : extra ? `${extra[1]} extra, ${extra[2]}` : ''
@@ -495,42 +520,42 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
             const needy = rs.find((r) => r.blocks)
             const totalWord = g.key === 'custom' ? 'Quote' : cents ? dollars(cents) : 'Free'
             return (
-              <div key={g.key} style={{ marginTop: 10, borderRadius: 20, background: `color-mix(in srgb, ${g.hue} 9%, #fff)`, border: `1.5px solid ${open ? `color-mix(in srgb, ${g.hue} 30%, #fff)` : 'transparent'}`, overflow: 'hidden' }}>
-                <button type="button" aria-expanded={open} onClick={() => setBand(open ? null : g.key)} style={{ display: 'block', width: '100%', padding: '14px 16px 16px', border: 0, background: 'none', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+              <div key={g.key} style={{ marginTop: 8, borderRadius: 18, background: `color-mix(in srgb, ${g.hue} 9%, #fff)`, border: `1.5px solid ${open ? `color-mix(in srgb, ${g.hue} 30%, #fff)` : 'transparent'}`, overflow: 'hidden' }}>
+                <button type="button" aria-expanded={open} onClick={() => setBand(open ? null : g.key)} style={{ display: 'block', width: '100%', padding: '12px 14px 13px', border: 0, background: 'none', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: 99, background: g.hue, flex: 'none' }} />
-                    <b style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 700, letterSpacing: '-.02em' }}>{g.name}</b>
+                    <b style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 700, letterSpacing: '-.02em' }}>{g.name}</b>
                     {needy && <span aria-label={needy.state.word} style={{ width: 8, height: 8, borderRadius: 99, background: '#d99a1e', flex: 'none' }} />}
-                    <b style={{ marginLeft: 'auto', fontFamily: DISPLAY, fontSize: 19, fontWeight: 700, letterSpacing: '-.02em', whiteSpace: 'nowrap', color: totalWord === 'Free' ? C.greenDk : C.ink }}>{totalWord}</b>
+                    <b style={{ marginLeft: 'auto', fontFamily: DISPLAY, fontSize: 17, fontWeight: 700, letterSpacing: '-.02em', whiteSpace: 'nowrap', color: totalWord === 'Free' ? C.greenDk : C.ink }}>{totalWord}</b>
                     <ChevronRight size={18} color={C.faint} style={{ flex: 'none', marginRight: -4, transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .15s' }} />
                   </span>
                   {!open && (
-                    <span style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+                    <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
                       {rs.map((r) => (
-                        <span key={r.key} style={{ width: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 60, height: 60, borderRadius: 18, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(29,29,31,.06)', position: 'relative', ['--c2' as string]: META[r.id].hue }}>
-                            <span style={{ width: 42 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span>
+                        <span key={r.key} style={{ width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 46, height: 46, borderRadius: 14, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(29,29,31,.06)', position: 'relative', ['--c2' as string]: META[r.id].hue }}>
+                            <span style={{ width: 32 }}><Drawing spec={{ scene: META[r.id].scene }} name="" rating="" t={(x) => x} /></span>
                             {r.blocks && <span style={{ position: 'absolute', top: 4, right: 4, width: 9, height: 9, borderRadius: 99, background: '#d99a1e', border: '2px solid #fff' }} />}
                           </span>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.2, textAlign: 'center', color: C.ink }}>{tileLabel(r)}</span>
-                          {r.blocks && <span style={{ marginTop: -3, fontSize: 11, fontWeight: 700, lineHeight: 1.2, textAlign: 'center', color: '#8a5a0c' }}>{r.state.word}</span>}
+                          <span style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.2, textAlign: 'center', color: C.ink }}>{tileLabel(r)}</span>
+                          {r.blocks && <span style={{ marginTop: -3, fontSize: 10.5, fontWeight: 700, lineHeight: 1.2, textAlign: 'center', color: '#8a5a0c' }}>{r.state.word}</span>}
                         </span>
                       ))}
                     </span>
                   )}
                 </button>
-                {open && <div style={{ padding: '0 10px 10px' }}>{rs.map(bandRow)}</div>}
+                {open && <div style={{ margin: '0 10px 10px', padding: '0 14px', borderRadius: 16, background: '#fff' }}>{rs.map((r, i) => cartRow(r, i === 0))}</div>}
               </div>
             )
           }
           /* ADD TO YOUR PLAN (owner 2026-09-24): a sideways row of tiles like the Create page */
           const addTile = (it: ItemPick) => { const m = META[it.id]; const cents = minOf(it); const free = m.free || cents === 0; return (
-            <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ flex: 'none', width: 100, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-              <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 100, height: 100, borderRadius: 22, background: `color-mix(in srgb, ${m.hue} 14%, #fff)`, ['--c2' as string]: m.hue }}>
-                <span style={{ width: 62 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(x) => x} /></span>
-                <span style={{ position: 'absolute', top: 7, right: 7, width: 24, height: 24, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.greenDk} /></span>
+            <button key={it.uid} type="button" onClick={() => { const k = groupOf(it.id); if (k) setBand(k); if (m.hasOptions && !free) setOpen(it.uid); else toggle(it.uid) }} style={{ flex: 'none', width: 80, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+              <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 80, height: 80, borderRadius: 18, background: `color-mix(in srgb, ${m.hue} 14%, #fff)`, ['--c2' as string]: m.hue }}>
+                <span style={{ width: 48 }}><Drawing spec={{ scene: m.scene }} name="" rating="" t={(x) => x} /></span>
+                <span style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.greenDk} /></span>
               </span>
-              <b style={{ display: 'block', fontSize: 13, fontWeight: 600, lineHeight: 1.25, marginTop: 7 }}>{chipName[it.id] ?? m.name}</b>
+              <b style={{ display: 'block', fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, marginTop: 6 }}>{chipName[it.id] ?? m.name}</b>
               <small style={{ display: 'block', fontSize: 12, color: free ? C.greenDk : C.mute, fontWeight: 600, marginTop: 1 }}>{free ? 'Free' : `${m.hasOptions ? 'from ' : ''}${dollars(cents)}`}</small>
             </button>
           ) }
@@ -553,12 +578,12 @@ export default function AnnounceMenu({ clientId, items, setItems, me, prices, me
                 <b style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, letterSpacing: '-.02em' }}>Add to your plan</b>
                 <div className="mvp-hscroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollPaddingInline: 16, margin: '12px -16px 0', padding: '0 16px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
                   {offRows.map(addTile)}
-                  <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ flex: 'none', width: 100, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
-                    <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 100, height: 100, borderRadius: 22, background: C.bg, ['--c2' as string]: '#8a928e' }}>
-                      <span style={{ width: 62 }}><Drawing spec={{ scene: 'else' }} name="" rating="" t={(x) => x} /></span>
-                      <span style={{ position: 'absolute', top: 7, right: 7, width: 24, height: 24, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.ink} /></span>
+                  <button type="button" onClick={() => { const uid = newUid('custom'); setItems((xs) => [...xs, { id: 'custom', uid, on: false, why: '', options: { ...(FRESH.custom ?? {}) }, cents: 0 }]); setBand('custom'); setOpen(uid) }} style={{ flex: 'none', width: 80, scrollSnapAlign: 'start', border: 0, background: 'none', padding: 0, display: 'block', alignSelf: 'flex-start', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: C.ink }}>
+                    <span style={{ position: 'relative', display: 'grid', placeItems: 'center', width: 80, height: 80, borderRadius: 18, background: C.bg, ['--c2' as string]: '#8a928e' }}>
+                      <span style={{ width: 48 }}><Drawing spec={{ scene: 'else' }} name="" rating="" t={(x) => x} /></span>
+                      <span style={{ position: 'absolute', top: 5, right: 5, width: 20, height: 20, borderRadius: 99, background: '#fff', display: 'grid', placeItems: 'center', boxShadow: '0 1px 3px rgba(29,29,31,.12)' }}><Plus size={14} strokeWidth={2.8} color={C.ink} /></span>
                     </span>
-                    <b style={{ display: 'block', fontSize: 13, fontWeight: 600, lineHeight: 1.25, marginTop: 7 }}>Something else</b>
+                    <b style={{ display: 'block', fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, marginTop: 6 }}>Something else</b>
                     <small style={{ display: 'block', fontSize: 12, color: C.mute, fontWeight: 600, marginTop: 1 }}>Quoted</small>
                   </button>
                 </div>
